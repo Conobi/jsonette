@@ -1,0 +1,15 @@
+[project]
+name = "json-simd-mojo"
+version = "0.1.0"
+description = "SIMD-accelerated JSON parser for Mojo"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mojox",
+]
+
+[tool.uv]
+package = false
