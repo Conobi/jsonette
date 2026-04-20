@@ -1,5 +1,4 @@
 from std.sys.intrinsics import llvm_intrinsic
-from std.bit import count_trailing_zeros
 
 
 def movemask_epi8(v: SIMD[DType.uint8, 32]) -> Int32:
