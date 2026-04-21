@@ -28,13 +28,18 @@ def build_tape(
 
     # R4: Pre-allocate tape and string_buf to avoid reallocation during parsing
     var tape = Tape(element_capacity=input_len * 2 + 2, string_capacity=input_len + 64)
+    # Resize to upper bound for raw pointer writes
+    tape.elements.resize(input_len * 2 + 2, UInt64(0))
+    var tape_ptr = tape.elements.unsafe_ptr()
+    var tape_pos = 0
     var input_ptr = input_buf.unsafe_ptr()
 
     # Root open placeholder at tape[0]
-    tape.append(TAG_ROOT, UInt64(0))
+    tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
+    tape_pos += 1
 
-    var container_stack = InlineArray[UInt32, MAX_DEPTH](fill=UInt32(0))
-    var count_stack = InlineArray[UInt32, MAX_DEPTH](fill=UInt32(0))
+    var container_stack = InlineArray[UInt32, MAX_DEPTH](uninitialized=True)
+    var count_stack = InlineArray[UInt32, MAX_DEPTH](uninitialized=True)
     var depth = 0
     var root_done = False
 
@@ -50,7 +55,8 @@ def build_tape(
         if byte == TAG_STRING:  # '"'
             var buf_offset = UInt64(len(tape.string_buf))
             var consumed = parse_string(input_ptr, pos, input_len, tape.string_buf)
-            tape.append(TAG_STRING, buf_offset)
+            tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
+            tape_pos += 1
             if depth == 0:
                 root_done = True
             si += 1
@@ -67,58 +73,65 @@ def build_tape(
             si += 1
         elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):
             var result = parse_number(input_ptr + pos, input_len - pos)
-            tape.append(result.tag, UInt64(0))
-            tape.append_raw(result.value)
+            tape_ptr[tape_pos] = make_tape_entry(result.tag, UInt64(0))
+            tape_pos += 1
+            tape_ptr[tape_pos] = result.value
+            tape_pos += 1
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_OBJECT_OPEN:  # '{'
             if depth >= MAX_DEPTH:
                 raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
-            container_stack[depth] = UInt32(len(tape.elements))
+            container_stack[depth] = UInt32(tape_pos)
             count_stack[depth] = UInt32(0)
-            tape.append(TAG_OBJECT_OPEN, UInt64(0))
+            tape_ptr[tape_pos] = make_tape_entry(TAG_OBJECT_OPEN, UInt64(0))
+            tape_pos += 1
             depth += 1
             si += 1
         elif byte == TAG_ARRAY_OPEN:  # '['
             if depth >= MAX_DEPTH:
                 raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
-            container_stack[depth] = UInt32(len(tape.elements))
+            container_stack[depth] = UInt32(tape_pos)
             count_stack[depth] = UInt32(0)
-            tape.append(TAG_ARRAY_OPEN, UInt64(0))
+            tape_ptr[tape_pos] = make_tape_entry(TAG_ARRAY_OPEN, UInt64(0))
+            tape_pos += 1
             depth += 1
             si += 1
         elif byte == TAG_OBJECT_CLOSE:  # '}'
-            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_OBJECT_OPEN:
+            if depth == 0 or UInt8(tape_ptr[Int(container_stack[depth - 1])] >> 56) != TAG_OBJECT_OPEN:
                 raise "TAPE_ERROR: unexpected '}' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, depth, TAG_OBJECT_CLOSE)
+            tape_pos = _close_container(tape_ptr, tape_pos, container_stack, count_stack, depth, TAG_OBJECT_CLOSE)
             depth -= 1
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_ARRAY_CLOSE:  # ']'
-            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_ARRAY_OPEN:
+            if depth == 0 or UInt8(tape_ptr[Int(container_stack[depth - 1])] >> 56) != TAG_ARRAY_OPEN:
                 raise "TAPE_ERROR: unexpected ']' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, depth, TAG_ARRAY_CLOSE)
+            tape_pos = _close_container(tape_ptr, tape_pos, container_stack, count_stack, depth, TAG_ARRAY_CLOSE)
             depth -= 1
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_TRUE:  # 't' (true)
             _validate_true(input_ptr, pos, input_len)
-            tape.append(TAG_TRUE, UInt64(0))
+            tape_ptr[tape_pos] = make_tape_entry(TAG_TRUE, UInt64(0))
+            tape_pos += 1
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_FALSE:  # 'f' (false)
             _validate_false(input_ptr, pos, input_len)
-            tape.append(TAG_FALSE, UInt64(0))
+            tape_ptr[tape_pos] = make_tape_entry(TAG_FALSE, UInt64(0))
+            tape_pos += 1
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_NULL:  # 'n' (null)
             _validate_null(input_ptr, pos, input_len)
-            tape.append(TAG_NULL, UInt64(0))
+            tape_ptr[tape_pos] = make_tape_entry(TAG_NULL, UInt64(0))
+            tape_pos += 1
             if depth == 0:
                 root_done = True
             si += 1
@@ -128,26 +141,31 @@ def build_tape(
     if depth != 0:
         raise "UNCLOSED_CONTAINER: " + String(depth) + " unclosed container(s)"
 
-    var root_close_idx = len(tape.elements)
-    tape.append(TAG_ROOT, UInt64(0))
-    tape.elements[0] = make_tape_entry(TAG_ROOT, UInt64(root_close_idx))
+    var root_close_idx = tape_pos
+    tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
+    tape_pos += 1
+    tape_ptr[0] = make_tape_entry(TAG_ROOT, UInt64(root_close_idx))
+
+    # Shrink tape to actual size
+    tape.elements.resize(tape_pos, UInt64(0))
 
     return tape^
 
 
 @always_inline("nodebug")
-def _close_container(
-    mut tape: Tape,
+def _close_container[o: Origin[mut=True]](
+    tape_ptr: UnsafePointer[UInt64, origin=o],
+    mut tape_pos: Int,
     container_stack: InlineArray[UInt32, MAX_DEPTH],
     count_stack: InlineArray[UInt32, MAX_DEPTH],
     depth: Int,
     close_tag: UInt8,
-):
+) -> Int:
     # depth is current depth BEFORE decrement; container was opened at depth-1
     var open_idx = Int(container_stack[depth - 1])
     var comma_count = count_stack[depth - 1]
-    var close_idx = len(tape.elements)
-    var open_tag = tape.tag_at(open_idx)
+    var close_idx = tape_pos
+    var open_tag = UInt8(tape_ptr[open_idx] >> 56)
 
     var is_empty = (close_idx == open_idx + 1)
     var count = UInt64(comma_count)
@@ -156,10 +174,12 @@ def _close_container(
     if count > 0xFFFFFF:
         count = 0xFFFFFF
 
-    tape.append(close_tag, UInt64(open_idx))
-    tape.elements[open_idx] = make_tape_entry(
+    tape_ptr[tape_pos] = make_tape_entry(close_tag, UInt64(open_idx))
+    tape_pos += 1
+    tape_ptr[open_idx] = make_tape_entry(
         open_tag, (count << 32) | UInt64(close_idx + 1)
     )
+    return tape_pos
 
 
 @always_inline("nodebug")
