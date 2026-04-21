@@ -48,16 +48,14 @@ def build_tape(
     var cs_ptr = container_stack.unsafe_ptr()
     var ks_ptr = count_stack.unsafe_ptr()
     var depth = 0
-    var root_done = False
+    # No root_done variable — we break out of the loop when the root value is complete.
+    # This eliminates a per-iteration check (4 instructions saved per structural).
 
     var si = 0
     while si < num_structurals:
         # Safety: si < num_structurals guaranteed by while loop guard
         var pos = Int(structural_positions.unsafe_get(si))
         var byte = input_ptr[pos]
-
-        if root_done and depth == 0:
-            raise ParseError(code=ErrorCode.TRAILING_CONTENT.value, position=pos)
 
         if byte == TAG_STRING:  # '"'
             var buf_offset = UInt64(sbuf_pos)
@@ -66,14 +64,13 @@ def build_tape(
             sbuf_pos = result[1]
             tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
             tape_pos += 1
-            if depth == 0:
-                root_done = True
             si += 1
             # Skip structural positions within the consumed string (closing quote)
             var string_end = pos + consumed - 1
-            # Safety: si < num_structurals guaranteed by while loop guard
             while si < num_structurals and Int(structural_positions.unsafe_get(si)) <= string_end:
                 si += 1
+            if depth == 0:
+                break
         elif byte == UInt8(0x2C):  # ','
             if depth > 0:
                 ks_ptr[depth - 1] += 1
@@ -86,9 +83,9 @@ def build_tape(
             tape_pos += 1
             tape_ptr[tape_pos] = result.value
             tape_pos += 1
-            if depth == 0:
-                root_done = True
             si += 1
+            if depth == 0:
+                break
         elif byte == TAG_OBJECT_OPEN:  # '{'
             if depth >= MAX_DEPTH:
                 raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos)
@@ -112,40 +109,45 @@ def build_tape(
                 raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos)
             tape_pos = _close_container(tape_ptr, tape_pos, cs_ptr, ks_ptr, depth, TAG_OBJECT_CLOSE)
             depth -= 1
-            if depth == 0:
-                root_done = True
             si += 1
+            if depth == 0:
+                break
         elif byte == TAG_ARRAY_CLOSE:  # ']'
             if depth == 0 or UInt8(tape_ptr[Int(cs_ptr[depth - 1])] >> 56) != TAG_ARRAY_OPEN:
                 raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos)
             tape_pos = _close_container(tape_ptr, tape_pos, cs_ptr, ks_ptr, depth, TAG_ARRAY_CLOSE)
             depth -= 1
-            if depth == 0:
-                root_done = True
             si += 1
+            if depth == 0:
+                break
         elif byte == TAG_TRUE:  # 't' (true)
             _validate_true(input_ptr, pos, input_len)
             tape_ptr[tape_pos] = make_tape_entry(TAG_TRUE, UInt64(0))
             tape_pos += 1
-            if depth == 0:
-                root_done = True
             si += 1
+            if depth == 0:
+                break
         elif byte == TAG_FALSE:  # 'f' (false)
             _validate_false(input_ptr, pos, input_len)
             tape_ptr[tape_pos] = make_tape_entry(TAG_FALSE, UInt64(0))
             tape_pos += 1
-            if depth == 0:
-                root_done = True
             si += 1
+            if depth == 0:
+                break
         elif byte == TAG_NULL:  # 'n' (null)
             _validate_null(input_ptr, pos, input_len)
             tape_ptr[tape_pos] = make_tape_entry(TAG_NULL, UInt64(0))
             tape_pos += 1
-            if depth == 0:
-                root_done = True
             si += 1
+            if depth == 0:
+                break
         else:
             raise ParseError(code=ErrorCode.UNEXPECTED_VALUE.value, position=pos)
+
+    # Check for trailing content (replaces per-iteration root_done check)
+    if si < num_structurals:
+        var trailing_pos = Int(structural_positions.unsafe_get(si))
+        raise ParseError(code=ErrorCode.TRAILING_CONTENT.value, position=trailing_pos)
 
     if depth != 0:
         raise ParseError(code=ErrorCode.UNCLOSED_CONTAINER.value, position=0)
