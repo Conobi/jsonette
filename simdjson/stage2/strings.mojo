@@ -115,25 +115,20 @@ def parse_string(
     input_ptr: UnsafePointer[UInt8, _],
     pos: Int,
     input_len: Int,
-    mut string_buf: List[UInt8],
-) raises ParseError -> Int:
+    string_buf_ptr: UnsafePointer[mut=True, UInt8, _],
+    buf_start: Int,
+) raises ParseError -> Tuple[Int, Int]:
     """Parse a JSON string starting at input_ptr[pos] (opening quote).
 
-    Writes to string_buf: [UInt32 length (LE)][UTF-8 bytes][0x00].
-    Returns: number of input bytes consumed (from opening to closing quote inclusive).
+    Writes to string_buf_ptr at offset buf_start: [UInt32 length (LE)][UTF-8 bytes][0x00].
+    Returns: (bytes_consumed, new_buf_end) where new_buf_end is the next free position.
 
+    string_buf must have capacity >= input_len + 64 (guaranteed by Tape pre-allocation).
     Uses unconditional 32-byte SIMD stores (copy first, check after) with a
-    256-byte escape LUT for branchless dispatch. Control character validation
-    is deferred to a single post-copy SIMD scan.
+    256-byte escape LUT for branchless dispatch.
     """
-    var buf_start = len(string_buf)
-
-    # Pre-allocate: 4-byte length prefix + max possible output + 32 SIMD overwrite margin.
-    # Output can never exceed input length (escapes shrink, never grow beyond input).
-    var max_output = input_len - pos + 32
-    string_buf.resize(buf_start + 4 + max_output, 0)
-    var write_ptr = string_buf.unsafe_ptr()
-    var write_pos = buf_start + 4
+    var write_ptr = string_buf_ptr
+    var write_pos = buf_start + 4  # skip 4-byte length prefix
 
     var i = pos + 1  # skip opening quote
 
@@ -215,8 +210,7 @@ def parse_string(
             write_ptr[buf_start + 1] = UInt8((str_len >> 8) & 0xFF)
             write_ptr[buf_start + 2] = UInt8((str_len >> 16) & 0xFF)
             write_ptr[buf_start + 3] = UInt8((str_len >> 24) & 0xFF)
-            string_buf.resize(write_pos + 1, 0)
-            return i - pos + 1
+            return (i - pos + 1, write_pos + 1)
 
         elif b == BACKSLASH:
             # Escape dispatch via LUT

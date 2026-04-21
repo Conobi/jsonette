@@ -34,6 +34,8 @@ def build_tape(
     var tape = Tape(element_capacity=input_len * 2 + 2, string_capacity=input_len + 64)
     var tape_ptr = tape.elements.unsafe_ptr()
     var tape_pos = 0
+    var sbuf_ptr = tape.string_buf.unsafe_ptr()
+    var sbuf_pos = 0  # tracks used bytes in string_buf (len is at capacity via unsafe_uninit_length)
     var input_ptr = input_buf.unsafe_ptr()
 
     # Root open placeholder at tape[0]
@@ -58,8 +60,10 @@ def build_tape(
             raise ParseError(code=ErrorCode.TRAILING_CONTENT.value, position=pos)
 
         if byte == TAG_STRING:  # '"'
-            var buf_offset = UInt64(len(tape.string_buf))
-            var consumed = parse_string(input_ptr, pos, input_len, tape.string_buf)
+            var buf_offset = UInt64(sbuf_pos)
+            var result = parse_string(input_ptr, pos, input_len, sbuf_ptr, sbuf_pos)
+            var consumed = result[0]
+            sbuf_pos = result[1]
             tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
             tape_pos += 1
             if depth == 0:
@@ -151,8 +155,9 @@ def build_tape(
     tape_pos += 1
     tape_ptr[0] = make_tape_entry(TAG_ROOT, UInt64(root_close_idx))
 
-    # Shrink tape to actual size
+    # Shrink tape and string_buf to actual used size (no zeroing on shrink)
     tape.elements.resize(tape_pos, UInt64(0))
+    tape.string_buf.resize(sbuf_pos, UInt8(0))
 
     return tape^
 
