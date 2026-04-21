@@ -18,7 +18,8 @@ def build_tape(
     """Stage 2 entry point: build a tape from structural positions and input bytes.
 
     Args:
-        input_buf: Padded input buffer (may be longer than the real input).
+        input_buf: Padded input buffer (must have >= 128 zero bytes after input_len
+            for safe SIMD overread in parse_string and parse_number).
         input_len: Real (unpadded) length of the JSON input.
         structural_positions: Structural character positions from Stage 1.
     """
