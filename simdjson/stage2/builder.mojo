@@ -6,7 +6,6 @@ numbers into a flat tape format with root envelope.
 
 from simdjson.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from simdjson.stage2.numbers import parse_number
-from simdjson.stage2.pow5_table import Pow5Cache
 from simdjson.stage2.strings import parse_string
 
 comptime MAX_DEPTH: Int = 1024
@@ -29,7 +28,6 @@ def build_tape(
 
     # R4: Pre-allocate tape and string_buf to avoid reallocation during parsing
     var tape = Tape(element_capacity=input_len * 2 + 2, string_capacity=input_len + 64)
-    var pow5_cache = Pow5Cache()
     var input_ptr = input_buf.unsafe_ptr()
 
     # Root open placeholder at tape[0]
@@ -68,7 +66,7 @@ def build_tape(
         elif byte == UInt8(0x3A):  # ':'
             si += 1
         elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):
-            var result = parse_number(input_ptr + pos, input_len - pos, pow5_cache)
+            var result = parse_number(input_ptr + pos, input_len - pos)
             tape.append(result.tag, UInt64(0))
             tape.append_raw(result.value)
             if depth == 0:

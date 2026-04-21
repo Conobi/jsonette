@@ -59,28 +59,30 @@ def main():
     lines.append("")
     lines.append("")
 
-    # Generate the table as two functions that build Lists
-    lines.append("def _init_pow5_hi() -> List[UInt64]:")
-    lines.append(f"    var t = List[UInt64](capacity={NUM_ENTRIES})")
-    for hi, lo in entries:
-        lines.append(f"    t.append(UInt64({hi}))")
+    # Generate the table as two builder functions returning InlineArray
+    lines.append(f"def _build_pow5_hi() -> InlineArray[UInt64, {NUM_ENTRIES}]:")
+    lines.append(f"    var t = InlineArray[UInt64, {NUM_ENTRIES}](fill=UInt64(0))")
+    for i, (hi, lo) in enumerate(entries):
+        lines.append(f"    t[{i}] = UInt64({hi})")
     lines.append("    return t^")
     lines.append("")
     lines.append("")
-    lines.append("def _init_pow5_lo() -> List[UInt64]:")
-    lines.append(f"    var t = List[UInt64](capacity={NUM_ENTRIES})")
-    for hi, lo in entries:
-        lines.append(f"    t.append(UInt64({lo}))")
+    lines.append(f"def _build_pow5_lo() -> InlineArray[UInt64, {NUM_ENTRIES}]:")
+    lines.append(f"    var t = InlineArray[UInt64, {NUM_ENTRIES}](fill=UInt64(0))")
+    for i, (hi, lo) in enumerate(entries):
+        lines.append(f"    t[{i}] = UInt64({lo})")
     lines.append("    return t^")
     lines.append("")
     lines.append("")
-
+    lines.append("comptime _POW5_HI = _build_pow5_hi()")
+    lines.append("comptime _POW5_LO = _build_pow5_lo()")
+    lines.append("")
+    lines.append("")
+    lines.append("@always_inline(\"nodebug\")")
     lines.append("def get_pow5(exponent: Int) -> Uint128:")
     lines.append('    """Get 5^exponent normalized to 128 bits."""')
     lines.append(f"    var idx = exponent - ({SMALLEST_POWER})")
-    lines.append("    var hi_table = _init_pow5_hi()")
-    lines.append("    var lo_table = _init_pow5_lo()")
-    lines.append("    return Uint128(hi=hi_table[idx], lo=lo_table[idx])")
+    lines.append("    return Uint128(hi=_POW5_HI[idx], lo=_POW5_LO[idx])")
     lines.append("")
 
     with open("simdjson/stage2/pow5_table.mojo", "w") as f:
