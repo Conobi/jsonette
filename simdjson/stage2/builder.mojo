@@ -34,8 +34,8 @@ def build_tape(
     # Root open placeholder at tape[0]
     tape.append(TAG_ROOT, UInt64(0))
 
-    var container_stack = List[UInt32]()
-    var count_stack = List[UInt32]()
+    var container_stack = InlineArray[UInt32, MAX_DEPTH](fill=UInt32(0))
+    var count_stack = InlineArray[UInt32, MAX_DEPTH](fill=UInt32(0))
     var depth = 0
     var root_done = False
 
@@ -50,15 +50,15 @@ def build_tape(
         if byte == TAG_OBJECT_OPEN:  # '{'
             if depth >= MAX_DEPTH:
                 raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
-            container_stack.append(UInt32(len(tape.elements)))
-            count_stack.append(UInt32(0))
+            container_stack[depth] = UInt32(len(tape.elements))
+            count_stack[depth] = UInt32(0)
             tape.append(TAG_OBJECT_OPEN, UInt64(0))
             depth += 1
             si += 1
         elif byte == TAG_OBJECT_CLOSE:  # '}'
-            if depth == 0 or tape.tag_at(Int(container_stack[len(container_stack) - 1])) != TAG_OBJECT_OPEN:
+            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_OBJECT_OPEN:
                 raise "TAPE_ERROR: unexpected '}' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, TAG_OBJECT_CLOSE)
+            _close_container(tape, container_stack, count_stack, depth, TAG_OBJECT_CLOSE)
             depth -= 1
             if depth == 0:
                 root_done = True
@@ -66,15 +66,15 @@ def build_tape(
         elif byte == TAG_ARRAY_OPEN:  # '['
             if depth >= MAX_DEPTH:
                 raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
-            container_stack.append(UInt32(len(tape.elements)))
-            count_stack.append(UInt32(0))
+            container_stack[depth] = UInt32(len(tape.elements))
+            count_stack[depth] = UInt32(0)
             tape.append(TAG_ARRAY_OPEN, UInt64(0))
             depth += 1
             si += 1
         elif byte == TAG_ARRAY_CLOSE:  # ']'
-            if depth == 0 or tape.tag_at(Int(container_stack[len(container_stack) - 1])) != TAG_ARRAY_OPEN:
+            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_ARRAY_OPEN:
                 raise "TAPE_ERROR: unexpected ']' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, TAG_ARRAY_CLOSE)
+            _close_container(tape, container_stack, count_stack, depth, TAG_ARRAY_CLOSE)
             depth -= 1
             if depth == 0:
                 root_done = True
@@ -119,7 +119,7 @@ def build_tape(
             si += 1
         elif byte == UInt8(0x2C):  # ','
             if depth > 0:
-                count_stack[len(count_stack) - 1] += 1
+                count_stack[depth - 1] += 1
             si += 1
         else:
             raise "UNEXPECTED_VALUE: unexpected byte " + String(Int(byte)) + " at position " + String(pos)
@@ -134,14 +134,17 @@ def build_tape(
     return tape^
 
 
+@always_inline("nodebug")
 def _close_container(
     mut tape: Tape,
-    mut container_stack: List[UInt32],
-    mut count_stack: List[UInt32],
+    container_stack: InlineArray[UInt32, MAX_DEPTH],
+    count_stack: InlineArray[UInt32, MAX_DEPTH],
+    depth: Int,
     close_tag: UInt8,
 ):
-    var open_idx = Int(container_stack.pop())
-    var comma_count = count_stack.pop()
+    # depth is current depth BEFORE decrement; container was opened at depth-1
+    var open_idx = Int(container_stack[depth - 1])
+    var comma_count = count_stack[depth - 1]
     var close_idx = len(tape.elements)
     var open_tag = tape.tag_at(open_idx)
 
