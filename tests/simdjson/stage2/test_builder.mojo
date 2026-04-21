@@ -25,9 +25,9 @@ def _pad(data: List[UInt8]) -> List[UInt8]:
     return buf^
 
 
-def _build(padded: List[UInt8], input_len: Int, positions: List[UInt32]) raises -> Tape:
+def _build(padded: List[UInt8], input_len: Int, mut positions: List[UInt32]) raises -> Tape:
     """Helper: build tape with temporary container stacks."""
-    var cs = List[UInt32](capacity=1024)
+    var cs = List[UInt32](capacity=2048)
     var ks = List[UInt32](capacity=1024)
     return build_tape(padded, input_len, positions, cs, ks)
 

@@ -10,11 +10,11 @@ from simdjson.stage2.builder import build_tape
 struct Parser:
     """JSON parser. Orchestrates Stage 1 + Stage 2."""
 
-    var container_stack: List[UInt32]
-    var count_stack: List[UInt32]
+    var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
+    var count_stack: List[UInt32]     # unused after interleaving, kept for API compat
 
     def __init__(out self):
-        self.container_stack = List[UInt32](capacity=1024)
+        self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
         self.count_stack = List[UInt32](capacity=1024)
 
     def __init__(out self, *, deinit take: Self):

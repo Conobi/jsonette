@@ -13,7 +13,7 @@ comptime MAX_DEPTH: Int = 1024
 
 
 def build_tape(
-    input_buf: List[UInt8], input_len: Int, structural_positions: List[UInt32],
+    input_buf: List[UInt8], input_len: Int, mut structural_positions: List[UInt32],
     mut container_stack: List[UInt32], mut count_stack: List[UInt32],
 ) raises ParseError -> Tape:
     """Stage 2 entry point: build a tape from structural positions and input bytes.
@@ -30,67 +30,70 @@ def build_tape(
     if num_structurals == 0:
         raise ParseError(code=ErrorCode.EMPTY_DOCUMENT.value, position=0)
 
-    # R4: Pre-allocate tape (unsafe_uninit_length — no zeroing, raw pointer writes fill before read)
+    # Append sentinel to structural_positions — eliminates si < num_structurals check in loop
+    structural_positions.append(UInt32(0xFFFFFFFF))
+
+    # Pre-allocate tape (unsafe_uninit_length — no zeroing, raw pointer writes fill before read)
     var tape = Tape(element_capacity=input_len * 2 + 2, string_capacity=input_len + 64)
     var tape_ptr = tape.elements.unsafe_ptr()
     var tape_pos = 0
-    var sbuf_ptr = tape.string_buf.unsafe_ptr()
-    var sbuf_pos = 0  # tracks used bytes in string_buf (len is at capacity via unsafe_uninit_length)
+    var sbuf_pos = 0  # tracks used bytes in string_buf
     var input_ptr = input_buf.unsafe_ptr()
 
     # Root open placeholder at tape[0]
     tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
     tape_pos += 1
 
-    # Pre-size stacks for raw pointer access (avoids bounds checks in hot loop)
-    container_stack.resize(MAX_DEPTH, UInt32(0))
-    count_stack.resize(MAX_DEPTH, UInt32(0))
-    var cs_ptr = container_stack.unsafe_ptr()
-    var ks_ptr = count_stack.unsafe_ptr()
+    # Interleaved container stack: stk[depth*2] = open_idx, stk[depth*2+1] = count
+    # Merges container_stack and count_stack into one pointer, saving one register.
+    container_stack.resize(MAX_DEPTH * 2, UInt32(0))
+    var stk = container_stack.unsafe_ptr()
     var depth = 0
-    # No root_done variable — we break out of the loop when the root value is complete.
-    # This eliminates a per-iteration check (4 instructions saved per structural).
 
+    # Sentinel: append UINT32_MAX so the loop needs no bounds check on si
+    structural_positions.append(UInt32(0xFFFFFFFF))
+    var si_ptr = structural_positions.unsafe_ptr()
     var si = 0
-    while si < num_structurals:
-        # Safety: si < num_structurals guaranteed by while loop guard
-        var pos = Int(structural_positions.unsafe_get(si))
+
+    while True:
+        var pos = Int(si_ptr[si])
+        if pos == Int(UInt32(0xFFFFFFFF)):
+            break  # sentinel reached
         var byte = input_ptr[pos]
 
         if byte == TAG_STRING:  # '"'
             var buf_offset = UInt64(sbuf_pos)
-            var result = parse_string(input_ptr, pos, input_len, sbuf_ptr, sbuf_pos)
+            var result = parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
             var consumed = result[0]
-            sbuf_pos = result[1]
+            sbuf_pos += result[1]
             tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
             tape_pos += 1
             si += 1
             # Skip structural positions within the consumed string (closing quote)
             var string_end = pos + consumed - 1
-            while si < num_structurals and Int(structural_positions.unsafe_get(si)) <= string_end:
+            while Int(si_ptr[si]) <= string_end:
                 si += 1
             if depth == 0:
                 break
         elif byte == UInt8(0x2C):  # ','
             if depth > 0:
-                ks_ptr[depth - 1] += 1
+                stk[depth * 2 - 1] += 1
             si += 1
         elif byte == UInt8(0x3A):  # ':'
             si += 1
         elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):
             var result = parse_number(input_ptr + pos, input_len - pos)
             tape_ptr[tape_pos] = make_tape_entry(result.tag, UInt64(0))
-            tape_pos += 1
-            tape_ptr[tape_pos] = result.value
-            tape_pos += 1
+            tape_ptr[tape_pos + 1] = result.value
+            tape_pos += 2
             si += 1
             if depth == 0:
                 break
         elif byte == TAG_OBJECT_OPEN:  # '{'
             if depth >= MAX_DEPTH:
                 raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos)
-            cs_ptr[depth] = UInt32(tape_pos)
-            ks_ptr[depth] = UInt32(0)
+            stk[depth * 2] = UInt32(tape_pos)
+            stk[depth * 2 + 1] = UInt32(0)
             tape_ptr[tape_pos] = make_tape_entry(TAG_OBJECT_OPEN, UInt64(0))
             tape_pos += 1
             depth += 1
@@ -98,24 +101,26 @@ def build_tape(
         elif byte == TAG_ARRAY_OPEN:  # '['
             if depth >= MAX_DEPTH:
                 raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos)
-            cs_ptr[depth] = UInt32(tape_pos)
-            ks_ptr[depth] = UInt32(0)
+            stk[depth * 2] = UInt32(tape_pos)
+            stk[depth * 2 + 1] = UInt32(0)
             tape_ptr[tape_pos] = make_tape_entry(TAG_ARRAY_OPEN, UInt64(0))
             tape_pos += 1
             depth += 1
             si += 1
         elif byte == TAG_OBJECT_CLOSE:  # '}'
-            if depth == 0 or UInt8(tape_ptr[Int(cs_ptr[depth - 1])] >> 56) != TAG_OBJECT_OPEN:
+            if depth == 0 or UInt8(tape_ptr[Int(stk[depth * 2 - 2])] >> 56) != TAG_OBJECT_OPEN:
                 raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos)
-            tape_pos = _close_container(tape_ptr, tape_pos, cs_ptr, ks_ptr, depth, TAG_OBJECT_CLOSE)
+            _close_container(tape_ptr, tape_pos, stk, depth, TAG_OBJECT_CLOSE)
+            tape_pos += 1
             depth -= 1
             si += 1
             if depth == 0:
                 break
         elif byte == TAG_ARRAY_CLOSE:  # ']'
-            if depth == 0 or UInt8(tape_ptr[Int(cs_ptr[depth - 1])] >> 56) != TAG_ARRAY_OPEN:
+            if depth == 0 or UInt8(tape_ptr[Int(stk[depth * 2 - 2])] >> 56) != TAG_ARRAY_OPEN:
                 raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos)
-            tape_pos = _close_container(tape_ptr, tape_pos, cs_ptr, ks_ptr, depth, TAG_ARRAY_CLOSE)
+            _close_container(tape_ptr, tape_pos, stk, depth, TAG_ARRAY_CLOSE)
+            tape_pos += 1
             depth -= 1
             si += 1
             if depth == 0:
@@ -144,10 +149,9 @@ def build_tape(
         else:
             raise ParseError(code=ErrorCode.UNEXPECTED_VALUE.value, position=pos)
 
-    # Check for trailing content (replaces per-iteration root_done check)
-    if si < num_structurals:
-        var trailing_pos = Int(structural_positions.unsafe_get(si))
-        raise ParseError(code=ErrorCode.TRAILING_CONTENT.value, position=trailing_pos)
+    # Check for trailing content (sentinel still present — if si didn't hit it, there's trailing)
+    if Int(si_ptr[si]) != Int(UInt32(0xFFFFFFFF)):
+        raise ParseError(code=ErrorCode.TRAILING_CONTENT.value, position=Int(si_ptr[si]))
 
     if depth != 0:
         raise ParseError(code=ErrorCode.UNCLOSED_CONTAINER.value, position=0)
@@ -167,15 +171,14 @@ def build_tape(
 @always_inline("nodebug")
 def _close_container[o: Origin[mut=True]](
     tape_ptr: UnsafePointer[UInt64, origin=o],
-    mut tape_pos: Int,
-    cs_ptr: UnsafePointer[UInt32, _],
-    ks_ptr: UnsafePointer[UInt32, _],
+    tape_pos: Int,
+    stk: UnsafePointer[UInt32, _],
     depth: Int,
     close_tag: UInt8,
-) -> Int:
+):
     # depth is current depth BEFORE decrement; container was opened at depth-1
-    var open_idx = Int(cs_ptr[depth - 1])
-    var comma_count = ks_ptr[depth - 1]
+    var open_idx = Int(stk[(depth - 1) * 2])
+    var comma_count = stk[(depth - 1) * 2 + 1]
     var close_idx = tape_pos
     var open_tag = UInt8(tape_ptr[open_idx] >> 56)
 
@@ -187,11 +190,9 @@ def _close_container[o: Origin[mut=True]](
         count = 0xFFFFFF
 
     tape_ptr[tape_pos] = make_tape_entry(close_tag, UInt64(open_idx))
-    tape_pos += 1
     tape_ptr[open_idx] = make_tape_entry(
         open_tag, (count << 32) | UInt64(close_idx + 1)
     )
-    return tape_pos
 
 
 @always_inline("nodebug")
