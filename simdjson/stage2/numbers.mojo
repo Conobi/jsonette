@@ -12,10 +12,12 @@ struct NumberResult(Movable, Copyable):
     var bytes_consumed: Int
 
 
+@always_inline("nodebug")
 def _is_digit(b: UInt8) -> Bool:
     return b >= UInt8(0x30) and b <= UInt8(0x39)
 
 
+@always_inline("nodebug")
 def _digit_value(b: UInt8) -> UInt64:
     return UInt64(b) - UInt64(0x30)
 
