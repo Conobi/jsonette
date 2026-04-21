@@ -1,11 +1,13 @@
 from std.sys.intrinsics import llvm_intrinsic
 
 
+@always_inline("nodebug")
 def movemask_epi8(v: SIMD[DType.uint8, 32]) -> Int32:
     """Extract high bit of each byte into a 32-bit integer mask (AVX2 PMOVMSKB)."""
     return llvm_intrinsic["llvm.x86.avx2.pmovmskb", Int32](v)
 
 
+@always_inline("nodebug")
 def shuffle_epi8(
     table: SIMD[DType.uint8, 32], indices: SIMD[DType.uint8, 32]
 ) -> SIMD[DType.uint8, 32]:
@@ -17,6 +19,7 @@ def shuffle_epi8(
     )
 
 
+@always_inline("nodebug")
 def prefix_xor(bitmask: UInt64) -> UInt64:
     """Compute prefix XOR: out[i] = bitmask[0] ^ bitmask[1] ^ ... ^ bitmask[i].
     Each 1-bit flips the polarity of all subsequent bits.
@@ -37,6 +40,7 @@ struct SimdInput(Movable, Copyable):
 
     var chunks: InlineArray[SIMD[DType.uint8, 32], 2]
 
+    @always_inline("nodebug")
     @staticmethod
     def load(ptr: UnsafePointer[UInt8, _]) -> SimdInput:
         """Load 64 bytes from ptr (unaligned)."""
@@ -49,6 +53,7 @@ struct SimdInput(Movable, Copyable):
         result.chunks[1] = (ptr + 32).load[width=32]()
         return result^
 
+    @always_inline("nodebug")
     def eq(self, target: UInt8) -> UInt64:
         """Return 64-bit mask: bit i set if byte i == target."""
         var splat = SIMD[DType.uint8, 32](target)
@@ -62,6 +67,7 @@ struct SimdInput(Movable, Copyable):
         var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]()) & 0xFFFFFFFF
         return lo | (hi << 32)
 
+    @always_inline("nodebug")
     def lteq(self, target: UInt8) -> UInt64:
         """Return 64-bit mask: bit i set if byte i <= target (unsigned)."""
         var splat = SIMD[DType.uint8, 32](target)

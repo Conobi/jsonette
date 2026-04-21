@@ -9,6 +9,7 @@ struct CharacterBlock(Movable, Copyable):
     var op: UInt64
 
 
+@always_inline("nodebug")
 def classify(input: SimdInput) -> CharacterBlock:
     """Classify 64 bytes into whitespace and structural operator bitmasks.
 

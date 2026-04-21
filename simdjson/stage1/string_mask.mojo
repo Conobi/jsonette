@@ -13,6 +13,7 @@ struct EscapeScanner:
     def __init__(out self):
         self.next_is_escaped = 0
 
+    @always_inline("nodebug")
     def next(mut self, backslash: UInt64) -> UInt64:
         """Given a 64-bit backslash bitmask, return 64-bit escaped bitmask."""
         comptime ODD_BITS: UInt64 = 0xAAAAAAAAAAAAAAAA
@@ -58,6 +59,7 @@ struct StringScanner:
     def __init__(out self):
         self.prev_in_string = 0
 
+    @always_inline("nodebug")
     def next(mut self, quote: UInt64, escaped: UInt64) -> UInt64:
         """Given quote and escaped bitmasks, return in-string bitmask.
 
