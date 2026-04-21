@@ -33,7 +33,9 @@ def _parse(s: String) raises -> Document:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var cs = List[UInt32](capacity=1024)
+    var ks = List[UInt32](capacity=1024)
+    var tape = build_tape(padded, input_len, positions, cs, ks)
     var doc = Document(tape^)
     return doc^
 

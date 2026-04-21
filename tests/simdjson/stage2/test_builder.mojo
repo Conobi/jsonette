@@ -1,6 +1,6 @@
 from std.testing import assert_equal
 from std.memory import bitcast
-from simdjson.tape import tape_tag, tape_payload
+from simdjson.tape import Tape, tape_tag, tape_payload
 from simdjson.stage1.indexer import structural_index
 from simdjson.stage2.builder import build_tape
 
@@ -25,13 +25,20 @@ def _pad(data: List[UInt8]) -> List[UInt8]:
     return buf^
 
 
+def _build(padded: List[UInt8], input_len: Int, positions: List[UInt32]) raises -> Tape:
+    """Helper: build tape with temporary container stacks."""
+    var cs = List[UInt32](capacity=1024)
+    var ks = List[UInt32](capacity=1024)
+    return build_tape(padded, input_len, positions, cs, ks)
+
+
 def test_literal_true() raises:
     """Parse 'true' — simplest valid JSON."""
     var input = _make_bytes(String("true"))
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     # tape[0] = root open 'r', tape[1] = 't', tape[2] = root close 'r'
     assert_equal(len(tape.elements), 3)
     assert_equal(tape.tag_at(0), UInt8(0x72))  # 'r'
@@ -46,7 +53,7 @@ def test_literal_false() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x66))  # 'f'
 
 
@@ -55,7 +62,7 @@ def test_literal_null() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x6E))  # 'n'
 
 
@@ -64,7 +71,7 @@ def test_empty_array() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     # tape: r, [, ], r
     assert_equal(len(tape.elements), 4)
     assert_equal(tape.tag_at(1), UInt8(0x5B))  # '['
@@ -81,7 +88,7 @@ def test_empty_object() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(len(tape.elements), 4)
     assert_equal(tape.tag_at(1), UInt8(0x7B))  # '{'
     assert_equal(tape.tag_at(2), UInt8(0x7D))  # '}'
@@ -93,7 +100,7 @@ def test_nested_containers() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     # tape: r, [outer, [inner, ]inner, ]outer, r
     assert_equal(len(tape.elements), 6)
     assert_equal(tape.tag_at(1), UInt8(0x5B))  # outer [
@@ -112,7 +119,7 @@ def test_array_with_literals() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     # tape: r, [, true, false, null, ], r
     assert_equal(len(tape.elements), 7)
     assert_equal(tape.tag_at(2), UInt8(0x74))  # 't'
@@ -126,7 +133,7 @@ def test_number_in_array() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     # tape: r, [, u(42), 42, l(-7), -7, ], r
     assert_equal(len(tape.elements), 8)
     assert_equal(tape.tag_at(2), UInt8(0x75))  # 'u'
@@ -141,7 +148,7 @@ def test_string_value() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(2), UInt8(0x22))  # '"'
     var offset = Int(tape.payload_at(2))
     assert_equal(tape.string_buf[offset], UInt8(5))  # length
@@ -154,7 +161,7 @@ def test_object_with_values() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x7B))  # '{'
     assert_equal(tape.tag_at(2), UInt8(0x22))  # '"' key "a"
     assert_equal(tape.tag_at(3), UInt8(0x75))  # 'u' value 1
@@ -170,7 +177,7 @@ def test_float_in_object() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(3), UInt8(0x64))  # 'd'
     var float_bits = tape.elements[4]
     var val = Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](float_bits)))
@@ -185,7 +192,7 @@ def test_nested_object_array() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(0), UInt8(0x72))  # root
     assert_equal(tape.tag_at(1), UInt8(0x7B))  # '{'
     assert_equal((tape.payload_at(1) >> 32) & 0xFFFFFF, UInt64(1))
@@ -196,7 +203,7 @@ def test_scalar_root_number() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     # tape: r, u(42), 42, r
     assert_equal(len(tape.elements), 4)
     assert_equal(tape.tag_at(1), UInt8(0x75))
@@ -208,7 +215,7 @@ def test_scalar_root_string() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = structural_index(padded, input_len)
-    var tape = build_tape(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x22))
 
 

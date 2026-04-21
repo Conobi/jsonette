@@ -36,10 +36,15 @@ def profile_file(path: String, name: String) raises:
     comptime WARMUP: Int = 5
     comptime ITERS: Int = 20
 
+    var cs = List[UInt32](capacity=1024)
+    var ks = List[UInt32](capacity=1024)
+
     # Warmup both stages
     for _ in range(WARMUP):
         var pos = structural_index(padded, size)
-        var tape = build_tape(padded, size, pos)
+        cs.resize(0, UInt32(0))
+        ks.resize(0, UInt32(0))
+        var tape = build_tape(padded, size, pos, cs, ks)
 
     # Time Stage 1 alone
     var s1_start = perf_counter_ns()
@@ -54,7 +59,9 @@ def profile_file(path: String, name: String) raises:
     # Time Stage 2 alone
     var s2_start = perf_counter_ns()
     for _ in range(ITERS):
-        var tape = build_tape(padded, size, positions)
+        cs.resize(0, UInt32(0))
+        ks.resize(0, UInt32(0))
+        var tape = build_tape(padded, size, positions, cs, ks)
     var s2_end = perf_counter_ns()
     var s2_ns = s2_end - s2_start
 
@@ -62,7 +69,9 @@ def profile_file(path: String, name: String) raises:
     var full_start = perf_counter_ns()
     for _ in range(ITERS):
         var pos = structural_index(padded, size)
-        var tape = build_tape(padded, size, pos)
+        cs.resize(0, UInt32(0))
+        ks.resize(0, UInt32(0))
+        var tape = build_tape(padded, size, pos, cs, ks)
     var full_end = perf_counter_ns()
     var full_ns = full_end - full_start
 
