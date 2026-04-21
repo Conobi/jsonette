@@ -59,8 +59,8 @@ def classify(input: SimdInput) -> CharacterBlock:
         SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
     )
 
-    var op_lo = UInt64(movemask_epi8(op_mask0).cast[DType.uint64]())
-    var op_hi = UInt64(movemask_epi8(op_mask1).cast[DType.uint64]())
+    var op_lo = UInt64(movemask_epi8(op_mask0).cast[DType.uint64]()) & 0xFFFFFFFF
+    var op_hi = UInt64(movemask_epi8(op_mask1).cast[DType.uint64]()) & 0xFFFFFFFF
     var op_combined = op_lo | (op_hi << 32)
 
     # --- Whitespace via eq() ---

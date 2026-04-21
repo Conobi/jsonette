@@ -58,8 +58,8 @@ struct SimdInput(Movable, Copyable):
         var m1 = self.chunks[1].eq(splat).select(
             SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
         )
-        var lo = UInt64(movemask_epi8(m0).cast[DType.uint64]())
-        var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]())
+        var lo = UInt64(movemask_epi8(m0).cast[DType.uint64]()) & 0xFFFFFFFF
+        var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]()) & 0xFFFFFFFF
         return lo | (hi << 32)
 
     def lteq(self, target: UInt8) -> UInt64:
@@ -71,6 +71,6 @@ struct SimdInput(Movable, Copyable):
         var m1 = self.chunks[1].le(splat).select(
             SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
         )
-        var lo = UInt64(movemask_epi8(m0).cast[DType.uint64]())
-        var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]())
+        var lo = UInt64(movemask_epi8(m0).cast[DType.uint64]()) & 0xFFFFFFFF
+        var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]()) & 0xFFFFFFFF
         return lo | (hi << 32)

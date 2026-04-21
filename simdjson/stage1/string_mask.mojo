@@ -32,7 +32,7 @@ struct EscapeScanner:
         # Filter by opposite parity (odd-length runs only)
         var even_result = even_carries & ODD_BITS
         var odd_result = odd_carries & ~ODD_BITS
-        var escaped = even_result | odd_result
+        var escaped = even_result | odd_result | prev_carry
 
         # Detect overflow (carry into next block).
         # Only odd-parity overflow sets the carry; even-parity overflow cancels it.
