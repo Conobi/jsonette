@@ -24,9 +24,6 @@ struct Parser:
         memset(padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
         var positions = structural_index(padded, input_len)
-        try:
-            var tape = build_tape(padded, input_len, positions)
-            var doc = Document(tape^)
-            return doc^
-        except e:
-            raise e
+        var tape = build_tape(padded, input_len, positions)
+        var doc = Document(tape^)
+        return doc^
