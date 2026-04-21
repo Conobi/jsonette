@@ -11,11 +11,15 @@ struct Value:
         self._idx = idx
 
     # --- Internal helpers ---
+    @always_inline("nodebug")
     def _tag(self, ref doc: Document) -> UInt8:
-        return UInt8(doc.tape.elements[self._idx] >> 56)
+        # Safety: idx comes from tape structure written by builder
+        return UInt8(doc.tape.elements.unsafe_get(self._idx) >> 56)
 
+    @always_inline("nodebug")
     def _payload(self, ref doc: Document) -> UInt64:
-        return doc.tape.elements[self._idx] & 0x00FFFFFFFFFFFFFF
+        # Safety: idx comes from tape structure written by builder
+        return doc.tape.elements.unsafe_get(self._idx) & 0x00FFFFFFFFFFFFFF
 
     # --- Type checks ---
     def is_object(self, ref doc: Document) -> Bool:
@@ -55,17 +59,20 @@ struct Value:
     def get_uint(self, ref doc: Document) raises -> UInt64:
         if self._tag(doc) != TAG_UINT64:
             raise "TAPE_ERROR: expected uint64"
-        return doc.tape.elements[self._idx + 1]
+        # Safety: idx comes from tape structure written by builder
+        return doc.tape.elements.unsafe_get(self._idx + 1)
 
     def get_int(self, ref doc: Document) raises -> Int64:
         if self._tag(doc) != TAG_INT64:
             raise "TAPE_ERROR: expected int64"
-        return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](doc.tape.elements[self._idx + 1])))
+        # Safety: idx comes from tape structure written by builder
+        return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](doc.tape.elements.unsafe_get(self._idx + 1))))
 
     def get_float(self, ref doc: Document) raises -> Float64:
         if self._tag(doc) != TAG_FLOAT64:
             raise "TAPE_ERROR: expected float64"
-        return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](doc.tape.elements[self._idx + 1])))
+        # Safety: idx comes from tape structure written by builder
+        return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](doc.tape.elements.unsafe_get(self._idx + 1))))
 
     def get_string_length(self, ref doc: Document) raises -> Int:
         if self._tag(doc) != TAG_STRING:
@@ -120,10 +127,12 @@ struct Value:
         var i = self._idx + 1
         var close_plus_one = Int(self._payload(doc) & 0xFFFFFFFF)
         while i < close_plus_one - 1:
-            var key_tag = UInt8(doc.tape.elements[i] >> 56)
+            # Safety: idx comes from tape structure written by builder
+            var key_tag = UInt8(doc.tape.elements.unsafe_get(i) >> 56)
             if key_tag != TAG_STRING:
                 raise "TAPE_ERROR: expected string key in object"
-            var offset = Int(doc.tape.elements[i] & 0x00FFFFFFFFFFFFFF)
+            # Safety: idx comes from tape structure written by builder
+            var offset = Int(doc.tape.elements.unsafe_get(i) & 0x00FFFFFFFFFFFFFF)
             var key_len = Int(
                 UInt32(doc.tape.string_buf[offset])
                 | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
@@ -167,11 +176,13 @@ struct Value:
 
 def skip_value(ref doc: Document, idx: Int) -> Int:
     """Return the tape index past the element at idx."""
-    var tag = UInt8(doc.tape.elements[idx] >> 56)
+    # Safety: idx comes from tape structure written by builder
+    var entry = doc.tape.elements.unsafe_get(idx)
+    var tag = UInt8(entry >> 56)
     if tag == TAG_TRUE or tag == TAG_FALSE or tag == TAG_NULL or tag == TAG_STRING:
         return idx + 1
     if tag == TAG_INT64 or tag == TAG_UINT64 or tag == TAG_FLOAT64:
         return idx + 2
     if tag == TAG_OBJECT_OPEN or tag == TAG_ARRAY_OPEN:
-        return Int(doc.tape.elements[idx] & 0xFFFFFFFF)
+        return Int(entry & 0xFFFFFFFF)
     return idx + 1

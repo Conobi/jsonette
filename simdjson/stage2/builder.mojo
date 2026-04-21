@@ -41,7 +41,8 @@ def build_tape(
 
     var si = 0
     while si < num_structurals:
-        var pos = Int(structural_positions[si])
+        # Safety: si < num_structurals guaranteed by while loop guard
+        var pos = Int(structural_positions.unsafe_get(si))
         var byte = input_ptr[pos]
 
         if root_done and depth == 0:
@@ -88,7 +89,8 @@ def build_tape(
             si += 1
             # Skip structural positions within the consumed string (closing quote)
             var string_end = pos + consumed - 1
-            while si < num_structurals and Int(structural_positions[si]) <= string_end:
+            # Safety: si < num_structurals guaranteed by while loop guard
+            while si < num_structurals and Int(structural_positions.unsafe_get(si)) <= string_end:
                 si += 1
         elif byte == TAG_TRUE:  # 't' (true)
             _validate_true(input_ptr, pos, input_len)
