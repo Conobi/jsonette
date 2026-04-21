@@ -1,1 +1,3 @@
 *.mojopkg
+tests/fixtures/corpus/
+tests/fixtures/test_vectors/
