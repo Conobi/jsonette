@@ -23,7 +23,8 @@ struct Tape(Movable):
         self.string_buf = List[UInt8]()
 
     def __init__(out self, element_capacity: Int, string_capacity: Int):
-        self.elements = List[UInt64](capacity=element_capacity)
+        # Use unsafe_uninit_length to avoid zeroing — raw pointer writes fill before read
+        self.elements = List[UInt64](unsafe_uninit_length=element_capacity)
         self.string_buf = List[UInt8](capacity=string_capacity)
 
     def __init__(out self, *, deinit take: Self):
