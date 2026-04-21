@@ -4,7 +4,7 @@ Combines containers (objects/arrays), literals (true/false/null), strings, and
 numbers into a flat tape format with root envelope.
 """
 
-from simdjson.tape import Tape, make_tape_entry
+from simdjson.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from simdjson.stage2.numbers import parse_number
 from simdjson.stage2.strings import parse_string
 
@@ -24,7 +24,7 @@ def build_tape(
     var input_len = len(input_buf)
 
     # Root open placeholder at tape[0]
-    tape.append(UInt8(0x72), UInt64(0))
+    tape.append(TAG_ROOT, UInt64(0))
 
     var container_stack = List[UInt32]()
     var count_stack = List[UInt32]()
@@ -39,42 +39,42 @@ def build_tape(
         if root_done and depth == 0:
             raise "TRAILING_CONTENT: unexpected content at position " + String(pos)
 
-        if byte == UInt8(0x7B):  # '{'
+        if byte == TAG_OBJECT_OPEN:  # '{'
             if depth >= MAX_DEPTH:
                 raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
             container_stack.append(UInt32(len(tape.elements)))
             count_stack.append(UInt32(0))
-            tape.append(UInt8(0x7B), UInt64(0))
+            tape.append(TAG_OBJECT_OPEN, UInt64(0))
             depth += 1
             si += 1
-        elif byte == UInt8(0x7D):  # '}'
-            if depth == 0 or tape.tag_at(Int(container_stack[len(container_stack) - 1])) != UInt8(0x7B):
+        elif byte == TAG_OBJECT_CLOSE:  # '}'
+            if depth == 0 or tape.tag_at(Int(container_stack[len(container_stack) - 1])) != TAG_OBJECT_OPEN:
                 raise "TAPE_ERROR: unexpected '}' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, UInt8(0x7D))
+            _close_container(tape, container_stack, count_stack, TAG_OBJECT_CLOSE)
             depth -= 1
             if depth == 0:
                 root_done = True
             si += 1
-        elif byte == UInt8(0x5B):  # '['
+        elif byte == TAG_ARRAY_OPEN:  # '['
             if depth >= MAX_DEPTH:
                 raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
             container_stack.append(UInt32(len(tape.elements)))
             count_stack.append(UInt32(0))
-            tape.append(UInt8(0x5B), UInt64(0))
+            tape.append(TAG_ARRAY_OPEN, UInt64(0))
             depth += 1
             si += 1
-        elif byte == UInt8(0x5D):  # ']'
-            if depth == 0 or tape.tag_at(Int(container_stack[len(container_stack) - 1])) != UInt8(0x5B):
+        elif byte == TAG_ARRAY_CLOSE:  # ']'
+            if depth == 0 or tape.tag_at(Int(container_stack[len(container_stack) - 1])) != TAG_ARRAY_OPEN:
                 raise "TAPE_ERROR: unexpected ']' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, UInt8(0x5D))
+            _close_container(tape, container_stack, count_stack, TAG_ARRAY_CLOSE)
             depth -= 1
             if depth == 0:
                 root_done = True
             si += 1
-        elif byte == UInt8(0x22):  # '"'
+        elif byte == TAG_STRING:  # '"'
             var buf_offset = UInt64(len(tape.string_buf))
             var consumed = parse_string(input_ptr, pos, input_len, tape.string_buf)
-            tape.append(UInt8(0x22), buf_offset)
+            tape.append(TAG_STRING, buf_offset)
             if depth == 0:
                 root_done = True
             si += 1
@@ -82,21 +82,21 @@ def build_tape(
             var string_end = pos + consumed - 1
             while si < num_structurals and Int(structural_positions[si]) <= string_end:
                 si += 1
-        elif byte == UInt8(0x74):  # 't' (true)
+        elif byte == TAG_TRUE:  # 't' (true)
             _validate_literal(input_ptr, pos, input_len, String("true"))
-            tape.append(UInt8(0x74), UInt64(0))
+            tape.append(TAG_TRUE, UInt64(0))
             if depth == 0:
                 root_done = True
             si += 1
-        elif byte == UInt8(0x66):  # 'f' (false)
+        elif byte == TAG_FALSE:  # 'f' (false)
             _validate_literal(input_ptr, pos, input_len, String("false"))
-            tape.append(UInt8(0x66), UInt64(0))
+            tape.append(TAG_FALSE, UInt64(0))
             if depth == 0:
                 root_done = True
             si += 1
-        elif byte == UInt8(0x6E):  # 'n' (null)
+        elif byte == TAG_NULL:  # 'n' (null)
             _validate_literal(input_ptr, pos, input_len, String("null"))
-            tape.append(UInt8(0x6E), UInt64(0))
+            tape.append(TAG_NULL, UInt64(0))
             if depth == 0:
                 root_done = True
             si += 1
@@ -120,8 +120,8 @@ def build_tape(
         raise "UNCLOSED_CONTAINER: " + String(depth) + " unclosed container(s)"
 
     var root_close_idx = len(tape.elements)
-    tape.append(UInt8(0x72), UInt64(0))
-    tape.elements[0] = make_tape_entry(UInt8(0x72), UInt64(root_close_idx))
+    tape.append(TAG_ROOT, UInt64(0))
+    tape.elements[0] = make_tape_entry(TAG_ROOT, UInt64(root_close_idx))
 
     return tape^
 

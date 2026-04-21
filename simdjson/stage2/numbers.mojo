@@ -1,11 +1,12 @@
 from std.memory import bitcast
 from simdjson.stage2.eisel_lemire import compute_float_64
+from simdjson.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 
 
 @fieldwise_init
 struct NumberResult(Movable, Copyable):
     """Result of parsing a JSON number."""
-    var tag: UInt8        # 0x6C='l' signed, 0x75='u' unsigned, 0x64='d' float
+    var tag: UInt8        # TAG_INT64 signed, TAG_UINT64 unsigned, TAG_FLOAT64 float
     var value: UInt64     # raw bits (Int64, UInt64, or Float64 bitcast)
     var bytes_consumed: Int
 
@@ -76,9 +77,9 @@ def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises -> Nu
         else:
             var signed_val = Int64(0) - Int64(integer_part)
             raw = UInt64(bitcast[DType.uint64](SIMD[DType.int64, 1](signed_val)))
-        return NumberResult(tag=UInt8(0x6C), value=raw, bytes_consumed=pos)
+        return NumberResult(tag=TAG_INT64, value=raw, bytes_consumed=pos)
     else:
-        return NumberResult(tag=UInt8(0x75), value=integer_part, bytes_consumed=pos)
+        return NumberResult(tag=TAG_UINT64, value=integer_part, bytes_consumed=pos)
 
 
 def _parse_float(
@@ -129,7 +130,7 @@ def _parse_float(
     if not too_many_digits:
         var result = compute_float_64(mantissa, decimal_exponent, negative)
         if result.valid:
-            return NumberResult(tag=UInt8(0x64), value=result.value, bytes_consumed=pos)
+            return NumberResult(tag=TAG_FLOAT64, value=result.value, bytes_consumed=pos)
 
     # Fallback: rebuild Float64 from components.
     return _parse_float_fallback(negative, mantissa, frac_digits, parsed_exponent, pos)
@@ -162,4 +163,4 @@ def _parse_float_fallback(
         value = -value
 
     var raw = bitcast[DType.uint64](SIMD[DType.float64, 1](value))
-    return NumberResult(tag=UInt8(0x64), value=UInt64(raw), bytes_consumed=pos)
+    return NumberResult(tag=TAG_FLOAT64, value=UInt64(raw), bytes_consumed=pos)
