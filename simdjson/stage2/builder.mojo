@@ -26,7 +26,8 @@ def build_tape(
     if num_structurals == 0:
         raise "EMPTY_DOCUMENT: no structural characters found"
 
-    var tape = Tape()
+    # R4: Pre-allocate tape and string_buf to avoid reallocation during parsing
+    var tape = Tape(element_capacity=input_len * 2, string_capacity=input_len + 64)
     var pow5_cache = Pow5Cache()
     var input_ptr = input_buf.unsafe_ptr()
 
