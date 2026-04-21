@@ -22,6 +22,24 @@ def _digit_value(b: UInt8) -> UInt64:
     return UInt64(b) - UInt64(0x30)
 
 
+@always_inline("nodebug")
+def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
+    """Check if 8 bytes starting at ptr+pos are all ASCII digits ('0'-'9')."""
+    var chunk = (ptr + pos).load[width=8]()
+    var sub = chunk - SIMD[DType.uint8, 8](0x30)
+    return sub.reduce_max() <= 9
+
+
+@always_inline("nodebug")
+def _parse_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
+    """Parse exactly 8 ASCII digits into a UInt64. Caller ensures all are digits."""
+    var chunk = (ptr + pos).load[width=8]()
+    var digits = (chunk - SIMD[DType.uint8, 8](0x30)).cast[DType.uint64]()
+    var g1 = digits[0] * 1000 + digits[1] * 100 + digits[2] * 10 + digits[3]
+    var g2 = digits[4] * 1000 + digits[5] * 100 + digits[6] * 10 + digits[7]
+    return g1 * 10000 + g2
+
+
 def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int, ref cache: Pow5Cache) raises -> NumberResult:
     """Parse a JSON number starting at ptr[0].
 
@@ -46,9 +64,17 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int, ref cache: Pow5Cach
     # Parse integer digits
     var integer_part: UInt64 = 0
     var digit_count = 0
+    # SWAR fast path: parse 8 digits at a time
+    while pos + 8 <= max_len and _are_8_digits(ptr, pos):
+        var batch = _parse_8_digits(ptr, pos)
+        if integer_part > (UInt64.MAX - batch) // 100000000:
+            raise "NUMBER_ERROR: integer overflow"
+        integer_part = integer_part * 100000000 + batch
+        digit_count += 8
+        pos += 8
+    # Scalar tail: remaining digits
     while pos < max_len and _is_digit(ptr[pos]):
         var digit = _digit_value(ptr[pos])
-        # Overflow check: if integer_part > (MAX - digit) / 10
         if integer_part > (UInt64.MAX - digit) // 10:
             raise "NUMBER_ERROR: integer overflow"
         integer_part = integer_part * 10 + digit
@@ -104,6 +130,14 @@ def _parse_float(
         pos += 1
         if pos >= max_len or not _is_digit(ptr[pos]):
             raise "NUMBER_ERROR: expected digit after '.'"
+        # SWAR fast path for fractional digits
+        while pos + 8 <= max_len and total_digits + 8 <= 19 and _are_8_digits(ptr, pos):
+            var batch = _parse_8_digits(ptr, pos)
+            mantissa = mantissa * 100000000 + batch
+            frac_digits += 8
+            total_digits += 8
+            pos += 8
+        # Scalar tail
         while pos < max_len and _is_digit(ptr[pos]):
             if total_digits < 19:
                 mantissa = mantissa * 10 + _digit_value(ptr[pos])
