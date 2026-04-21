@@ -13,6 +13,7 @@ TESTS=(
     tests/simdjson/stage2/test_numbers.mojo
     tests/simdjson/stage2/test_strings.mojo
     tests/simdjson/stage2/test_builder.mojo
+    tests/simdjson/stage2/test_eisel_lemire.mojo
     tests/simdjson/test_parser.mojo
     tests/simdjson/test_value.mojo
 )
