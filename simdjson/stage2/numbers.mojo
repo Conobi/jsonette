@@ -1,4 +1,5 @@
 from std.memory import bitcast
+from simdjson.stage2.eisel_lemire import compute_float_64
 
 
 @fieldwise_init
@@ -88,20 +89,26 @@ def _parse_float(
     integer_part: UInt64,
     digit_count: Int,
 ) raises -> NumberResult:
-    var value = Float64(integer_part)
+    # Build mantissa (all significant digits) and track decimal exponent.
+    var mantissa = integer_part
+    var total_digits = digit_count
+    var frac_digits = 0
+    var too_many_digits = digit_count > 19
 
     if pos < max_len and ptr[pos] == UInt8(0x2E):
         pos += 1
         if pos >= max_len or not _is_digit(ptr[pos]):
             raise "NUMBER_ERROR: expected digit after '.'"
-        var frac: Float64 = 0.0
-        var frac_scale: Float64 = 1.0
         while pos < max_len and _is_digit(ptr[pos]):
-            frac = frac * 10.0 + Float64(_digit_value(ptr[pos]))
-            frac_scale *= 10.0
+            if total_digits < 19:
+                mantissa = mantissa * 10 + _digit_value(ptr[pos])
+            else:
+                too_many_digits = True
+            frac_digits += 1
+            total_digits += 1
             pos += 1
-        value += frac / frac_scale
 
+    var parsed_exponent = 0
     if pos < max_len and (ptr[pos] == UInt8(0x65) or ptr[pos] == UInt8(0x45)):
         pos += 1
         var exp_negative = False
@@ -110,16 +117,46 @@ def _parse_float(
             pos += 1
         if pos >= max_len or not _is_digit(ptr[pos]):
             raise "NUMBER_ERROR: expected digit in exponent"
-        var exponent: Int = 0
         while pos < max_len and _is_digit(ptr[pos]):
-            exponent = exponent * 10 + Int(_digit_value(ptr[pos]))
+            parsed_exponent = parsed_exponent * 10 + Int(_digit_value(ptr[pos]))
             pos += 1
         if exp_negative:
-            for _ in range(exponent):
-                value /= 10.0
-        else:
-            for _ in range(exponent):
-                value *= 10.0
+            parsed_exponent = -parsed_exponent
+
+    var decimal_exponent = parsed_exponent - frac_digits
+
+    # Try Eisel-Lemire fast path if mantissa fits in 19 digits.
+    if not too_many_digits:
+        var result = compute_float_64(mantissa, decimal_exponent, negative)
+        if result.valid:
+            return NumberResult(tag=UInt8(0x64), value=result.value, bytes_consumed=pos)
+
+    # Fallback: rebuild Float64 from components.
+    return _parse_float_fallback(negative, mantissa, frac_digits, parsed_exponent, pos)
+
+
+def _parse_float_fallback(
+    negative: Bool,
+    mantissa: UInt64,
+    frac_digits: Int,
+    parsed_exponent: Int,
+    pos: Int,
+) raises -> NumberResult:
+    """Slow-path float construction using Float64 arithmetic."""
+    var value = Float64(mantissa)
+
+    # Apply fractional shift: mantissa was built without the decimal point,
+    # so divide by 10^frac_digits.
+    for _ in range(frac_digits):
+        value /= 10.0
+
+    # Apply parsed exponent.
+    if parsed_exponent >= 0:
+        for _ in range(parsed_exponent):
+            value *= 10.0
+    else:
+        for _ in range(-parsed_exponent):
+            value /= 10.0
 
     if negative:
         value = -value
