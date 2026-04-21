@@ -48,39 +48,7 @@ def build_tape(
         if root_done and depth == 0:
             raise "TRAILING_CONTENT: unexpected content at position " + String(pos)
 
-        if byte == TAG_OBJECT_OPEN:  # '{'
-            if depth >= MAX_DEPTH:
-                raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
-            container_stack[depth] = UInt32(len(tape.elements))
-            count_stack[depth] = UInt32(0)
-            tape.append(TAG_OBJECT_OPEN, UInt64(0))
-            depth += 1
-            si += 1
-        elif byte == TAG_OBJECT_CLOSE:  # '}'
-            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_OBJECT_OPEN:
-                raise "TAPE_ERROR: unexpected '}' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, depth, TAG_OBJECT_CLOSE)
-            depth -= 1
-            if depth == 0:
-                root_done = True
-            si += 1
-        elif byte == TAG_ARRAY_OPEN:  # '['
-            if depth >= MAX_DEPTH:
-                raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
-            container_stack[depth] = UInt32(len(tape.elements))
-            count_stack[depth] = UInt32(0)
-            tape.append(TAG_ARRAY_OPEN, UInt64(0))
-            depth += 1
-            si += 1
-        elif byte == TAG_ARRAY_CLOSE:  # ']'
-            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_ARRAY_OPEN:
-                raise "TAPE_ERROR: unexpected ']' at position " + String(pos)
-            _close_container(tape, container_stack, count_stack, depth, TAG_ARRAY_CLOSE)
-            depth -= 1
-            if depth == 0:
-                root_done = True
-            si += 1
-        elif byte == TAG_STRING:  # '"'
+        if byte == TAG_STRING:  # '"'
             var buf_offset = UInt64(len(tape.string_buf))
             var consumed = parse_string(input_ptr, pos, input_len, tape.string_buf)
             tape.append(TAG_STRING, buf_offset)
@@ -92,6 +60,51 @@ def build_tape(
             # Safety: si < num_structurals guaranteed by while loop guard
             while si < num_structurals and Int(structural_positions.unsafe_get(si)) <= string_end:
                 si += 1
+        elif byte == UInt8(0x2C):  # ','
+            if depth > 0:
+                count_stack[depth - 1] += 1
+            si += 1
+        elif byte == UInt8(0x3A):  # ':'
+            si += 1
+        elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):
+            var result = parse_number(input_ptr + pos, input_len - pos, pow5_cache)
+            tape.append(result.tag, UInt64(0))
+            tape.append_raw(result.value)
+            if depth == 0:
+                root_done = True
+            si += 1
+        elif byte == TAG_OBJECT_OPEN:  # '{'
+            if depth >= MAX_DEPTH:
+                raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
+            container_stack[depth] = UInt32(len(tape.elements))
+            count_stack[depth] = UInt32(0)
+            tape.append(TAG_OBJECT_OPEN, UInt64(0))
+            depth += 1
+            si += 1
+        elif byte == TAG_ARRAY_OPEN:  # '['
+            if depth >= MAX_DEPTH:
+                raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
+            container_stack[depth] = UInt32(len(tape.elements))
+            count_stack[depth] = UInt32(0)
+            tape.append(TAG_ARRAY_OPEN, UInt64(0))
+            depth += 1
+            si += 1
+        elif byte == TAG_OBJECT_CLOSE:  # '}'
+            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_OBJECT_OPEN:
+                raise "TAPE_ERROR: unexpected '}' at position " + String(pos)
+            _close_container(tape, container_stack, count_stack, depth, TAG_OBJECT_CLOSE)
+            depth -= 1
+            if depth == 0:
+                root_done = True
+            si += 1
+        elif byte == TAG_ARRAY_CLOSE:  # ']'
+            if depth == 0 or tape.tag_at(Int(container_stack[depth - 1])) != TAG_ARRAY_OPEN:
+                raise "TAPE_ERROR: unexpected ']' at position " + String(pos)
+            _close_container(tape, container_stack, count_stack, depth, TAG_ARRAY_CLOSE)
+            depth -= 1
+            if depth == 0:
+                root_done = True
+            si += 1
         elif byte == TAG_TRUE:  # 't' (true)
             _validate_true(input_ptr, pos, input_len)
             tape.append(TAG_TRUE, UInt64(0))
@@ -109,19 +122,6 @@ def build_tape(
             tape.append(TAG_NULL, UInt64(0))
             if depth == 0:
                 root_done = True
-            si += 1
-        elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):
-            var result = parse_number(input_ptr + pos, input_len - pos, pow5_cache)
-            tape.append(result.tag, UInt64(0))
-            tape.append_raw(result.value)
-            if depth == 0:
-                root_done = True
-            si += 1
-        elif byte == UInt8(0x3A):  # ':'
-            si += 1
-        elif byte == UInt8(0x2C):  # ','
-            if depth > 0:
-                count_stack[depth - 1] += 1
             si += 1
         else:
             raise "UNEXPECTED_VALUE: unexpected byte " + String(Int(byte)) + " at position " + String(pos)
