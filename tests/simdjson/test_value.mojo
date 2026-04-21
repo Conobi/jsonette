@@ -15,10 +15,25 @@ def _make_bytes(s: String) -> List[UInt8]:
     return buf^
 
 
+def _pad(data: List[UInt8]) -> List[UInt8]:
+    """Pad buffer: input + 128 zero bytes."""
+    var n = len(data)
+    var num_chunks = (n + 63) // 64
+    var padded_len = num_chunks * 64 + 128
+    var buf = List[UInt8](capacity=padded_len)
+    for i in range(n):
+        buf.append(data[i])
+    while len(buf) < padded_len:
+        buf.append(UInt8(0))
+    return buf^
+
+
 def _parse(s: String) raises -> Document:
     var input = _make_bytes(s)
-    var positions = structural_index(input)
-    var tape = build_tape(input, positions)
+    var input_len = len(input)
+    var padded = _pad(input)
+    var positions = structural_index(padded, input_len)
+    var tape = build_tape(padded, input_len, positions)
     var doc = Document(tape^)
     return doc^
 

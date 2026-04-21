@@ -13,9 +13,15 @@ comptime MAX_DEPTH: Int = 1024
 
 
 def build_tape(
-    input_buf: List[UInt8], structural_positions: List[UInt32]
+    input_buf: List[UInt8], input_len: Int, structural_positions: List[UInt32]
 ) raises -> Tape:
-    """Stage 2 entry point: build a tape from structural positions and input bytes."""
+    """Stage 2 entry point: build a tape from structural positions and input bytes.
+
+    Args:
+        input_buf: Padded input buffer (may be longer than the real input).
+        input_len: Real (unpadded) length of the JSON input.
+        structural_positions: Structural character positions from Stage 1.
+    """
     var num_structurals = len(structural_positions)
     if num_structurals == 0:
         raise "EMPTY_DOCUMENT: no structural characters found"
@@ -23,7 +29,6 @@ def build_tape(
     var tape = Tape()
     var pow5_cache = Pow5Cache()
     var input_ptr = input_buf.unsafe_ptr()
-    var input_len = len(input_buf)
 
     # Root open placeholder at tape[0]
     tape.append(TAG_ROOT, UInt64(0))

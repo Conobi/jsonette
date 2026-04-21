@@ -21,24 +21,21 @@ struct BitIndexer:
             b = b & (b - 1)
 
 
-def structural_index(data: List[UInt8]) -> List[UInt32]:
+def structural_index(padded_buf: List[UInt8], input_len: Int) -> List[UInt32]:
     """Stage 1 main entry point: produce a list of structural character positions.
 
     Processes input in 64-byte chunks using SIMD classification, escape/string
     scanning, and pseudo-structural (scalar start) detection.
+
+    Args:
+        padded_buf: Input buffer already padded to at least
+                    ceil(input_len/64)*64 + 64 zero bytes.
+        input_len: Real (unpadded) length of the JSON input.
     """
-    var input_len = len(data)
     if input_len == 0:
         return List[UInt32]()
 
-    # Pad input to multiple of 64 + 64 extra zero bytes
     var num_chunks = (input_len + 63) // 64
-    var padded_len = num_chunks * 64 + 64
-    var buf = List[UInt8](capacity=padded_len)
-    for i in range(input_len):
-        buf.append(data[i])
-    while len(buf) < padded_len:
-        buf.append(UInt8(0))
 
     var escape_scanner = EscapeScanner()
     var string_scanner = StringScanner()
@@ -48,7 +45,7 @@ def structural_index(data: List[UInt8]) -> List[UInt32]:
     var prev_scalar_carry: UInt64 = 0
     var prev_base: UInt32 = 0
 
-    var ptr = buf.unsafe_ptr()
+    var ptr = padded_buf.unsafe_ptr()
 
     for chunk_idx in range(num_chunks):
         var base_idx = UInt32(chunk_idx * 64)

@@ -14,9 +14,23 @@ def read_file(path: String) raises -> List[UInt8]:
     return buf^
 
 
+def _pad_buffer(data: List[UInt8]) -> List[UInt8]:
+    """Create a padded copy: input + 128 zero bytes."""
+    var input_len = len(data)
+    var num_chunks = (input_len + 63) // 64
+    var padded_len = num_chunks * 64 + 128
+    var padded = List[UInt8](capacity=padded_len)
+    for i in range(input_len):
+        padded.append(data[i])
+    while len(padded) < padded_len:
+        padded.append(UInt8(0))
+    return padded^
+
+
 def profile_file(path: String, name: String) raises:
     var data = read_file(path)
     var size = len(data)
+    var padded = _pad_buffer(data)
     print("=== " + name + " (" + String(size) + " bytes) ===")
 
     comptime WARMUP: Int = 5
@@ -24,31 +38,31 @@ def profile_file(path: String, name: String) raises:
 
     # Warmup both stages
     for _ in range(WARMUP):
-        var pos = structural_index(data)
-        var tape = build_tape(data, pos)
+        var pos = structural_index(padded, size)
+        var tape = build_tape(padded, size, pos)
 
     # Time Stage 1 alone
     var s1_start = perf_counter_ns()
     for _ in range(ITERS):
-        var pos = structural_index(data)
+        var pos = structural_index(padded, size)
     var s1_end = perf_counter_ns()
     var s1_ns = s1_end - s1_start
 
     # Get positions for Stage 2 timing
-    var positions = structural_index(data)
+    var positions = structural_index(padded, size)
 
     # Time Stage 2 alone
     var s2_start = perf_counter_ns()
     for _ in range(ITERS):
-        var tape = build_tape(data, positions)
+        var tape = build_tape(padded, size, positions)
     var s2_end = perf_counter_ns()
     var s2_ns = s2_end - s2_start
 
     # Time full pipeline
     var full_start = perf_counter_ns()
     for _ in range(ITERS):
-        var pos = structural_index(data)
-        var tape = build_tape(data, pos)
+        var pos = structural_index(padded, size)
+        var tape = build_tape(padded, size, pos)
     var full_end = perf_counter_ns()
     var full_ns = full_end - full_start
 

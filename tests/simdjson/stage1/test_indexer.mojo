@@ -3,6 +3,19 @@ from std.testing import assert_true, assert_equal
 from simdjson.stage1.indexer import BitIndexer, structural_index
 
 
+def _pad(data: List[UInt8]) -> List[UInt8]:
+    """Pad buffer for Stage 1: input + 128 zero bytes."""
+    var n = len(data)
+    var num_chunks = (n + 63) // 64
+    var padded_len = num_chunks * 64 + 128
+    var buf = List[UInt8](capacity=padded_len)
+    for i in range(n):
+        buf.append(data[i])
+    while len(buf) < padded_len:
+        buf.append(UInt8(0))
+    return buf^
+
+
 # ===== BitIndexer tests =====
 
 
@@ -60,7 +73,7 @@ def test_structural_index_empty_object() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(data)
+    var positions = structural_index(_pad(data), len(data))
     assert_equal(len(positions), 2)
     assert_equal(positions[0], UInt32(0))
     assert_equal(positions[1], UInt32(1))
@@ -73,7 +86,7 @@ def test_structural_index_simple_object() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(data)
+    var positions = structural_index(_pad(data), len(data))
 
     # Must contain: { at 0, " at 1, " at 3, : at 4, 1-start at 5, } at 6
     assert_true(has_position(positions, UInt32(0)), "missing {")
@@ -91,7 +104,7 @@ def test_structural_index_nested() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(data)
+    var positions = structural_index(_pad(data), len(data))
 
     # { at 0
     assert_true(has_position(positions, UInt32(0)), "missing opening {")
@@ -113,7 +126,7 @@ def test_structural_index_escaped_quotes() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(data)
+    var positions = structural_index(_pad(data), len(data))
 
     # The escaped quote (preceded by \) should not appear as a structural position.
     # In the string: {"key": "val\"ue"}
@@ -133,7 +146,7 @@ def test_structural_index_long_string() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(data)
+    var positions = structural_index(_pad(data), len(data))
 
     # { at 0
     assert_true(has_position(positions, UInt32(0)), "missing {")
