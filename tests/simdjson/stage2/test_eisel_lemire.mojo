@@ -1,6 +1,11 @@
 from std.testing import assert_equal
-from simdjson.stage2.eisel_lemire import Uint128, umul128
+from std.memory import bitcast
+from simdjson.stage2.eisel_lemire import Uint128, umul128, compute_float_64, FloatResult
 from simdjson.stage2.pow5_table import get_pow5, SMALLEST_POWER_OF_FIVE, LARGEST_POWER_OF_FIVE
+
+
+def _bits_to_float(bits: UInt64) -> Float64:
+    return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](bits)))
 
 
 def test_umul128_small() raises:
@@ -50,6 +55,78 @@ def test_pow5_known_values() raises:
     assert_equal(p1.lo, UInt64(0))
 
 
+def test_eisel_lemire_simple() raises:
+    """314 * 10^-2 = 3.14"""
+    var result = compute_float_64(UInt64(314), -2, False)
+    assert_equal(result.valid, True)
+    var val = _bits_to_float(result.value)
+    var diff = val - 3.14
+    if diff < 0.0:
+        diff = -diff
+    assert_equal(diff < 1e-15, True)
+
+
+def test_eisel_lemire_integer() raises:
+    """42 * 10^0 = 42.0"""
+    var result = compute_float_64(UInt64(42), 0, False)
+    assert_equal(result.valid, True)
+    assert_equal(_bits_to_float(result.value), 42.0)
+
+
+def test_eisel_lemire_negative() raises:
+    var result = compute_float_64(UInt64(1), 0, True)
+    assert_equal(result.valid, True)
+    assert_equal(_bits_to_float(result.value), -1.0)
+
+
+def test_eisel_lemire_1e10() raises:
+    var result = compute_float_64(UInt64(1), 10, False)
+    assert_equal(result.valid, True)
+    assert_equal(_bits_to_float(result.value), 1e10)
+
+
+def test_eisel_lemire_large_exponent() raises:
+    """1 * 10^308"""
+    var result = compute_float_64(UInt64(1), 308, False)
+    assert_equal(result.valid, True)
+    assert_equal(_bits_to_float(result.value) > 0.0, True)
+
+
+def test_eisel_lemire_small_exponent() raises:
+    """5 * 10^-324 — subnormal, may fall back"""
+    var result = compute_float_64(UInt64(5), -324, False)
+    # Either valid with correct value, or invalid (fallback needed)
+    if result.valid:
+        assert_equal(_bits_to_float(result.value) >= 0.0, True)
+
+
+def test_eisel_lemire_zero() raises:
+    var result = compute_float_64(UInt64(0), 0, False)
+    assert_equal(result.valid, True)
+    assert_equal(_bits_to_float(result.value), 0.0)
+
+
+def test_eisel_lemire_negative_zero() raises:
+    var result = compute_float_64(UInt64(0), 0, True)
+    assert_equal(result.valid, True)
+    # Negative zero: bit 63 set, everything else 0
+    assert_equal(result.value, UInt64(1) << 63)
+
+
+def test_eisel_lemire_one_point_zero() raises:
+    """1 * 10^0 = 1.0 — IEEE bits should be 0x3FF0000000000000"""
+    var result = compute_float_64(UInt64(1), 0, False)
+    assert_equal(result.valid, True)
+    assert_equal(result.value, UInt64(0x3FF0000000000000))
+
+
+def test_eisel_lemire_half() raises:
+    """5 * 10^-1 = 0.5 — IEEE bits should be 0x3FE0000000000000"""
+    var result = compute_float_64(UInt64(5), -1, False)
+    assert_equal(result.valid, True)
+    assert_equal(result.value, UInt64(0x3FE0000000000000))
+
+
 def main() raises:
     test_umul128_small()
     test_umul128_max_times_2()
@@ -57,4 +134,14 @@ def main() raises:
     test_umul128_power_of_two()
     test_pow5_table_bounds()
     test_pow5_known_values()
+    test_eisel_lemire_simple()
+    test_eisel_lemire_integer()
+    test_eisel_lemire_negative()
+    test_eisel_lemire_1e10()
+    test_eisel_lemire_large_exponent()
+    test_eisel_lemire_small_exponent()
+    test_eisel_lemire_zero()
+    test_eisel_lemire_negative_zero()
+    test_eisel_lemire_one_point_zero()
+    test_eisel_lemire_half()
     print("test_eisel_lemire: all passed")
