@@ -3,6 +3,7 @@ from std.memory import bitcast
 from simdjson.tape import Tape, TAG_ROOT, TAG_TRUE, TAG_FALSE, TAG_NULL, TAG_UINT64, TAG_INT64, TAG_FLOAT64, TAG_STRING, TAG_OBJECT_OPEN, TAG_ARRAY_OPEN
 from simdjson.document import Document
 from simdjson.value import Value, skip_value
+from simdjson.parser import Parser
 from simdjson.stage1.indexer import structural_index
 from simdjson.stage2.builder import build_tape
 
@@ -143,6 +144,29 @@ def test_deeply_nested() raises:
     assert_equal(items.at(doc, 0).get_uint(doc), UInt64(1))
     assert_equal(items.at(doc, 2).get_uint(doc), UInt64(3))
 
+# --- get_string tests ---
+
+def test_get_string() raises:
+    var parser = Parser()
+    var doc = parser.parse(_make_bytes(String('"hello"')))
+    var root = doc.root()
+    var s = root.get_string(doc)
+    assert_equal(s, String("hello"))
+
+def test_get_string_from_object() raises:
+    var parser = Parser()
+    var doc = parser.parse(_make_bytes(String('{"name": "world"}')))
+    var root = doc.root()
+    var name = root.get(doc, String("name")).get_string(doc)
+    assert_equal(name, String("world"))
+
+def test_get_string_empty() raises:
+    var parser = Parser()
+    var doc = parser.parse(_make_bytes(String('""')))
+    var root = doc.root()
+    var s = root.get_string(doc)
+    assert_equal(s, String(""))
+
 
 def main() raises:
     test_bool_true()
@@ -163,4 +187,7 @@ def main() raises:
     test_mixed_object()
     test_negative_in_object()
     test_deeply_nested()
+    test_get_string()
+    test_get_string_from_object()
+    test_get_string_empty()
     print("test_value: all passed")

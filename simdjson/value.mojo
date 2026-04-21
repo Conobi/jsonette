@@ -78,6 +78,22 @@ struct Value:
             | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
         )
 
+    def get_string(self, ref doc: Document) raises -> String:
+        """Get string as an owned Mojo String. Raises if not a string."""
+        if self._tag(doc) != TAG_STRING:
+            raise "TAPE_ERROR: expected string"
+        var offset = Int(self._payload(doc))
+        var str_len = Int(
+            UInt32(doc.tape.string_buf[offset])
+            | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
+            | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
+            | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+        )
+        var buf = List[UInt8](capacity=str_len)
+        for i in range(str_len):
+            buf.append(doc.tape.string_buf[offset + 4 + i])
+        return String(from_utf8=buf^)
+
     def string_eq(self, ref doc: Document, expected: String) raises -> Bool:
         if self._tag(doc) != TAG_STRING:
             raise "TAPE_ERROR: expected string"

@@ -164,6 +164,36 @@ def test_surrogate_pair() raises:
     assert_equal(string_buf[7], UInt8(0x8D))
 
 
+def test_control_char_rejected() raises:
+    """Unescaped control character (0x0A newline) should raise."""
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # "
+    input.append(UInt8(0x61))  # a
+    input.append(UInt8(0x0A))  # raw newline (invalid)
+    input.append(UInt8(0x22))  # "
+    var string_buf = List[UInt8]()
+    var raised = False
+    try:
+        _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    except:
+        raised = True
+    assert_equal(raised, True)
+
+def test_control_char_null_rejected() raises:
+    """Unescaped null byte should raise."""
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # "
+    input.append(UInt8(0x00))  # null
+    input.append(UInt8(0x22))  # "
+    var string_buf = List[UInt8]()
+    var raised = False
+    try:
+        _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    except:
+        raised = True
+    assert_equal(raised, True)
+
+
 def main() raises:
     test_simple_string()
     test_empty_string()
@@ -175,4 +205,6 @@ def main() raises:
     test_unicode_escape_2byte()
     test_unicode_escape_3byte()
     test_surrogate_pair()
+    test_control_char_rejected()
+    test_control_char_null_rejected()
     print("test_strings: all passed")

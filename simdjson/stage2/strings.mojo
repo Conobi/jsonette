@@ -71,6 +71,8 @@ def parse_string(
             string_buf[buf_start + 3] = UInt8((str_len >> 24) & 0xFF)
             return i - pos + 1
         else:
+            if b <= UInt8(0x1F):
+                raise "STRING_ERROR: unescaped control character at position " + String(i)
             string_buf.append(b)
             i += 1
 
