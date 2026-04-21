@@ -45,8 +45,7 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
         var digit = _digit_value(ptr[pos])
         # Overflow check: if integer_part > (MAX - digit) / 10
         if integer_part > (UInt64.MAX - digit) // 10:
-            if not negative:
-                raise "NUMBER_ERROR: integer overflow"
+            raise "NUMBER_ERROR: integer overflow"
         integer_part = integer_part * 10 + digit
         digit_count += 1
         pos += 1
