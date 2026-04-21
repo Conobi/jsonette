@@ -33,7 +33,7 @@ def _handle_escape(
 ) raises ParseError -> Tuple[Int, Int]:
     """Handle a backslash escape sequence. Returns (new_i, new_write_pos)."""
     if i + 1 >= input_len:
-        raise ParseError(code=ErrorCode.UNCLOSED_STRING.value, position=i, message="UNCLOSED_STRING: escape at end of input")
+        raise ParseError(code=ErrorCode.UNCLOSED_STRING.value, position=i)
     var escaped = input_ptr[i + 1]
     if escaped == UInt8(0x22):  # \"
         string_buf.resize(write_pos + 1, 0)
@@ -73,7 +73,7 @@ def _handle_escape(
         var new_write_pos = len(string_buf)
         return (new_i, new_write_pos)
     else:
-        raise ParseError(code=ErrorCode.STRING_ERROR.value, position=i, message="STRING_ERROR: invalid escape sequence at position " + String(i))
+        raise ParseError(code=ErrorCode.STRING_ERROR.value, position=i)
 
 
 def parse_string(
@@ -140,9 +140,7 @@ def parse_string(
 
         # Check for control char before any quote/backslash
         if first_ctrl < first_special:
-            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=i + first_ctrl, message="STRING_ERROR: unescaped control character at position " + String(
-                i + first_ctrl
-            ))
+            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=i + first_ctrl)
 
         # Bulk copy bytes before the first special character
         if first_special > 0:
@@ -171,9 +169,9 @@ def parse_string(
             write_pos = result[1]
         else:
             # Should not reach here
-            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=i, message="STRING_ERROR: unexpected byte at position " + String(i))
+            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=i)
 
-    raise ParseError(code=ErrorCode.UNCLOSED_STRING.value, position=pos, message="UNCLOSED_STRING: no closing quote found")
+    raise ParseError(code=ErrorCode.UNCLOSED_STRING.value, position=pos)
 
 
 def _parse_hex4(
@@ -181,7 +179,7 @@ def _parse_hex4(
 ) raises ParseError -> UInt32:
     """Parse 4 hex digits starting at ptr[start] into a UInt32."""
     if start + 4 > input_len:
-        raise ParseError(code=ErrorCode.STRING_ERROR.value, position=start, message="STRING_ERROR: incomplete hex escape")
+        raise ParseError(code=ErrorCode.STRING_ERROR.value, position=start)
     var value: UInt32 = 0
     for i in range(4):
         var b = ptr[start + i]
@@ -193,9 +191,7 @@ def _parse_hex4(
         elif b >= UInt8(0x41) and b <= UInt8(0x46):
             digit = UInt32(b) - 0x41 + 10
         else:
-            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=start + i, message="STRING_ERROR: invalid hex digit at position " + String(
-                start + i
-            ))
+            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=start + i)
         value = (value << 4) | digit
     return value
 
@@ -239,20 +235,14 @@ def _parse_unicode_escape(
             or ptr[new_pos] != UInt8(0x5C)
             or ptr[new_pos + 1] != UInt8(0x75)
         ):
-            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=backslash_pos, message="STRING_ERROR: orphan high surrogate at position " + String(
-                backslash_pos
-            ))
+            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=backslash_pos)
         var low = _parse_hex4(ptr, new_pos + 2, input_len)
         if low < 0xDC00 or low > 0xDFFF:
-            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=new_pos, message="STRING_ERROR: invalid low surrogate at position " + String(
-                new_pos
-            ))
+            raise ParseError(code=ErrorCode.STRING_ERROR.value, position=new_pos)
         code_point = 0x10000 + (code_point - 0xD800) * 0x400 + (low - 0xDC00)
         new_pos += 6
     elif code_point >= 0xDC00 and code_point <= 0xDFFF:
-        raise ParseError(code=ErrorCode.STRING_ERROR.value, position=backslash_pos, message="STRING_ERROR: orphan low surrogate at position " + String(
-            backslash_pos
-        ))
+        raise ParseError(code=ErrorCode.STRING_ERROR.value, position=backslash_pos)
 
     _encode_utf8(code_point, string_buf)
     return new_pos

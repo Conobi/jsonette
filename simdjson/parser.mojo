@@ -2,6 +2,7 @@ from std.memory import memcpy, memset
 
 from simdjson.tape import Tape
 from simdjson.document import Document
+from simdjson.error import format_parse_error
 from simdjson.stage1.indexer import structural_index
 from simdjson.stage2.builder import build_tape
 
@@ -24,6 +25,9 @@ struct Parser:
         memset(padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
         var positions = structural_index(padded, input_len)
-        var tape = build_tape(padded, input_len, positions)
-        var doc = Document(tape^)
-        return doc^
+        try:
+            var tape = build_tape(padded, input_len, positions)
+            var doc = Document(tape^)
+            return doc^
+        except e:
+            raise format_parse_error(e.code, e.position)

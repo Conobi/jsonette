@@ -18,16 +18,51 @@ struct ErrorCode(Movable, Copyable):
 
 @fieldwise_init
 struct ParseError(Movable, Writable):
-    """Typed parse error for internal hot-path functions.
+    """Lightweight parse error — no String allocation on the hot path.
 
     Using typed `raises ParseError` on internal functions lets the compiler
     eliminate the dynamic error-type check on the happy path, reducing
     overhead compared to generic `raises`.
+
+    The `message` field was removed to avoid 32+ String constructions in
+    the inlined hot path.  `write_to` formats lazily from code + position
+    only when the error is actually caught and converted to `Error`.
     """
 
     var code: UInt8
     var position: Int
-    var message: String
+
+    def __init__(out self, *, deinit take: Self):
+        self.code = take.code
+        self.position = take.position
 
     def write_to[W: Writer](self, mut writer: W):
-        writer.write(self.message)
+        writer.write(format_parse_error(self.code, self.position))
+
+
+def format_parse_error(code: UInt8, position: Int) -> String:
+    """Construct human-readable error message. Called only at catch site."""
+    var name: String
+    if code == ErrorCode.DEPTH_EXCEEDED.value:
+        name = "DEPTH_EXCEEDED"
+    elif code == ErrorCode.TAPE_ERROR.value:
+        name = "TAPE_ERROR"
+    elif code == ErrorCode.STRING_ERROR.value:
+        name = "STRING_ERROR"
+    elif code == ErrorCode.NUMBER_ERROR.value:
+        name = "NUMBER_ERROR"
+    elif code == ErrorCode.UNCLOSED_STRING.value:
+        name = "UNCLOSED_STRING"
+    elif code == ErrorCode.UNEXPECTED_VALUE.value:
+        name = "UNEXPECTED_VALUE"
+    elif code == ErrorCode.TRAILING_CONTENT.value:
+        name = "TRAILING_CONTENT"
+    elif code == ErrorCode.EMPTY_DOCUMENT.value:
+        name = "EMPTY_DOCUMENT"
+    elif code == ErrorCode.UNCLOSED_CONTAINER.value:
+        name = "UNCLOSED_CONTAINER"
+    elif code == ErrorCode.INVALID_LITERAL.value:
+        name = "INVALID_LITERAL"
+    else:
+        name = "UNKNOWN_ERROR"
+    return name + " at position " + String(position)
