@@ -1,3 +1,17 @@
+comptime TAG_ROOT = UInt8(0x72)
+comptime TAG_OBJECT_OPEN = UInt8(0x7B)
+comptime TAG_OBJECT_CLOSE = UInt8(0x7D)
+comptime TAG_ARRAY_OPEN = UInt8(0x5B)
+comptime TAG_ARRAY_CLOSE = UInt8(0x5D)
+comptime TAG_STRING = UInt8(0x22)
+comptime TAG_INT64 = UInt8(0x6C)
+comptime TAG_UINT64 = UInt8(0x75)
+comptime TAG_FLOAT64 = UInt8(0x64)
+comptime TAG_TRUE = UInt8(0x74)
+comptime TAG_FALSE = UInt8(0x66)
+comptime TAG_NULL = UInt8(0x6E)
+
+
 struct Tape(Movable):
     """Flat tape of 64-bit elements plus a string buffer."""
 
