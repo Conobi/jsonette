@@ -12,26 +12,28 @@ def _make_bytes(s: String) -> List[UInt8]:
 def test_simple_string() raises:
     """Parse '"hello"' — no escapes."""
     var input = _make_bytes(String('"hello"'))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 7)
-    assert_equal(string_buf[0], UInt8(5))  # length low byte
-    assert_equal(string_buf[1], UInt8(0))
-    assert_equal(string_buf[2], UInt8(0))
-    assert_equal(string_buf[3], UInt8(0))
-    assert_equal(string_buf[4], UInt8(0x68))  # 'h'
-    assert_equal(string_buf[5], UInt8(0x65))  # 'e'
-    assert_equal(string_buf[9], UInt8(0))     # null terminator
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(5))  # length low byte
+    assert_equal(string_buf.unsafe_ptr()[1], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[2], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[3], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x68))  # 'h'
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0x65))  # 'e'
+    assert_equal(string_buf.unsafe_ptr()[9], UInt8(0))     # null terminator
 
 
 def test_empty_string() raises:
     """Parse '""' — empty string."""
     var input = _make_bytes(String('""'))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 2)
-    assert_equal(string_buf[0], UInt8(0))
-    assert_equal(string_buf[4], UInt8(0))  # null terminator
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0))  # null terminator
 
 
 def test_escaped_quote() raises:
@@ -44,13 +46,14 @@ def test_escaped_quote() raises:
     input.append(UInt8(0x22))  # " (escaped)
     input.append(UInt8(0x62))  # b
     input.append(UInt8(0x22))  # " (closing)
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 6)
-    assert_equal(string_buf[0], UInt8(3))  # length
-    assert_equal(string_buf[4], UInt8(0x61))  # a
-    assert_equal(string_buf[5], UInt8(0x22))  # "
-    assert_equal(string_buf[6], UInt8(0x62))  # b
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(3))  # length
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x61))  # a
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0x22))  # "
+    assert_equal(string_buf.unsafe_ptr()[6], UInt8(0x62))  # b
 
 
 def test_escape_sequences() raises:
@@ -61,13 +64,14 @@ def test_escape_sequences() raises:
     input.append(UInt8(0x5C)); input.append(UInt8(0x74))  # \t
     input.append(UInt8(0x5C)); input.append(UInt8(0x72))  # \r
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 8)
-    assert_equal(string_buf[0], UInt8(3))     # length = 3
-    assert_equal(string_buf[4], UInt8(0x0A))  # \n
-    assert_equal(string_buf[5], UInt8(0x09))  # \t
-    assert_equal(string_buf[6], UInt8(0x0D))  # \r
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(3))     # length = 3
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x0A))  # \n
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0x09))  # \t
+    assert_equal(string_buf.unsafe_ptr()[6], UInt8(0x0D))  # \r
 
 
 def test_escaped_backslash() raises:
@@ -77,23 +81,25 @@ def test_escaped_backslash() raises:
     input.append(UInt8(0x5C)); input.append(UInt8(0x5C))  # \\
     input.append(UInt8(0x5C)); input.append(UInt8(0x5C))  # \\
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 6)
-    assert_equal(string_buf[0], UInt8(2))     # length = 2
-    assert_equal(string_buf[4], UInt8(0x5C))  # backslash
-    assert_equal(string_buf[5], UInt8(0x5C))  # backslash
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(2))     # length = 2
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x5C))  # backslash
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0x5C))  # backslash
 
 
 def test_string_at_offset() raises:
     """Parse string starting at non-zero offset."""
     var input = _make_bytes(String('  "hi"'))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 2, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 2, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 4)
-    assert_equal(string_buf[0], UInt8(2))     # length = 2
-    assert_equal(string_buf[4], UInt8(0x68))  # 'h'
-    assert_equal(string_buf[5], UInt8(0x69))  # 'i'
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(2))     # length = 2
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x68))  # 'h'
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0x69))  # 'i'
 
 
 def test_unicode_escape_ascii() raises:
@@ -104,11 +110,12 @@ def test_unicode_escape_ascii() raises:
     input.append(UInt8(0x30)); input.append(UInt8(0x30))  # 00
     input.append(UInt8(0x34)); input.append(UInt8(0x31))  # 41
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    var result = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 8)
-    assert_equal(string_buf[0], UInt8(1))     # length = 1
-    assert_equal(string_buf[4], UInt8(0x41))  # 'A'
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(1))     # length = 1
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x41))  # 'A'
 
 
 def test_unicode_escape_2byte() raises:
@@ -119,11 +126,11 @@ def test_unicode_escape_2byte() raises:
     input.append(UInt8(0x30)); input.append(UInt8(0x30))  # 00
     input.append(UInt8(0x45)); input.append(UInt8(0x39))  # E9
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
-    _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
-    assert_equal(string_buf[0], UInt8(2))     # 2-byte UTF-8
-    assert_equal(string_buf[4], UInt8(0xC3))
-    assert_equal(string_buf[5], UInt8(0xA9))
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(2))     # 2-byte UTF-8
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0xC3))
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0xA9))
 
 
 def test_unicode_escape_3byte() raises:
@@ -134,12 +141,12 @@ def test_unicode_escape_3byte() raises:
     input.append(UInt8(0x34)); input.append(UInt8(0x45))  # 4E
     input.append(UInt8(0x31)); input.append(UInt8(0x36))  # 16
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
-    _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
-    assert_equal(string_buf[0], UInt8(3))     # 3-byte UTF-8
-    assert_equal(string_buf[4], UInt8(0xE4))
-    assert_equal(string_buf[5], UInt8(0xB8))
-    assert_equal(string_buf[6], UInt8(0x96))
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(3))     # 3-byte UTF-8
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0xE4))
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0xB8))
+    assert_equal(string_buf.unsafe_ptr()[6], UInt8(0x96))
 
 
 def test_surrogate_pair() raises:
@@ -155,13 +162,13 @@ def test_surrogate_pair() raises:
     input.append(UInt8(0x44)); input.append(UInt8(0x43))
     input.append(UInt8(0x34)); input.append(UInt8(0x44))
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
-    _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
-    assert_equal(string_buf[0], UInt8(4))     # 4-byte UTF-8
-    assert_equal(string_buf[4], UInt8(0xF0))
-    assert_equal(string_buf[5], UInt8(0x9F))
-    assert_equal(string_buf[6], UInt8(0x91))
-    assert_equal(string_buf[7], UInt8(0x8D))
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
+    _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(4))     # 4-byte UTF-8
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0xF0))
+    assert_equal(string_buf.unsafe_ptr()[5], UInt8(0x9F))
+    assert_equal(string_buf.unsafe_ptr()[6], UInt8(0x91))
+    assert_equal(string_buf.unsafe_ptr()[7], UInt8(0x8D))
 
 
 def test_control_char_rejected() raises:
@@ -171,10 +178,10 @@ def test_control_char_rejected() raises:
     input.append(UInt8(0x61))  # a
     input.append(UInt8(0x0A))  # raw newline (invalid)
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
     var raised = False
     try:
-        _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+        _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
     except:
         raised = True
     assert_equal(raised, True)
@@ -190,19 +197,20 @@ def test_long_string_no_escapes() raises:
     var real_len = len(input)
     for _ in range(128):
         input.append(UInt8(0))  # SIMD safety padding
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=real_len + 128)
+    var result = parse_string(input.unsafe_ptr(), 0, real_len, string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 44)  # 1 open + 42 chars + 1 close
     # Length prefix should be 42 (LE UInt32)
-    assert_equal(string_buf[0], UInt8(42))
-    assert_equal(string_buf[1], UInt8(0))
-    assert_equal(string_buf[2], UInt8(0))
-    assert_equal(string_buf[3], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(42))
+    assert_equal(string_buf.unsafe_ptr()[1], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[2], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[3], UInt8(0))
     # All content bytes should be 'A'
     for i in range(42):
-        assert_equal(string_buf[4 + i], UInt8(0x41))
+        assert_equal(string_buf.unsafe_ptr()[4 + i], UInt8(0x41))
     # Null terminator
-    assert_equal(string_buf[4 + 42], UInt8(0))
+    assert_equal(string_buf.unsafe_ptr()[4 + 42], UInt8(0))
 
 
 def test_escape_at_position_31() raises:
@@ -221,13 +229,14 @@ def test_escape_at_position_31() raises:
     var real_len = len(input)
     for _ in range(128):
         input.append(UInt8(0))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=real_len + 128)
+    var result = parse_string(input.unsafe_ptr(), 0, real_len, string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 35)  # 1 + 30 + 2 + 1 + 1
     # Output: 30 x 'x' + 0x0A + 'y' = 32 bytes
-    assert_equal(string_buf[0], UInt8(32))
-    assert_equal(string_buf[4 + 30], UInt8(0x0A))  # decoded \n
-    assert_equal(string_buf[4 + 31], UInt8(0x79))  # 'y'
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(32))
+    assert_equal(string_buf.unsafe_ptr()[4 + 30], UInt8(0x0A))  # decoded \n
+    assert_equal(string_buf.unsafe_ptr()[4 + 31], UInt8(0x79))  # 'y'
 
 
 def test_escape_at_position_32() raises:
@@ -246,13 +255,14 @@ def test_escape_at_position_32() raises:
     var real_len = len(input)
     for _ in range(128):
         input.append(UInt8(0))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=real_len + 128)
+    var result = parse_string(input.unsafe_ptr(), 0, real_len, string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 36)  # 1 + 31 + 2 + 1 + 1
     # Output: 31 x 'x' + 0x09 + 'y' = 33 bytes
-    assert_equal(string_buf[0], UInt8(33))
-    assert_equal(string_buf[4 + 31], UInt8(0x09))  # decoded \t
-    assert_equal(string_buf[4 + 32], UInt8(0x79))  # 'y'
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(33))
+    assert_equal(string_buf.unsafe_ptr()[4 + 31], UInt8(0x09))  # decoded \t
+    assert_equal(string_buf.unsafe_ptr()[4 + 32], UInt8(0x79))  # 'y'
 
 
 def test_string_exactly_32_bytes() raises:
@@ -265,14 +275,15 @@ def test_string_exactly_32_bytes() raises:
     var real_len = len(input)
     for _ in range(128):
         input.append(UInt8(0))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=real_len + 128)
+    var result = parse_string(input.unsafe_ptr(), 0, real_len, string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 34)  # 1 + 32 + 1
-    assert_equal(string_buf[0], UInt8(32))  # length
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(32))  # length
     # Spot-check first and last content bytes
-    assert_equal(string_buf[4], UInt8(0x61))       # 'a'
-    assert_equal(string_buf[4 + 31], UInt8(0x61 + (31 % 26)))  # 'f'
-    assert_equal(string_buf[4 + 32], UInt8(0))     # null terminator
+    assert_equal(string_buf.unsafe_ptr()[4], UInt8(0x61))       # 'a'
+    assert_equal(string_buf.unsafe_ptr()[4 + 31], UInt8(0x61 + (31 % 26)))  # 'f'
+    assert_equal(string_buf.unsafe_ptr()[4 + 32], UInt8(0))     # null terminator
 
 
 def test_string_64_bytes_with_middle_escape() raises:
@@ -291,16 +302,17 @@ def test_string_64_bytes_with_middle_escape() raises:
     var real_len = len(input)
     for _ in range(128):
         input.append(UInt8(0))
-    var string_buf = List[UInt8]()
-    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    var string_buf = List[UInt8](unsafe_uninit_length=real_len + 128)
+    var result = parse_string(input.unsafe_ptr(), 0, real_len, string_buf.unsafe_ptr(), 0)
+    var consumed = result[0]
     assert_equal(consumed, 65)  # 1 + 63 + 1
-    assert_equal(string_buf[0], UInt8(62))  # decoded length
+    assert_equal(string_buf.unsafe_ptr()[0], UInt8(62))  # decoded length
     # Check boundary region
-    assert_equal(string_buf[4 + 30], UInt8(0x61))  # last 'a'
-    assert_equal(string_buf[4 + 31], UInt8(0x0A))  # decoded \n
-    assert_equal(string_buf[4 + 32], UInt8(0x62))  # first 'b'
-    assert_equal(string_buf[4 + 61], UInt8(0x62))  # last 'b'
-    assert_equal(string_buf[4 + 62], UInt8(0))     # null terminator
+    assert_equal(string_buf.unsafe_ptr()[4 + 30], UInt8(0x61))  # last 'a'
+    assert_equal(string_buf.unsafe_ptr()[4 + 31], UInt8(0x0A))  # decoded \n
+    assert_equal(string_buf.unsafe_ptr()[4 + 32], UInt8(0x62))  # first 'b'
+    assert_equal(string_buf.unsafe_ptr()[4 + 61], UInt8(0x62))  # last 'b'
+    assert_equal(string_buf.unsafe_ptr()[4 + 62], UInt8(0))     # null terminator
 
 
 def test_control_char_null_rejected() raises:
@@ -309,10 +321,10 @@ def test_control_char_null_rejected() raises:
     input.append(UInt8(0x22))  # "
     input.append(UInt8(0x00))  # null
     input.append(UInt8(0x22))  # "
-    var string_buf = List[UInt8]()
+    var string_buf = List[UInt8](unsafe_uninit_length=1024)
     var raised = False
     try:
-        _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf)
+        _ = parse_string(input.unsafe_ptr(), 0, len(input), string_buf.unsafe_ptr(), 0)
     except:
         raised = True
     assert_equal(raised, True)
