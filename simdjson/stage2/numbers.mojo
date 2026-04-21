@@ -63,11 +63,19 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
 
 def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises -> NumberResult:
     if negative:
-        if integer_part > UInt64(9223372036854775808):
+        # Int64 range: -9223372036854775808 to 9223372036854775807
+        # integer_part == 2^63 is valid (it's INT64_MIN's absolute value)
+        comptime INT64_MIN_ABS: UInt64 = UInt64(1) << 63
+        if integer_part > INT64_MIN_ABS:
             raise "NUMBER_ERROR: signed integer overflow"
-        var signed_val = Int64(0) - Int64(integer_part)
-        var raw = bitcast[DType.uint64](SIMD[DType.int64, 1](signed_val))
-        return NumberResult(tag=UInt8(0x6C), value=UInt64(raw), bytes_consumed=pos)
+        # Special case: 2^63 can't be negated via Int64 (overflow), use bitcast
+        var raw: UInt64
+        if integer_part == INT64_MIN_ABS:
+            raw = INT64_MIN_ABS  # Two's complement: 0x8000000000000000 = INT64_MIN
+        else:
+            var signed_val = Int64(0) - Int64(integer_part)
+            raw = UInt64(bitcast[DType.uint64](SIMD[DType.int64, 1](signed_val)))
+        return NumberResult(tag=UInt8(0x6C), value=raw, bytes_consumed=pos)
     else:
         return NumberResult(tag=UInt8(0x75), value=integer_part, bytes_consumed=pos)
 

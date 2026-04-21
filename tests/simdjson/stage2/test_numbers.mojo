@@ -63,10 +63,25 @@ def test_parse_large_uint() raises:
     assert_equal(result.value, UInt64.MAX)
 
 
+def test_parse_int64_min() raises:
+    """Parse '-9223372036854775808' (INT64_MIN)."""
+    var s = String("-9223372036854775808")
+    var buf = List[UInt8]()
+    for b in s.as_bytes():
+        buf.append(b)
+    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    assert_equal(result.tag, UInt8(0x6C))  # 'l'
+    # INT64_MIN in two's complement = 0x8000000000000000
+    assert_equal(result.value, UInt64(1) << 63)
+    var val = bitcast[DType.int64](SIMD[DType.uint64, 1](result.value))
+    assert_equal(Int64(val), Int64.MIN)
+
+
 def main() raises:
     test_parse_positive_int()
     test_parse_zero()
     test_parse_negative_int()
     test_parse_int_with_terminator()
     test_parse_large_uint()
+    test_parse_int64_min()
     print("test_numbers: all passed")
