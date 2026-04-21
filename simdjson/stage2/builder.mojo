@@ -91,19 +91,19 @@ def build_tape(
             while si < num_structurals and Int(structural_positions[si]) <= string_end:
                 si += 1
         elif byte == TAG_TRUE:  # 't' (true)
-            _validate_literal(input_ptr, pos, input_len, String("true"))
+            _validate_true(input_ptr, pos, input_len)
             tape.append(TAG_TRUE, UInt64(0))
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_FALSE:  # 'f' (false)
-            _validate_literal(input_ptr, pos, input_len, String("false"))
+            _validate_false(input_ptr, pos, input_len)
             tape.append(TAG_FALSE, UInt64(0))
             if depth == 0:
                 root_done = True
             si += 1
         elif byte == TAG_NULL:  # 'n' (null)
-            _validate_literal(input_ptr, pos, input_len, String("null"))
+            _validate_null(input_ptr, pos, input_len)
             tape.append(TAG_NULL, UInt64(0))
             if depth == 0:
                 root_done = True
@@ -158,12 +158,31 @@ def _close_container(
     )
 
 
-def _validate_literal(
-    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int, expected: String
+@always_inline("nodebug")
+def _validate_true(
+    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
 ) raises:
-    var expected_bytes = expected.as_bytes()
-    if pos + len(expected_bytes) > input_len:
+    if pos + 4 > input_len:
         raise "INVALID_LITERAL: unexpected end of input at position " + String(pos)
-    for i in range(len(expected_bytes)):
-        if ptr[pos + i] != expected_bytes[i]:
-            raise "INVALID_LITERAL: expected '" + expected + "' at position " + String(pos)
+    if ptr[pos] != UInt8(0x74) or ptr[pos + 1] != UInt8(0x72) or ptr[pos + 2] != UInt8(0x75) or ptr[pos + 3] != UInt8(0x65):
+        raise "INVALID_LITERAL: expected 'true' at position " + String(pos)
+
+
+@always_inline("nodebug")
+def _validate_false(
+    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
+) raises:
+    if pos + 5 > input_len:
+        raise "INVALID_LITERAL: unexpected end of input at position " + String(pos)
+    if ptr[pos] != UInt8(0x66) or ptr[pos + 1] != UInt8(0x61) or ptr[pos + 2] != UInt8(0x6C) or ptr[pos + 3] != UInt8(0x73) or ptr[pos + 4] != UInt8(0x65):
+        raise "INVALID_LITERAL: expected 'false' at position " + String(pos)
+
+
+@always_inline("nodebug")
+def _validate_null(
+    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
+) raises:
+    if pos + 4 > input_len:
+        raise "INVALID_LITERAL: unexpected end of input at position " + String(pos)
+    if ptr[pos] != UInt8(0x6E) or ptr[pos + 1] != UInt8(0x75) or ptr[pos + 2] != UInt8(0x6C) or ptr[pos + 3] != UInt8(0x6C):
+        raise "INVALID_LITERAL: expected 'null' at position " + String(pos)
