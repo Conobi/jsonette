@@ -9,6 +9,9 @@ TESTS=(
     tests/simdjson/stage1/test_classifier.mojo
     tests/simdjson/stage1/test_string_mask.mojo
     tests/simdjson/stage1/test_indexer.mojo
+    tests/simdjson/stage2/test_numbers.mojo
+    tests/simdjson/stage2/test_strings.mojo
+    tests/simdjson/stage2/test_builder.mojo
 )
 
 cd "$PROJECT_DIR"
