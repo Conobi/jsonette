@@ -6,18 +6,26 @@ from simdjson.stage1.string_mask import EscapeScanner, StringScanner
 
 
 struct BitIndexer:
-    """Converts a 64-bit bitmask into a list of absolute byte positions."""
+    """Converts a 64-bit bitmask into positions via direct pointer writes."""
 
     var positions: List[UInt32]
+    var write_pos: Int
 
-    def __init__(out self):
-        self.positions = List[UInt32]()
+    def __init__(out self, capacity: Int = 0):
+        if capacity > 0:
+            self.positions = List[UInt32](unsafe_uninit_length=capacity)
+        else:
+            self.positions = List[UInt32]()
+        self.write_pos = 0
 
+    @always_inline("nodebug")
     def write(mut self, base_idx: UInt32, bits: UInt64):
-        """Append positions of each set bit (relative to base_idx)."""
+        """Write positions of each set bit (relative to base_idx)."""
+        var ptr = self.positions.unsafe_ptr()
         var b = bits
         while b != 0:
-            self.positions.append(base_idx + UInt32(count_trailing_zeros(b)))
+            ptr[self.write_pos] = base_idx + UInt32(count_trailing_zeros(b))
+            self.write_pos += 1
             b = b & (b - 1)
 
 
@@ -39,7 +47,7 @@ def structural_index(padded_buf: List[UInt8], input_len: Int) -> List[UInt32]:
 
     var escape_scanner = EscapeScanner()
     var string_scanner = StringScanner()
-    var indexer = BitIndexer()
+    var indexer = BitIndexer(input_len)
 
     var prev_structurals: UInt64 = 0
     var prev_scalar_carry: UInt64 = 0
@@ -87,10 +95,18 @@ def structural_index(padded_buf: List[UInt8], input_len: Int) -> List[UInt32]:
     # Flush last chunk
     indexer.write(prev_base, prev_structurals)
 
-    # Filter positions beyond input length
-    var result = List[UInt32]()
-    for i in range(len(indexer.positions)):
-        if Int(indexer.positions[i]) < input_len:
-            result.append(indexer.positions[i])
+    # Move positions out of indexer for in-place filtering
+    var write_count = indexer.write_pos
+    var positions = indexer.positions^
+    indexer.positions = List[UInt32]()
 
-    return result^
+    # In-place filter: compact valid positions (< input_len) to front
+    var pos_ptr = positions.unsafe_ptr()
+    var write = 0
+    for i in range(write_count):
+        if Int(pos_ptr[i]) < input_len:
+            pos_ptr[write] = pos_ptr[i]
+            write += 1
+    # Shrink to actual count
+    positions.resize(write, UInt32(0))
+    return positions^
