@@ -19,23 +19,11 @@ struct FloatResult(Movable, Copyable):
     var valid: Bool
 
 
+@always_inline("nodebug")
 def umul128(a: UInt64, b: UInt64) -> Uint128:
-    """64x64 -> 128 unsigned multiply via 32-bit split."""
-    var a_lo = a & 0xFFFFFFFF
-    var a_hi = a >> 32
-    var b_lo = b & 0xFFFFFFFF
-    var b_hi = b >> 32
-
-    var ll = a_lo * b_lo
-    var lh = a_lo * b_hi
-    var hl = a_hi * b_lo
-    var hh = a_hi * b_hi
-
-    var mid_sum = (ll >> 32) + (lh & 0xFFFFFFFF) + (hl & 0xFFFFFFFF)
-    var hi = hh + (lh >> 32) + (hl >> 32) + (mid_sum >> 32)
-    var lo = (ll & 0xFFFFFFFF) | ((mid_sum & 0xFFFFFFFF) << 32)
-
-    return Uint128(hi=hi, lo=lo)
+    """64x64 -> 128 unsigned multiply using native UInt128."""
+    var product = UInt128(a) * UInt128(b)
+    return Uint128(hi=UInt64(product >> 64), lo=UInt64(product & 0xFFFFFFFFFFFFFFFF))
 
 
 def _leading_zeros(x: UInt64) -> Int:
