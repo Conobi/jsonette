@@ -5,6 +5,7 @@ numbers into a flat tape format with root envelope.
 """
 
 from simdjson.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
+from simdjson.error import ParseError, ErrorCode
 from simdjson.stage2.numbers import parse_number
 from simdjson.stage2.strings import parse_string
 
@@ -13,7 +14,7 @@ comptime MAX_DEPTH: Int = 1024
 
 def build_tape(
     input_buf: List[UInt8], input_len: Int, structural_positions: List[UInt32]
-) raises -> Tape:
+) raises ParseError -> Tape:
     """Stage 2 entry point: build a tape from structural positions and input bytes.
 
     Args:
@@ -24,7 +25,7 @@ def build_tape(
     """
     var num_structurals = len(structural_positions)
     if num_structurals == 0:
-        raise "EMPTY_DOCUMENT: no structural characters found"
+        raise ParseError(code=ErrorCode.EMPTY_DOCUMENT.value, position=0, message="EMPTY_DOCUMENT: no structural characters found")
 
     # R4: Pre-allocate tape and string_buf to avoid reallocation during parsing
     var tape = Tape(element_capacity=input_len * 2 + 2, string_capacity=input_len + 64)
@@ -50,7 +51,7 @@ def build_tape(
         var byte = input_ptr[pos]
 
         if root_done and depth == 0:
-            raise "TRAILING_CONTENT: unexpected content at position " + String(pos)
+            raise ParseError(code=ErrorCode.TRAILING_CONTENT.value, position=pos, message="TRAILING_CONTENT: unexpected content at position " + String(pos))
 
         if byte == TAG_STRING:  # '"'
             var buf_offset = UInt64(len(tape.string_buf))
@@ -82,7 +83,7 @@ def build_tape(
             si += 1
         elif byte == TAG_OBJECT_OPEN:  # '{'
             if depth >= MAX_DEPTH:
-                raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
+                raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos, message="DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH))
             container_stack[depth] = UInt32(tape_pos)
             count_stack[depth] = UInt32(0)
             tape_ptr[tape_pos] = make_tape_entry(TAG_OBJECT_OPEN, UInt64(0))
@@ -91,7 +92,7 @@ def build_tape(
             si += 1
         elif byte == TAG_ARRAY_OPEN:  # '['
             if depth >= MAX_DEPTH:
-                raise "DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH)
+                raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos, message="DEPTH_EXCEEDED: nesting depth exceeds " + String(MAX_DEPTH))
             container_stack[depth] = UInt32(tape_pos)
             count_stack[depth] = UInt32(0)
             tape_ptr[tape_pos] = make_tape_entry(TAG_ARRAY_OPEN, UInt64(0))
@@ -100,7 +101,7 @@ def build_tape(
             si += 1
         elif byte == TAG_OBJECT_CLOSE:  # '}'
             if depth == 0 or UInt8(tape_ptr[Int(container_stack[depth - 1])] >> 56) != TAG_OBJECT_OPEN:
-                raise "TAPE_ERROR: unexpected '}' at position " + String(pos)
+                raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos, message="TAPE_ERROR: unexpected '}' at position " + String(pos))
             tape_pos = _close_container(tape_ptr, tape_pos, container_stack, count_stack, depth, TAG_OBJECT_CLOSE)
             depth -= 1
             if depth == 0:
@@ -108,7 +109,7 @@ def build_tape(
             si += 1
         elif byte == TAG_ARRAY_CLOSE:  # ']'
             if depth == 0 or UInt8(tape_ptr[Int(container_stack[depth - 1])] >> 56) != TAG_ARRAY_OPEN:
-                raise "TAPE_ERROR: unexpected ']' at position " + String(pos)
+                raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos, message="TAPE_ERROR: unexpected ']' at position " + String(pos))
             tape_pos = _close_container(tape_ptr, tape_pos, container_stack, count_stack, depth, TAG_ARRAY_CLOSE)
             depth -= 1
             if depth == 0:
@@ -136,10 +137,10 @@ def build_tape(
                 root_done = True
             si += 1
         else:
-            raise "UNEXPECTED_VALUE: unexpected byte " + String(Int(byte)) + " at position " + String(pos)
+            raise ParseError(code=ErrorCode.UNEXPECTED_VALUE.value, position=pos, message="UNEXPECTED_VALUE: unexpected byte " + String(Int(byte)) + " at position " + String(pos))
 
     if depth != 0:
-        raise "UNCLOSED_CONTAINER: " + String(depth) + " unclosed container(s)"
+        raise ParseError(code=ErrorCode.UNCLOSED_CONTAINER.value, position=0, message="UNCLOSED_CONTAINER: " + String(depth) + " unclosed container(s)")
 
     var root_close_idx = tape_pos
     tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
@@ -185,28 +186,28 @@ def _close_container[o: Origin[mut=True]](
 @always_inline("nodebug")
 def _validate_true(
     ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
-) raises:
+) raises ParseError:
     if pos + 4 > input_len:
-        raise "INVALID_LITERAL: unexpected end of input at position " + String(pos)
+        raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos, message="INVALID_LITERAL: unexpected end of input at position " + String(pos))
     if ptr[pos] != UInt8(0x74) or ptr[pos + 1] != UInt8(0x72) or ptr[pos + 2] != UInt8(0x75) or ptr[pos + 3] != UInt8(0x65):
-        raise "INVALID_LITERAL: expected 'true' at position " + String(pos)
+        raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos, message="INVALID_LITERAL: expected 'true' at position " + String(pos))
 
 
 @always_inline("nodebug")
 def _validate_false(
     ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
-) raises:
+) raises ParseError:
     if pos + 5 > input_len:
-        raise "INVALID_LITERAL: unexpected end of input at position " + String(pos)
+        raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos, message="INVALID_LITERAL: unexpected end of input at position " + String(pos))
     if ptr[pos] != UInt8(0x66) or ptr[pos + 1] != UInt8(0x61) or ptr[pos + 2] != UInt8(0x6C) or ptr[pos + 3] != UInt8(0x73) or ptr[pos + 4] != UInt8(0x65):
-        raise "INVALID_LITERAL: expected 'false' at position " + String(pos)
+        raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos, message="INVALID_LITERAL: expected 'false' at position " + String(pos))
 
 
 @always_inline("nodebug")
 def _validate_null(
     ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
-) raises:
+) raises ParseError:
     if pos + 4 > input_len:
-        raise "INVALID_LITERAL: unexpected end of input at position " + String(pos)
+        raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos, message="INVALID_LITERAL: unexpected end of input at position " + String(pos))
     if ptr[pos] != UInt8(0x6E) or ptr[pos + 1] != UInt8(0x75) or ptr[pos + 2] != UInt8(0x6C) or ptr[pos + 3] != UInt8(0x6C):
-        raise "INVALID_LITERAL: expected 'null' at position " + String(pos)
+        raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos, message="INVALID_LITERAL: expected 'null' at position " + String(pos))

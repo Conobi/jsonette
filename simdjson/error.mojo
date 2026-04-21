@@ -14,3 +14,20 @@ struct ErrorCode(Movable, Copyable):
     comptime EMPTY_DOCUMENT = ErrorCode(8)
     comptime UNCLOSED_CONTAINER = ErrorCode(9)
     comptime INVALID_LITERAL = ErrorCode(10)
+
+
+@fieldwise_init
+struct ParseError(Movable, Writable):
+    """Typed parse error for internal hot-path functions.
+
+    Using typed `raises ParseError` on internal functions lets the compiler
+    eliminate the dynamic error-type check on the happy path, reducing
+    overhead compared to generic `raises`.
+    """
+
+    var code: UInt8
+    var position: Int
+    var message: String
+
+    def write_to[W: Writer](self, mut writer: W):
+        writer.write(self.message)

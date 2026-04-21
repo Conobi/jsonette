@@ -1,6 +1,7 @@
 from std.memory import bitcast
 from simdjson.stage2.eisel_lemire import compute_float_64
 from simdjson.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
+from simdjson.error import ParseError, ErrorCode
 
 
 @fieldwise_init
@@ -39,7 +40,7 @@ def _parse_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
     return g1 * 10000 + g2
 
 
-def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberResult:
+def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError -> NumberResult:
     """Parse a JSON number starting at ptr[0].
 
     Returns tag ('l'/'u'/'d'), raw value bits, and bytes consumed.
@@ -54,11 +55,11 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
         pos += 1
 
     if pos >= max_len or not _is_digit(ptr[pos]):
-        raise "NUMBER_ERROR: expected digit after '-'"
+        raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: expected digit after '-'")
 
     # Leading zero check: "01" is invalid, "0" and "0.x" are ok
     if ptr[pos] == UInt8(0x30) and pos + 1 < max_len and _is_digit(ptr[pos + 1]):
-        raise "NUMBER_ERROR: leading zeros not allowed"
+        raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: leading zeros not allowed")
 
     # Parse integer digits
     var integer_part: UInt64 = 0
@@ -67,7 +68,7 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
     while pos + 8 <= max_len and _are_8_digits(ptr, pos):
         var batch = _parse_8_digits(ptr, pos)
         if integer_part > (UInt64.MAX - batch) // 100000000:
-            raise "NUMBER_ERROR: integer overflow"
+            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: integer overflow")
         integer_part = integer_part * 100000000 + batch
         digit_count += 8
         pos += 8
@@ -75,7 +76,7 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
     while pos < max_len and _is_digit(ptr[pos]):
         var digit = _digit_value(ptr[pos])
         if integer_part > (UInt64.MAX - digit) // 10:
-            raise "NUMBER_ERROR: integer overflow"
+            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: integer overflow")
         integer_part = integer_part * 10 + digit
         digit_count += 1
         pos += 1
@@ -91,13 +92,13 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
         return _finish_integer(negative, integer_part, pos)
 
 
-def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises -> NumberResult:
+def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises ParseError -> NumberResult:
     if negative:
         # Int64 range: -9223372036854775808 to 9223372036854775807
         # integer_part == 2^63 is valid (it's INT64_MIN's absolute value)
         comptime INT64_MIN_ABS: UInt64 = UInt64(1) << 63
         if integer_part > INT64_MIN_ABS:
-            raise "NUMBER_ERROR: signed integer overflow"
+            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: signed integer overflow")
         # Special case: 2^63 can't be negated via Int64 (overflow), use bitcast
         var raw: UInt64
         if integer_part == INT64_MIN_ABS:
@@ -117,7 +118,7 @@ def _parse_float(
     negative: Bool,
     integer_part: UInt64,
     digit_count: Int,
-) raises -> NumberResult:
+) raises ParseError -> NumberResult:
     # Build mantissa (all significant digits) and track decimal exponent.
     var mantissa = integer_part
     var total_digits = digit_count
@@ -127,7 +128,7 @@ def _parse_float(
     if pos < max_len and ptr[pos] == UInt8(0x2E):
         pos += 1
         if pos >= max_len or not _is_digit(ptr[pos]):
-            raise "NUMBER_ERROR: expected digit after '.'"
+            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: expected digit after '.'")
         # SWAR fast path for fractional digits
         while pos + 8 <= max_len and total_digits + 8 <= 19 and _are_8_digits(ptr, pos):
             var batch = _parse_8_digits(ptr, pos)
@@ -153,7 +154,7 @@ def _parse_float(
             exp_negative = ptr[pos] == UInt8(0x2D)
             pos += 1
         if pos >= max_len or not _is_digit(ptr[pos]):
-            raise "NUMBER_ERROR: expected digit in exponent"
+            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos, message="NUMBER_ERROR: expected digit in exponent")
         while pos < max_len and _is_digit(ptr[pos]):
             parsed_exponent = parsed_exponent * 10 + Int(_digit_value(ptr[pos]))
             pos += 1
@@ -178,7 +179,7 @@ def _parse_float_fallback(
     frac_digits: Int,
     parsed_exponent: Int,
     pos: Int,
-) raises -> NumberResult:
+) raises ParseError -> NumberResult:
     """Slow-path float construction using Float64 arithmetic."""
     var value = Float64(mantissa)
 
