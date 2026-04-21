@@ -179,6 +179,130 @@ def test_control_char_rejected() raises:
         raised = True
     assert_equal(raised, True)
 
+def test_long_string_no_escapes() raises:
+    """42-char string with no escapes — exercises bulk copy path."""
+    # Build: " + 42 x 'A' + " + 128 zero-byte padding
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # opening "
+    for _ in range(42):
+        input.append(UInt8(0x41))  # 'A'
+    input.append(UInt8(0x22))  # closing "
+    var real_len = len(input)
+    for _ in range(128):
+        input.append(UInt8(0))  # SIMD safety padding
+    var string_buf = List[UInt8]()
+    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    assert_equal(consumed, 44)  # 1 open + 42 chars + 1 close
+    # Length prefix should be 42 (LE UInt32)
+    assert_equal(string_buf[0], UInt8(42))
+    assert_equal(string_buf[1], UInt8(0))
+    assert_equal(string_buf[2], UInt8(0))
+    assert_equal(string_buf[3], UInt8(0))
+    # All content bytes should be 'A'
+    for i in range(42):
+        assert_equal(string_buf[4 + i], UInt8(0x41))
+    # Null terminator
+    assert_equal(string_buf[4 + 42], UInt8(0))
+
+
+def test_escape_at_position_31() raises:
+    """Backslash at byte 31 (SIMD boundary - 1), straddles 32-byte lane."""
+    # Content: 30 x 'x' + \n + 'y' = 30 + 2 escape bytes + 1 = 33 content bytes
+    # Input:   " + 30 x 'x' + '\' + 'n' + 'y' + "
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # opening " at pos 0
+    for _ in range(30):
+        input.append(UInt8(0x78))  # 'x'
+    # Backslash at input position 31
+    input.append(UInt8(0x5C))  # backslash
+    input.append(UInt8(0x6E))  # 'n'
+    input.append(UInt8(0x79))  # 'y'
+    input.append(UInt8(0x22))  # closing "
+    var real_len = len(input)
+    for _ in range(128):
+        input.append(UInt8(0))
+    var string_buf = List[UInt8]()
+    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    assert_equal(consumed, 35)  # 1 + 30 + 2 + 1 + 1
+    # Output: 30 x 'x' + 0x0A + 'y' = 32 bytes
+    assert_equal(string_buf[0], UInt8(32))
+    assert_equal(string_buf[4 + 30], UInt8(0x0A))  # decoded \n
+    assert_equal(string_buf[4 + 31], UInt8(0x79))  # 'y'
+
+
+def test_escape_at_position_32() raises:
+    """Backslash at byte 32 (exact SIMD boundary)."""
+    # Content: 31 x 'x' + \t + 'y'
+    # Input:   " + 31 x 'x' + '\' + 't' + 'y' + "
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # opening " at pos 0
+    for _ in range(31):
+        input.append(UInt8(0x78))  # 'x'
+    # Backslash at input position 32
+    input.append(UInt8(0x5C))  # backslash
+    input.append(UInt8(0x74))  # 't'
+    input.append(UInt8(0x79))  # 'y'
+    input.append(UInt8(0x22))  # closing "
+    var real_len = len(input)
+    for _ in range(128):
+        input.append(UInt8(0))
+    var string_buf = List[UInt8]()
+    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    assert_equal(consumed, 36)  # 1 + 31 + 2 + 1 + 1
+    # Output: 31 x 'x' + 0x09 + 'y' = 33 bytes
+    assert_equal(string_buf[0], UInt8(33))
+    assert_equal(string_buf[4 + 31], UInt8(0x09))  # decoded \t
+    assert_equal(string_buf[4 + 32], UInt8(0x79))  # 'y'
+
+
+def test_string_exactly_32_bytes() raises:
+    """String content exactly 32 bytes — one full SIMD lane."""
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # opening "
+    for i in range(32):
+        input.append(UInt8(0x61 + (i % 26)))  # 'a'..'z' cycling
+    input.append(UInt8(0x22))  # closing "
+    var real_len = len(input)
+    for _ in range(128):
+        input.append(UInt8(0))
+    var string_buf = List[UInt8]()
+    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    assert_equal(consumed, 34)  # 1 + 32 + 1
+    assert_equal(string_buf[0], UInt8(32))  # length
+    # Spot-check first and last content bytes
+    assert_equal(string_buf[4], UInt8(0x61))       # 'a'
+    assert_equal(string_buf[4 + 31], UInt8(0x61 + (31 % 26)))  # 'f'
+    assert_equal(string_buf[4 + 32], UInt8(0))     # null terminator
+
+
+def test_string_64_bytes_with_middle_escape() raises:
+    """64-byte string content with escape in the middle (position ~32)."""
+    # 31 x 'a' + \n + 30 x 'b' = 31 + 2 + 30 = 63 input content bytes
+    # Output: 31 + 1 + 30 = 62 decoded bytes
+    var input = List[UInt8]()
+    input.append(UInt8(0x22))  # opening "
+    for _ in range(31):
+        input.append(UInt8(0x61))  # 'a'
+    input.append(UInt8(0x5C))  # backslash at content position 31
+    input.append(UInt8(0x6E))  # 'n'
+    for _ in range(30):
+        input.append(UInt8(0x62))  # 'b'
+    input.append(UInt8(0x22))  # closing "
+    var real_len = len(input)
+    for _ in range(128):
+        input.append(UInt8(0))
+    var string_buf = List[UInt8]()
+    var consumed = parse_string(input.unsafe_ptr(), 0, real_len, string_buf)
+    assert_equal(consumed, 65)  # 1 + 63 + 1
+    assert_equal(string_buf[0], UInt8(62))  # decoded length
+    # Check boundary region
+    assert_equal(string_buf[4 + 30], UInt8(0x61))  # last 'a'
+    assert_equal(string_buf[4 + 31], UInt8(0x0A))  # decoded \n
+    assert_equal(string_buf[4 + 32], UInt8(0x62))  # first 'b'
+    assert_equal(string_buf[4 + 61], UInt8(0x62))  # last 'b'
+    assert_equal(string_buf[4 + 62], UInt8(0))     # null terminator
+
+
 def test_control_char_null_rejected() raises:
     """Unescaped null byte should raise."""
     var input = List[UInt8]()
@@ -205,6 +329,11 @@ def main() raises:
     test_unicode_escape_2byte()
     test_unicode_escape_3byte()
     test_surrogate_pair()
+    test_long_string_no_escapes()
+    test_escape_at_position_31()
+    test_escape_at_position_32()
+    test_string_exactly_32_bytes()
+    test_string_64_bytes_with_middle_escape()
     test_control_char_rejected()
     test_control_char_null_rejected()
     print("test_strings: all passed")
