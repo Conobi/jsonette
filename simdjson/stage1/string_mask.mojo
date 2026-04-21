@@ -34,7 +34,9 @@ struct EscapeScanner:
         var odd_result = odd_carries & ~ODD_BITS
         var escaped = even_result | odd_result
 
-        # Detect overflow (carry into next block)
+        # Detect overflow (carry into next block).
+        # Only odd-parity overflow sets the carry; even-parity overflow cancels it.
+        # This matches simdjson C++: next_escaped = (odd_carry>>63) & ~(even_carry>>63)
         var even_overflow: Bool = (even_starts != 0) and (
             (even_starts + backslash) < even_starts
         )
@@ -42,7 +44,7 @@ struct EscapeScanner:
             (odd_starts + backslash) < odd_starts
         )
         self.next_is_escaped = UInt64(1) if (
-            even_overflow or odd_overflow
+            odd_overflow and not even_overflow
         ) else UInt64(0)
 
         return escaped

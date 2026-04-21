@@ -81,12 +81,32 @@ def test_string_carry_across_blocks() raises:
     assert_equal(in_string2, ~UInt64(0))
 
 
+def test_escape_double_backslash_at_block_boundary() raises:
+    """Even-length backslash run at positions 62,63 must NOT set next_is_escaped."""
+    var scanner = EscapeScanner()
+    var backslash: UInt64 = (UInt64(1) << 62) | (UInt64(1) << 63)
+    _ = scanner.next(backslash)
+    # Even-length run: no carry. First byte of next block is NOT escaped.
+    assert_equal(scanner.next_is_escaped, UInt64(0))
+
+
+def test_escape_triple_backslash_at_block_boundary() raises:
+    """Odd-length backslash run at positions 61,62,63 MUST set next_is_escaped."""
+    var scanner = EscapeScanner()
+    var backslash: UInt64 = (UInt64(1) << 61) | (UInt64(1) << 62) | (UInt64(1) << 63)
+    _ = scanner.next(backslash)
+    # Odd-length run: carry set. First byte of next block IS escaped.
+    assert_equal(scanner.next_is_escaped, UInt64(1))
+
+
 def main() raises:
     test_escape_no_backslashes()
     test_escape_single_backslash()
     test_escape_double_backslash()
     test_escape_triple_backslash()
     test_escape_carry_across_blocks()
+    test_escape_double_backslash_at_block_boundary()
+    test_escape_triple_backslash_at_block_boundary()
     test_string_basic_quotes()
     test_string_escaped_quote()
     test_string_carry_across_blocks()
