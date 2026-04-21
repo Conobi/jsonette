@@ -1,6 +1,161 @@
+from std.memory import bitcast
+from simdjson.tape import TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
+from simdjson.document import Document
+
+
 struct Value:
     """Lightweight tape index view into a Document."""
     var _idx: Int
 
     def __init__(out self, idx: Int):
         self._idx = idx
+
+    # --- Internal helpers ---
+    def _tag(self, ref doc: Document) -> UInt8:
+        return UInt8(doc.tape.elements[self._idx] >> 56)
+
+    def _payload(self, ref doc: Document) -> UInt64:
+        return doc.tape.elements[self._idx] & 0x00FFFFFFFFFFFFFF
+
+    # --- Type checks ---
+    def is_object(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_OBJECT_OPEN
+
+    def is_array(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_ARRAY_OPEN
+
+    def is_string(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_STRING
+
+    def is_int(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_INT64
+
+    def is_uint(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_UINT64
+
+    def is_float(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_FLOAT64
+
+    def is_bool(self, ref doc: Document) -> Bool:
+        var t = self._tag(doc)
+        return t == TAG_TRUE or t == TAG_FALSE
+
+    def is_null(self, ref doc: Document) -> Bool:
+        return self._tag(doc) == TAG_NULL
+
+    # --- Scalar getters ---
+    def get_bool(self, ref doc: Document) raises -> Bool:
+        var t = self._tag(doc)
+        if t == TAG_TRUE:
+            return True
+        if t == TAG_FALSE:
+            return False
+        raise "TAPE_ERROR: expected bool"
+
+    def get_uint(self, ref doc: Document) raises -> UInt64:
+        if self._tag(doc) != TAG_UINT64:
+            raise "TAPE_ERROR: expected uint64"
+        return doc.tape.elements[self._idx + 1]
+
+    def get_int(self, ref doc: Document) raises -> Int64:
+        if self._tag(doc) != TAG_INT64:
+            raise "TAPE_ERROR: expected int64"
+        return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](doc.tape.elements[self._idx + 1])))
+
+    def get_float(self, ref doc: Document) raises -> Float64:
+        if self._tag(doc) != TAG_FLOAT64:
+            raise "TAPE_ERROR: expected float64"
+        return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](doc.tape.elements[self._idx + 1])))
+
+    def get_string_length(self, ref doc: Document) raises -> Int:
+        if self._tag(doc) != TAG_STRING:
+            raise "TAPE_ERROR: expected string"
+        var offset = Int(self._payload(doc))
+        return Int(
+            UInt32(doc.tape.string_buf[offset])
+            | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
+            | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
+            | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+        )
+
+    def string_eq(self, ref doc: Document, expected: String) raises -> Bool:
+        if self._tag(doc) != TAG_STRING:
+            raise "TAPE_ERROR: expected string"
+        var offset = Int(self._payload(doc))
+        var str_len = Int(
+            UInt32(doc.tape.string_buf[offset])
+            | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
+            | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
+            | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+        )
+        var expected_bytes = expected.as_bytes()
+        if str_len != len(expected_bytes):
+            return False
+        for i in range(str_len):
+            if doc.tape.string_buf[offset + 4 + i] != expected_bytes[i]:
+                return False
+        return True
+
+    # --- Container access ---
+    def get(self, ref doc: Document, key: String) raises -> Value:
+        """Object key lookup. O(n) linear scan."""
+        if self._tag(doc) != TAG_OBJECT_OPEN:
+            raise "TAPE_ERROR: expected object for key lookup"
+        var i = self._idx + 1
+        var close_plus_one = Int(self._payload(doc) & 0xFFFFFFFF)
+        while i < close_plus_one - 1:
+            var key_tag = UInt8(doc.tape.elements[i] >> 56)
+            if key_tag != TAG_STRING:
+                raise "TAPE_ERROR: expected string key in object"
+            var offset = Int(doc.tape.elements[i] & 0x00FFFFFFFFFFFFFF)
+            var key_len = Int(
+                UInt32(doc.tape.string_buf[offset])
+                | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
+                | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
+                | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+            )
+            var expected_bytes = key.as_bytes()
+            var is_match = key_len == len(expected_bytes)
+            if is_match:
+                for j in range(key_len):
+                    if doc.tape.string_buf[offset + 4 + j] != expected_bytes[j]:
+                        is_match = False
+                        break
+            var val_idx = i + 1
+            if is_match:
+                return Value(val_idx)
+            i = skip_value(doc, val_idx)
+        raise "KEY_NOT_FOUND: '" + key + "'"
+
+    def at(self, ref doc: Document, idx: Int) raises -> Value:
+        """Array element access by index. O(n) skip."""
+        if self._tag(doc) != TAG_ARRAY_OPEN:
+            raise "TAPE_ERROR: expected array for index access"
+        var i = self._idx + 1
+        var close_plus_one = Int(self._payload(doc) & 0xFFFFFFFF)
+        var current = 0
+        while i < close_plus_one - 1:
+            if current == idx:
+                return Value(i)
+            i = skip_value(doc, i)
+            current += 1
+        raise "INDEX_ERROR: index " + String(idx) + " out of range"
+
+    def count(self, ref doc: Document) raises -> Int:
+        """Return element count from container open entry."""
+        var t = self._tag(doc)
+        if t != TAG_OBJECT_OPEN and t != TAG_ARRAY_OPEN:
+            raise "TAPE_ERROR: expected container for count"
+        return Int((self._payload(doc) >> 32) & 0xFFFFFF)
+
+
+def skip_value(ref doc: Document, idx: Int) -> Int:
+    """Return the tape index past the element at idx."""
+    var tag = UInt8(doc.tape.elements[idx] >> 56)
+    if tag == TAG_TRUE or tag == TAG_FALSE or tag == TAG_NULL or tag == TAG_STRING:
+        return idx + 1
+    if tag == TAG_INT64 or tag == TAG_UINT64 or tag == TAG_FLOAT64:
+        return idx + 2
+    if tag == TAG_OBJECT_OPEN or tag == TAG_ARRAY_OPEN:
+        return Int(doc.tape.elements[idx] & 0xFFFFFFFF)
+    return idx + 1
