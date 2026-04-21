@@ -1,3 +1,5 @@
+from std.memory import memcpy, memset
+
 from simdjson.tape import Tape
 from simdjson.document import Document
 from simdjson.stage1.indexer import structural_index
@@ -17,11 +19,9 @@ struct Parser:
         # Create padded buffer: input + 128 zero bytes (enough for SIMD overread)
         var num_chunks = (input_len + 63) // 64
         var padded_len = num_chunks * 64 + 128
-        var padded = List[UInt8](capacity=padded_len)
-        for i in range(input_len):
-            padded.append(data[i])
-        while len(padded) < padded_len:
-            padded.append(UInt8(0))
+        var padded = List[UInt8](unsafe_uninit_length=padded_len)
+        memcpy(dest=padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        memset(padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
         var positions = structural_index(padded, input_len)
         var tape = build_tape(padded, input_len, positions)
