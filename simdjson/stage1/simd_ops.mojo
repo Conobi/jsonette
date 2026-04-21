@@ -21,17 +21,22 @@ def shuffle_epi8(
 
 @always_inline("nodebug")
 def prefix_xor(bitmask: UInt64) -> UInt64:
-    """Compute prefix XOR: out[i] = bitmask[0] ^ bitmask[1] ^ ... ^ bitmask[i].
+    """Compute prefix XOR via carry-less multiply (PCLMULQDQ).
     Each 1-bit flips the polarity of all subsequent bits.
-    Software fallback for CLMUL (6 XOR + 6 shift)."""
-    var x = bitmask
-    x ^= x << 1
-    x ^= x << 2
-    x ^= x << 4
-    x ^= x << 8
-    x ^= x << 16
-    x ^= x << 32
-    return x
+    Equivalent to: out[i] = bitmask[0] ^ bitmask[1] ^ ... ^ bitmask[i].
+    """
+    # CLMUL: multiplying by all-ones in GF(2) = prefix XOR
+    # Software fallback (non-x86):
+    #   x ^= x << 1; x ^= x << 2; x ^= x << 4;
+    #   x ^= x << 8; x ^= x << 16; x ^= x << 32; return x
+    var input = SIMD[DType.uint64, 2](bitmask, 0)
+    var multiplier = SIMD[DType.uint64, 2](0xFFFFFFFFFFFFFFFF, 0)
+    var result = llvm_intrinsic[
+        "llvm.x86.pclmulqdq",
+        SIMD[DType.uint64, 2],
+        has_side_effect=False,
+    ](input, multiplier, Int8(0))
+    return result[0]
 
 
 @fieldwise_init
