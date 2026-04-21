@@ -1,6 +1,6 @@
 """Eisel-Lemire float parsing: Uint128, umul128, and compute_float_64."""
 
-from simdjson.stage2.pow5_table import get_pow5, SMALLEST_POWER_OF_FIVE, LARGEST_POWER_OF_FIVE
+from simdjson.stage2.pow5_table import get_pow5, Pow5Cache, SMALLEST_POWER_OF_FIVE, LARGEST_POWER_OF_FIVE
 
 
 @fieldwise_init
@@ -64,7 +64,7 @@ def _leading_zeros(x: UInt64) -> Int:
     return n
 
 
-def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatResult:
+def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool, ref cache: Pow5Cache) -> FloatResult:
     """Convert mantissa * 10^exponent to IEEE 754 double via Eisel-Lemire."""
     # Zero mantissa.
     if mantissa == 0:
@@ -80,7 +80,7 @@ def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatRe
     var w = mantissa << UInt64(lz)
 
     # Get 128-bit power of 5.
-    var pow5 = get_pow5(exponent)
+    var pow5 = cache.get(exponent)
 
     # First multiply.
     var product = umul128(w, pow5.hi)

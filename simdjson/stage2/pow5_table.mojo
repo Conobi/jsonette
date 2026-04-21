@@ -1330,3 +1330,22 @@ def get_pow5(exponent: Int) -> Uint128:
     var hi_table = _init_pow5_hi()
     var lo_table = _init_pow5_lo()
     return Uint128(hi=hi_table[idx], lo=lo_table[idx])
+
+
+struct Pow5Cache(Movable):
+    """Cached power-of-5 table. Build once, query many times."""
+
+    var _hi: List[UInt64]
+    var _lo: List[UInt64]
+
+    def __init__(out self):
+        self._hi = _init_pow5_hi()
+        self._lo = _init_pow5_lo()
+
+    def __init__(out self, *, deinit take: Self):
+        self._hi = take._hi^
+        self._lo = take._lo^
+
+    def get(self, exponent: Int) -> Uint128:
+        var idx = exponent - SMALLEST_POWER_OF_FIVE
+        return Uint128(hi=self._hi[idx], lo=self._lo[idx])

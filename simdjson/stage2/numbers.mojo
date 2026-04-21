@@ -1,5 +1,6 @@
 from std.memory import bitcast
 from simdjson.stage2.eisel_lemire import compute_float_64
+from simdjson.stage2.pow5_table import Pow5Cache
 from simdjson.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 
 
@@ -19,7 +20,7 @@ def _digit_value(b: UInt8) -> UInt64:
     return UInt64(b) - UInt64(0x30)
 
 
-def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberResult:
+def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int, ref cache: Pow5Cache) raises -> NumberResult:
     """Parse a JSON number starting at ptr[0].
 
     Returns tag ('l'/'u'/'d'), raw value bits, and bytes consumed.
@@ -58,7 +59,7 @@ def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises -> NumberRes
         is_float = True
 
     if is_float:
-        return _parse_float(ptr, pos, max_len, negative, integer_part, digit_count)
+        return _parse_float(ptr, pos, max_len, negative, integer_part, digit_count, cache)
     else:
         return _finish_integer(negative, integer_part, pos)
 
@@ -89,6 +90,7 @@ def _parse_float(
     negative: Bool,
     integer_part: UInt64,
     digit_count: Int,
+    ref cache: Pow5Cache,
 ) raises -> NumberResult:
     # Build mantissa (all significant digits) and track decimal exponent.
     var mantissa = integer_part
@@ -128,7 +130,7 @@ def _parse_float(
 
     # Try Eisel-Lemire fast path if mantissa fits in 19 digits.
     if not too_many_digits:
-        var result = compute_float_64(mantissa, decimal_exponent, negative)
+        var result = compute_float_64(mantissa, decimal_exponent, negative, cache)
         if result.valid:
             return NumberResult(tag=TAG_FLOAT64, value=result.value, bytes_consumed=pos)
 
