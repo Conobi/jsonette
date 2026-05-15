@@ -1,3 +1,7 @@
 *.mojopkg
 tests/fixtures/corpus/
 tests/fixtures/test_vectors/
+plans
+plans/
+docs/project-context.md
+docs/project-context.md/
