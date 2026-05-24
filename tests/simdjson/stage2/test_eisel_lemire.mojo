@@ -56,7 +56,7 @@ def test_pow5_known_values() raises:
 
 
 def test_eisel_lemire_simple() raises:
-    """314 * 10^-2 = 3.14"""
+    """Converts 314 * 10^-2 to 3.14."""
 
     var result = compute_float_64(UInt64(314), -2, False)
     assert_equal(result.valid, True)
@@ -68,7 +68,7 @@ def test_eisel_lemire_simple() raises:
 
 
 def test_eisel_lemire_integer() raises:
-    """42 * 10^0 = 42.0"""
+    """Converts 42 * 10^0 to 42.0."""
 
     var result = compute_float_64(UInt64(42), 0, False)
     assert_equal(result.valid, True)
@@ -90,7 +90,7 @@ def test_eisel_lemire_1e10() raises:
 
 
 def test_eisel_lemire_large_exponent() raises:
-    """1 * 10^308"""
+    """Converts 1 * 10^308 near float64 max."""
 
     var result = compute_float_64(UInt64(1), 308, False)
     assert_equal(result.valid, True)
@@ -98,7 +98,7 @@ def test_eisel_lemire_large_exponent() raises:
 
 
 def test_eisel_lemire_small_exponent() raises:
-    """5 * 10^-324 — subnormal, may fall back"""
+    """Converts 5 * 10^-324, subnormal that may fall back."""
 
     var result = compute_float_64(UInt64(5), -324, False)
     # Either valid with correct value, or invalid (fallback needed)
@@ -122,7 +122,7 @@ def test_eisel_lemire_negative_zero() raises:
 
 
 def test_eisel_lemire_one_point_zero() raises:
-    """1 * 10^0 = 1.0 — IEEE bits should be 0x3FF0000000000000"""
+    """Converts 1 * 10^0 to 1.0 with IEEE bits 0x3FF0000000000000."""
 
     var result = compute_float_64(UInt64(1), 0, False)
     assert_equal(result.valid, True)
@@ -130,7 +130,7 @@ def test_eisel_lemire_one_point_zero() raises:
 
 
 def test_eisel_lemire_half() raises:
-    """5 * 10^-1 = 0.5 — IEEE bits should be 0x3FE0000000000000"""
+    """Converts 5 * 10^-1 to 0.5 with IEEE bits 0x3FE0000000000000."""
 
     var result = compute_float_64(UInt64(5), -1, False)
     assert_equal(result.valid, True)

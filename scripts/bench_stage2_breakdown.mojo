@@ -37,10 +37,10 @@ def read_file(path: String) raises -> List[UInt8]:
 def fmt_count(n: Int) -> String:
     """Format integer with comma separators."""
     var s = String(n)
-    if len(s) <= 3:
+    if s.byte_length() <= 3:
         return s
     var result = String("")
-    var digits = len(s)
+    var digits = s.byte_length()
     for i in range(digits):
         if i > 0 and (digits - i) % 3 == 0:
             result += ","

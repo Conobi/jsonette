@@ -13,7 +13,7 @@ uv run -- mojo run -I . -D ASSERT=all tests/<path>.mojo        # Run single test
 
 ## Package Name
 
-The source directory is `simdjson/` (not `json/`). Mojo 0.26.2's implicit stdlib imports cause `json` to collide with `std.json`. All imports use `simdjson.*` (e.g., `from simdjson.parser import Parser`).
+The source directory is `simdjson/` (not `json/`). Mojo's implicit stdlib imports cause `json` to collide with `std.json`. All imports use `simdjson.*` (e.g., `from simdjson.parser import Parser`).
 
 ## Vision
 
@@ -83,14 +83,16 @@ String content is excluded from structural character detection using a carry-les
 ### No I/O in the parser
 `Parser.parse(ref data: List[UInt8]) -> Value` takes a pre-loaded buffer. Callers own I/O. No file handles, no streams inside `simdjson/`.
 
-## Mojo Conventions (0.26.2)
+## Mojo Conventions (1.0.0b1)
 
-- `def` for all methods except `fn __del__(deinit self)`.
+- `def` for all functions and methods (`fn` is deprecated — warning in 1.0.0b1, error in next release).
 - Move constructor: `def __init__(out self, *, deinit take: Self)`.
 - `comptime` for constants (not `@parameter`).
 - Trait methods use `def`.
 - `@always_inline("nodebug")` on hot-path accessors.
-- Performance-critical free functions use `fn` with explicit types.
+- Bounds checking is on by default for CPU collections. Hot-path accessors use `unsafe_get()` / `unsafe_ptr()` to bypass checks where indices are trusted (e.g., tape-driven offsets).
+- `UnsafePointer` is non-null by design. Express nullability with `Optional[UnsafePointer[...]]`.
+- `String.__len__()` is deprecated — use `byte_length()` or `count_codepoints()`.
 - When in doubt about a stdlib API (`SIMD`, `UnsafePointer`, `List`, `Span`), use `mcp__mojo-mcp__lookup` / `validate` before writing; use `mcp__mojo-mcp__execute` as the single source of truth for whether code compiles.
 
 ## Commit Style

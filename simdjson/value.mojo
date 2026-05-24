@@ -79,10 +79,10 @@ struct Value:
             raise "TAPE_ERROR: expected string"
         var offset = Int(self._payload(doc))
         return Int(
-            UInt32(doc.tape.string_buf[offset])
-            | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
-            | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
-            | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+            UInt32(doc.tape.string_buf.unsafe_get(offset))
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 1)) << 8)
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 2)) << 16)
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 3)) << 24)
         )
 
     def get_string(self, ref doc: Document) raises -> String:
@@ -91,14 +91,14 @@ struct Value:
             raise "TAPE_ERROR: expected string"
         var offset = Int(self._payload(doc))
         var str_len = Int(
-            UInt32(doc.tape.string_buf[offset])
-            | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
-            | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
-            | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+            UInt32(doc.tape.string_buf.unsafe_get(offset))
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 1)) << 8)
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 2)) << 16)
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 3)) << 24)
         )
         var buf = List[UInt8](capacity=str_len)
         for i in range(str_len):
-            buf.append(doc.tape.string_buf[offset + 4 + i])
+            buf.append(doc.tape.string_buf.unsafe_get(offset + 4 + i))
         return String(from_utf8=buf^)
 
     def string_eq(self, ref doc: Document, expected: String) raises -> Bool:
@@ -106,16 +106,16 @@ struct Value:
             raise "TAPE_ERROR: expected string"
         var offset = Int(self._payload(doc))
         var str_len = Int(
-            UInt32(doc.tape.string_buf[offset])
-            | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
-            | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
-            | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+            UInt32(doc.tape.string_buf.unsafe_get(offset))
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 1)) << 8)
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 2)) << 16)
+            | (UInt32(doc.tape.string_buf.unsafe_get(offset + 3)) << 24)
         )
         var expected_bytes = expected.as_bytes()
         if str_len != len(expected_bytes):
             return False
         for i in range(str_len):
-            if doc.tape.string_buf[offset + 4 + i] != expected_bytes[i]:
+            if doc.tape.string_buf.unsafe_get(offset + 4 + i) != expected_bytes[i]:
                 return False
         return True
 
@@ -134,16 +134,16 @@ struct Value:
             # Safety: idx comes from tape structure written by builder
             var offset = Int(doc.tape.elements.unsafe_get(i) & 0x00FFFFFFFFFFFFFF)
             var key_len = Int(
-                UInt32(doc.tape.string_buf[offset])
-                | (UInt32(doc.tape.string_buf[offset + 1]) << 8)
-                | (UInt32(doc.tape.string_buf[offset + 2]) << 16)
-                | (UInt32(doc.tape.string_buf[offset + 3]) << 24)
+                UInt32(doc.tape.string_buf.unsafe_get(offset))
+                | (UInt32(doc.tape.string_buf.unsafe_get(offset + 1)) << 8)
+                | (UInt32(doc.tape.string_buf.unsafe_get(offset + 2)) << 16)
+                | (UInt32(doc.tape.string_buf.unsafe_get(offset + 3)) << 24)
             )
             var expected_bytes = key.as_bytes()
             var is_match = key_len == len(expected_bytes)
             if is_match:
                 for j in range(key_len):
-                    if doc.tape.string_buf[offset + 4 + j] != expected_bytes[j]:
+                    if doc.tape.string_buf.unsafe_get(offset + 4 + j) != expected_bytes[j]:
                         is_match = False
                         break
             var val_idx = i + 1

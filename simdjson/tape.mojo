@@ -33,11 +33,11 @@ struct Tape(Movable):
 
     @always_inline("nodebug")
     def tag_at(self, idx: Int) -> UInt8:
-        return UInt8(self.elements[idx] >> 56)
+        return UInt8(self.elements.unsafe_get(idx) >> 56)
 
     @always_inline("nodebug")
     def payload_at(self, idx: Int) -> UInt64:
-        return self.elements[idx] & 0x00FFFFFFFFFFFFFF
+        return self.elements.unsafe_get(idx) & 0x00FFFFFFFFFFFFFF
 
     @always_inline("nodebug")
     def append(mut self, tag: UInt8, payload: UInt64):

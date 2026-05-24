@@ -3,7 +3,7 @@ from simdjson.document import Document
 
 
 def test_y_array_arraysWithSpaces() -> Bool:
-    """Accept: y_array_arraysWithSpaces.json"""
+    """Accept: y_array_arraysWithSpaces.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(91))
@@ -22,7 +22,7 @@ def test_y_array_arraysWithSpaces() -> Bool:
 
 
 def test_y_array_empty_string() -> Bool:
-    """Accept: y_array_empty-string.json"""
+    """Accept: y_array_empty-string.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -38,7 +38,7 @@ def test_y_array_empty_string() -> Bool:
 
 
 def test_y_array_empty() -> Bool:
-    """Accept: y_array_empty.json"""
+    """Accept: y_array_empty.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(93))
@@ -52,7 +52,7 @@ def test_y_array_empty() -> Bool:
 
 
 def test_y_array_ending_with_newline() -> Bool:
-    """Accept: y_array_ending_with_newline.json"""
+    """Accept: y_array_ending_with_newline.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -69,7 +69,7 @@ def test_y_array_ending_with_newline() -> Bool:
 
 
 def test_y_array_false() -> Bool:
-    """Accept: y_array_false.json"""
+    """Accept: y_array_false.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(102))
@@ -88,7 +88,7 @@ def test_y_array_false() -> Bool:
 
 
 def test_y_array_heterogeneous() -> Bool:
-    """Accept: y_array_heterogeneous.json"""
+    """Accept: y_array_heterogeneous.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(110))
@@ -118,7 +118,7 @@ def test_y_array_heterogeneous() -> Bool:
 
 
 def test_y_array_null() -> Bool:
-    """Accept: y_array_null.json"""
+    """Accept: y_array_null.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(110))
@@ -136,7 +136,7 @@ def test_y_array_null() -> Bool:
 
 
 def test_y_array_with_1_and_newline() -> Bool:
-    """Accept: y_array_with_1_and_newline.json"""
+    """Accept: y_array_with_1_and_newline.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -152,7 +152,7 @@ def test_y_array_with_1_and_newline() -> Bool:
 
 
 def test_y_array_with_leading_space() -> Bool:
-    """Accept: y_array_with_leading_space.json"""
+    """Accept: y_array_with_leading_space.json."""
     var data = List[UInt8]()
     data.append(UInt8(32))
     data.append(UInt8(91))
@@ -168,7 +168,7 @@ def test_y_array_with_leading_space() -> Bool:
 
 
 def test_y_array_with_several_null() -> Bool:
-    """Accept: y_array_with_several_null.json"""
+    """Accept: y_array_with_several_null.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -200,7 +200,7 @@ def test_y_array_with_several_null() -> Bool:
 
 
 def test_y_array_with_trailing_space() -> Bool:
-    """Accept: y_array_with_trailing_space.json"""
+    """Accept: y_array_with_trailing_space.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(50))
@@ -216,7 +216,7 @@ def test_y_array_with_trailing_space() -> Bool:
 
 
 def test_y_number() -> Bool:
-    """Accept: y_number.json"""
+    """Accept: y_number.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -236,7 +236,7 @@ def test_y_number() -> Bool:
 
 
 def test_y_number_0e_1() -> Bool:
-    """Accept: y_number_0e+1.json"""
+    """Accept: y_number_0e+1.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(48))
@@ -254,7 +254,7 @@ def test_y_number_0e_1() -> Bool:
 
 
 def test_y_number_0e1() -> Bool:
-    """Accept: y_number_0e1.json"""
+    """Accept: y_number_0e1.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(48))
@@ -271,7 +271,7 @@ def test_y_number_0e1() -> Bool:
 
 
 def test_y_number_after_space() -> Bool:
-    """Accept: y_number_after_space.json"""
+    """Accept: y_number_after_space.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(32))
@@ -287,7 +287,7 @@ def test_y_number_after_space() -> Bool:
 
 
 def test_y_number_double_close_to_zero() -> Bool:
-    """Accept: y_number_double_close_to_zero.json"""
+    """Accept: y_number_double_close_to_zero.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(45))
@@ -383,7 +383,7 @@ def test_y_number_double_close_to_zero() -> Bool:
 
 
 def test_y_number_int_with_exp() -> Bool:
-    """Accept: y_number_int_with_exp.json"""
+    """Accept: y_number_int_with_exp.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(50))
@@ -401,7 +401,7 @@ def test_y_number_int_with_exp() -> Bool:
 
 
 def test_y_number_minus_zero() -> Bool:
-    """Accept: y_number_minus_zero.json"""
+    """Accept: y_number_minus_zero.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(45))
@@ -417,7 +417,7 @@ def test_y_number_minus_zero() -> Bool:
 
 
 def test_y_number_negative_int() -> Bool:
-    """Accept: y_number_negative_int.json"""
+    """Accept: y_number_negative_int.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(45))
@@ -435,7 +435,7 @@ def test_y_number_negative_int() -> Bool:
 
 
 def test_y_number_negative_one() -> Bool:
-    """Accept: y_number_negative_one.json"""
+    """Accept: y_number_negative_one.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(45))
@@ -451,7 +451,7 @@ def test_y_number_negative_one() -> Bool:
 
 
 def test_y_number_negative_zero() -> Bool:
-    """Accept: y_number_negative_zero.json"""
+    """Accept: y_number_negative_zero.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(45))
@@ -467,7 +467,7 @@ def test_y_number_negative_zero() -> Bool:
 
 
 def test_y_number_real_capital_e() -> Bool:
-    """Accept: y_number_real_capital_e.json"""
+    """Accept: y_number_real_capital_e.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -485,7 +485,7 @@ def test_y_number_real_capital_e() -> Bool:
 
 
 def test_y_number_real_capital_e_neg_exp() -> Bool:
-    """Accept: y_number_real_capital_e_neg_exp.json"""
+    """Accept: y_number_real_capital_e_neg_exp.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -503,7 +503,7 @@ def test_y_number_real_capital_e_neg_exp() -> Bool:
 
 
 def test_y_number_real_capital_e_pos_exp() -> Bool:
-    """Accept: y_number_real_capital_e_pos_exp.json"""
+    """Accept: y_number_real_capital_e_pos_exp.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -521,7 +521,7 @@ def test_y_number_real_capital_e_pos_exp() -> Bool:
 
 
 def test_y_number_real_exponent() -> Bool:
-    """Accept: y_number_real_exponent.json"""
+    """Accept: y_number_real_exponent.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -541,7 +541,7 @@ def test_y_number_real_exponent() -> Bool:
 
 
 def test_y_number_real_fraction_exponent() -> Bool:
-    """Accept: y_number_real_fraction_exponent.json"""
+    """Accept: y_number_real_fraction_exponent.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -565,7 +565,7 @@ def test_y_number_real_fraction_exponent() -> Bool:
 
 
 def test_y_number_real_neg_exp() -> Bool:
-    """Accept: y_number_real_neg_exp.json"""
+    """Accept: y_number_real_neg_exp.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -583,7 +583,7 @@ def test_y_number_real_neg_exp() -> Bool:
 
 
 def test_y_number_real_pos_exponent() -> Bool:
-    """Accept: y_number_real_pos_exponent.json"""
+    """Accept: y_number_real_pos_exponent.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -601,7 +601,7 @@ def test_y_number_real_pos_exponent() -> Bool:
 
 
 def test_y_number_simple_int() -> Bool:
-    """Accept: y_number_simple_int.json"""
+    """Accept: y_number_simple_int.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -618,7 +618,7 @@ def test_y_number_simple_int() -> Bool:
 
 
 def test_y_number_simple_real() -> Bool:
-    """Accept: y_number_simple_real.json"""
+    """Accept: y_number_simple_real.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -642,7 +642,7 @@ def test_y_number_simple_real() -> Bool:
 
 
 def test_y_object() -> Bool:
-    """Accept: y_object.json"""
+    """Accept: y_object.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -680,7 +680,7 @@ def test_y_object() -> Bool:
 
 
 def test_y_object_basic() -> Bool:
-    """Accept: y_object_basic.json"""
+    """Accept: y_object_basic.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -705,7 +705,7 @@ def test_y_object_basic() -> Bool:
 
 
 def test_y_object_duplicated_key() -> Bool:
-    """Accept: y_object_duplicated_key.json"""
+    """Accept: y_object_duplicated_key.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -734,7 +734,7 @@ def test_y_object_duplicated_key() -> Bool:
 
 
 def test_y_object_duplicated_key_and_value() -> Bool:
-    """Accept: y_object_duplicated_key_and_value.json"""
+    """Accept: y_object_duplicated_key_and_value.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -763,7 +763,7 @@ def test_y_object_duplicated_key_and_value() -> Bool:
 
 
 def test_y_object_empty() -> Bool:
-    """Accept: y_object_empty.json"""
+    """Accept: y_object_empty.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(125))
@@ -777,7 +777,7 @@ def test_y_object_empty() -> Bool:
 
 
 def test_y_object_empty_key() -> Bool:
-    """Accept: y_object_empty_key.json"""
+    """Accept: y_object_empty_key.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -795,7 +795,7 @@ def test_y_object_empty_key() -> Bool:
 
 
 def test_y_object_escaped_null_in_key() -> Bool:
-    """Accept: y_object_escaped_null_in_key.json"""
+    """Accept: y_object_escaped_null_in_key.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -827,7 +827,7 @@ def test_y_object_escaped_null_in_key() -> Bool:
 
 
 def test_y_object_extreme_numbers() -> Bool:
-    """Accept: y_object_extreme_numbers.json"""
+    """Accept: y_object_extreme_numbers.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(32))
@@ -874,7 +874,7 @@ def test_y_object_extreme_numbers() -> Bool:
 
 
 def test_y_object_long_strings() -> Bool:
-    """Accept: y_object_long_strings.json"""
+    """Accept: y_object_long_strings.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -994,7 +994,7 @@ def test_y_object_long_strings() -> Bool:
 
 
 def test_y_object_simple() -> Bool:
-    """Accept: y_object_simple.json"""
+    """Accept: y_object_simple.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -1014,7 +1014,7 @@ def test_y_object_simple() -> Bool:
 
 
 def test_y_object_string_unicode() -> Bool:
-    """Accept: y_object_string_unicode.json"""
+    """Accept: y_object_string_unicode.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(34))
@@ -1136,7 +1136,7 @@ def test_y_object_string_unicode() -> Bool:
 
 
 def test_y_object_with_newlines() -> Bool:
-    """Accept: y_object_with_newlines.json"""
+    """Accept: y_object_with_newlines.json."""
     var data = List[UInt8]()
     data.append(UInt8(123))
     data.append(UInt8(10))
@@ -1160,7 +1160,7 @@ def test_y_object_with_newlines() -> Bool:
 
 
 def test_y_string_1_2_3_bytes_UTF_8_sequences() -> Bool:
-    """Accept: y_string_1_2_3_bytes_UTF-8_sequences.json"""
+    """Accept: y_string_1_2_3_bytes_UTF-8_sequences.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1194,7 +1194,7 @@ def test_y_string_1_2_3_bytes_UTF_8_sequences() -> Bool:
 
 
 def test_y_string_accepted_surrogate_pair() -> Bool:
-    """Accept: y_string_accepted_surrogate_pair.json"""
+    """Accept: y_string_accepted_surrogate_pair.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1222,7 +1222,7 @@ def test_y_string_accepted_surrogate_pair() -> Bool:
 
 
 def test_y_string_accepted_surrogate_pairs() -> Bool:
-    """Accept: y_string_accepted_surrogate_pairs.json"""
+    """Accept: y_string_accepted_surrogate_pairs.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1262,7 +1262,7 @@ def test_y_string_accepted_surrogate_pairs() -> Bool:
 
 
 def test_y_string_allowed_escapes() -> Bool:
-    """Accept: y_string_allowed_escapes.json"""
+    """Accept: y_string_allowed_escapes.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1294,7 +1294,7 @@ def test_y_string_allowed_escapes() -> Bool:
 
 
 def test_y_string_backslash_and_u_escaped_zero() -> Bool:
-    """Accept: y_string_backslash_and_u_escaped_zero.json"""
+    """Accept: y_string_backslash_and_u_escaped_zero.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1317,7 +1317,7 @@ def test_y_string_backslash_and_u_escaped_zero() -> Bool:
 
 
 def test_y_string_backslash_doublequotes() -> Bool:
-    """Accept: y_string_backslash_doublequotes.json"""
+    """Accept: y_string_backslash_doublequotes.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1335,7 +1335,7 @@ def test_y_string_backslash_doublequotes() -> Bool:
 
 
 def test_y_string_comments() -> Bool:
-    """Accept: y_string_comments.json"""
+    """Accept: y_string_comments.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1364,7 +1364,7 @@ def test_y_string_comments() -> Bool:
 
 
 def test_y_string_double_escape_a() -> Bool:
-    """Accept: y_string_double_escape_a.json"""
+    """Accept: y_string_double_escape_a.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1383,7 +1383,7 @@ def test_y_string_double_escape_a() -> Bool:
 
 
 def test_y_string_double_escape_n() -> Bool:
-    """Accept: y_string_double_escape_n.json"""
+    """Accept: y_string_double_escape_n.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1402,7 +1402,7 @@ def test_y_string_double_escape_n() -> Bool:
 
 
 def test_y_string_escaped_control_character() -> Bool:
-    """Accept: y_string_escaped_control_character.json"""
+    """Accept: y_string_escaped_control_character.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1424,7 +1424,7 @@ def test_y_string_escaped_control_character() -> Bool:
 
 
 def test_y_string_escaped_noncharacter() -> Bool:
-    """Accept: y_string_escaped_noncharacter.json"""
+    """Accept: y_string_escaped_noncharacter.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1446,7 +1446,7 @@ def test_y_string_escaped_noncharacter() -> Bool:
 
 
 def test_y_string_in_array() -> Bool:
-    """Accept: y_string_in_array.json"""
+    """Accept: y_string_in_array.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1465,7 +1465,7 @@ def test_y_string_in_array() -> Bool:
 
 
 def test_y_string_in_array_with_leading_space() -> Bool:
-    """Accept: y_string_in_array_with_leading_space.json"""
+    """Accept: y_string_in_array_with_leading_space.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(32))
@@ -1485,7 +1485,7 @@ def test_y_string_in_array_with_leading_space() -> Bool:
 
 
 def test_y_string_last_surrogates_1_and_2() -> Bool:
-    """Accept: y_string_last_surrogates_1_and_2.json"""
+    """Accept: y_string_last_surrogates_1_and_2.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1513,7 +1513,7 @@ def test_y_string_last_surrogates_1_and_2() -> Bool:
 
 
 def test_y_string_nbsp_uescaped() -> Bool:
-    """Accept: y_string_nbsp_uescaped.json"""
+    """Accept: y_string_nbsp_uescaped.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1542,7 +1542,7 @@ def test_y_string_nbsp_uescaped() -> Bool:
 
 
 def test_y_string_nonCharacterInUTF_8_U_10FFFF() -> Bool:
-    """Accept: y_string_nonCharacterInUTF-8_U+10FFFF.json"""
+    """Accept: y_string_nonCharacterInUTF-8_U+10FFFF.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1562,7 +1562,7 @@ def test_y_string_nonCharacterInUTF_8_U_10FFFF() -> Bool:
 
 
 def test_y_string_nonCharacterInUTF_8_U_FFFF() -> Bool:
-    """Accept: y_string_nonCharacterInUTF-8_U+FFFF.json"""
+    """Accept: y_string_nonCharacterInUTF-8_U+FFFF.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1581,7 +1581,7 @@ def test_y_string_nonCharacterInUTF_8_U_FFFF() -> Bool:
 
 
 def test_y_string_null_escape() -> Bool:
-    """Accept: y_string_null_escape.json"""
+    """Accept: y_string_null_escape.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1603,7 +1603,7 @@ def test_y_string_null_escape() -> Bool:
 
 
 def test_y_string_one_byte_utf_8() -> Bool:
-    """Accept: y_string_one-byte-utf-8.json"""
+    """Accept: y_string_one-byte-utf-8.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1625,7 +1625,7 @@ def test_y_string_one_byte_utf_8() -> Bool:
 
 
 def test_y_string_pi() -> Bool:
-    """Accept: y_string_pi.json"""
+    """Accept: y_string_pi.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1643,7 +1643,7 @@ def test_y_string_pi() -> Bool:
 
 
 def test_y_string_reservedCharacterInUTF_8_U_1BFFF() -> Bool:
-    """Accept: y_string_reservedCharacterInUTF-8_U+1BFFF.json"""
+    """Accept: y_string_reservedCharacterInUTF-8_U+1BFFF.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1663,7 +1663,7 @@ def test_y_string_reservedCharacterInUTF_8_U_1BFFF() -> Bool:
 
 
 def test_y_string_simple_ascii() -> Bool:
-    """Accept: y_string_simple_ascii.json"""
+    """Accept: y_string_simple_ascii.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1683,7 +1683,7 @@ def test_y_string_simple_ascii() -> Bool:
 
 
 def test_y_string_space() -> Bool:
-    """Accept: y_string_space.json"""
+    """Accept: y_string_space.json."""
     var data = List[UInt8]()
     data.append(UInt8(34))
     data.append(UInt8(32))
@@ -1698,7 +1698,7 @@ def test_y_string_space() -> Bool:
 
 
 def test_y_string_surrogates_U_1D11E_MUSICAL_SYMBOL_G_CLEF() -> Bool:
-    """Accept: y_string_surrogates_U+1D11E_MUSICAL_SYMBOL_G_CLEF.json"""
+    """Accept: y_string_surrogates_U+1D11E_MUSICAL_SYMBOL_G_CLEF.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1726,7 +1726,7 @@ def test_y_string_surrogates_U_1D11E_MUSICAL_SYMBOL_G_CLEF() -> Bool:
 
 
 def test_y_string_three_byte_utf_8() -> Bool:
-    """Accept: y_string_three-byte-utf-8.json"""
+    """Accept: y_string_three-byte-utf-8.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1748,7 +1748,7 @@ def test_y_string_three_byte_utf_8() -> Bool:
 
 
 def test_y_string_two_byte_utf_8() -> Bool:
-    """Accept: y_string_two-byte-utf-8.json"""
+    """Accept: y_string_two-byte-utf-8.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1770,7 +1770,7 @@ def test_y_string_two_byte_utf_8() -> Bool:
 
 
 def test_y_string_u_2028_line_sep() -> Bool:
-    """Accept: y_string_u+2028_line_sep.json"""
+    """Accept: y_string_u+2028_line_sep.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1789,7 +1789,7 @@ def test_y_string_u_2028_line_sep() -> Bool:
 
 
 def test_y_string_u_2029_par_sep() -> Bool:
-    """Accept: y_string_u+2029_par_sep.json"""
+    """Accept: y_string_u+2029_par_sep.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1808,7 +1808,7 @@ def test_y_string_u_2029_par_sep() -> Bool:
 
 
 def test_y_string_uEscape() -> Bool:
-    """Accept: y_string_uEscape.json"""
+    """Accept: y_string_uEscape.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1848,7 +1848,7 @@ def test_y_string_uEscape() -> Bool:
 
 
 def test_y_string_uescaped_newline() -> Bool:
-    """Accept: y_string_uescaped_newline.json"""
+    """Accept: y_string_uescaped_newline.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1877,7 +1877,7 @@ def test_y_string_uescaped_newline() -> Bool:
 
 
 def test_y_string_unescaped_char_delete() -> Bool:
-    """Accept: y_string_unescaped_char_delete.json"""
+    """Accept: y_string_unescaped_char_delete.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1894,7 +1894,7 @@ def test_y_string_unescaped_char_delete() -> Bool:
 
 
 def test_y_string_unicode() -> Bool:
-    """Accept: y_string_unicode.json"""
+    """Accept: y_string_unicode.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1916,7 +1916,7 @@ def test_y_string_unicode() -> Bool:
 
 
 def test_y_string_unicodeEscapedBackslash() -> Bool:
-    """Accept: y_string_unicodeEscapedBackslash.json"""
+    """Accept: y_string_unicodeEscapedBackslash.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1938,7 +1938,7 @@ def test_y_string_unicodeEscapedBackslash() -> Bool:
 
 
 def test_y_string_unicode_2() -> Bool:
-    """Accept: y_string_unicode_2.json"""
+    """Accept: y_string_unicode_2.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1963,7 +1963,7 @@ def test_y_string_unicode_2() -> Bool:
 
 
 def test_y_string_unicode_U_10FFFE_nonchar() -> Bool:
-    """Accept: y_string_unicode_U+10FFFE_nonchar.json"""
+    """Accept: y_string_unicode_U+10FFFE_nonchar.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -1991,7 +1991,7 @@ def test_y_string_unicode_U_10FFFE_nonchar() -> Bool:
 
 
 def test_y_string_unicode_U_1FFFE_nonchar() -> Bool:
-    """Accept: y_string_unicode_U+1FFFE_nonchar.json"""
+    """Accept: y_string_unicode_U+1FFFE_nonchar.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2019,7 +2019,7 @@ def test_y_string_unicode_U_1FFFE_nonchar() -> Bool:
 
 
 def test_y_string_unicode_U_200B_ZERO_WIDTH_SPACE() -> Bool:
-    """Accept: y_string_unicode_U+200B_ZERO_WIDTH_SPACE.json"""
+    """Accept: y_string_unicode_U+200B_ZERO_WIDTH_SPACE.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2041,7 +2041,7 @@ def test_y_string_unicode_U_200B_ZERO_WIDTH_SPACE() -> Bool:
 
 
 def test_y_string_unicode_U_2064_invisible_plus() -> Bool:
-    """Accept: y_string_unicode_U+2064_invisible_plus.json"""
+    """Accept: y_string_unicode_U+2064_invisible_plus.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2063,7 +2063,7 @@ def test_y_string_unicode_U_2064_invisible_plus() -> Bool:
 
 
 def test_y_string_unicode_U_FDD0_nonchar() -> Bool:
-    """Accept: y_string_unicode_U+FDD0_nonchar.json"""
+    """Accept: y_string_unicode_U+FDD0_nonchar.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2085,7 +2085,7 @@ def test_y_string_unicode_U_FDD0_nonchar() -> Bool:
 
 
 def test_y_string_unicode_U_FFFE_nonchar() -> Bool:
-    """Accept: y_string_unicode_U+FFFE_nonchar.json"""
+    """Accept: y_string_unicode_U+FFFE_nonchar.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2107,7 +2107,7 @@ def test_y_string_unicode_U_FFFE_nonchar() -> Bool:
 
 
 def test_y_string_unicode_escaped_double_quote() -> Bool:
-    """Accept: y_string_unicode_escaped_double_quote.json"""
+    """Accept: y_string_unicode_escaped_double_quote.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2129,7 +2129,7 @@ def test_y_string_unicode_escaped_double_quote() -> Bool:
 
 
 def test_y_string_utf8() -> Bool:
-    """Accept: y_string_utf8.json"""
+    """Accept: y_string_utf8.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2152,7 +2152,7 @@ def test_y_string_utf8() -> Bool:
 
 
 def test_y_string_with_del_character() -> Bool:
-    """Accept: y_string_with_del_character.json"""
+    """Accept: y_string_with_del_character.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2171,7 +2171,7 @@ def test_y_string_with_del_character() -> Bool:
 
 
 def test_y_structure_lonely_false() -> Bool:
-    """Accept: y_structure_lonely_false.json"""
+    """Accept: y_structure_lonely_false.json."""
     var data = List[UInt8]()
     data.append(UInt8(102))
     data.append(UInt8(97))
@@ -2188,7 +2188,7 @@ def test_y_structure_lonely_false() -> Bool:
 
 
 def test_y_structure_lonely_int() -> Bool:
-    """Accept: y_structure_lonely_int.json"""
+    """Accept: y_structure_lonely_int.json."""
     var data = List[UInt8]()
     data.append(UInt8(52))
     data.append(UInt8(50))
@@ -2202,7 +2202,7 @@ def test_y_structure_lonely_int() -> Bool:
 
 
 def test_y_structure_lonely_negative_real() -> Bool:
-    """Accept: y_structure_lonely_negative_real.json"""
+    """Accept: y_structure_lonely_negative_real.json."""
     var data = List[UInt8]()
     data.append(UInt8(45))
     data.append(UInt8(48))
@@ -2218,7 +2218,7 @@ def test_y_structure_lonely_negative_real() -> Bool:
 
 
 def test_y_structure_lonely_null() -> Bool:
-    """Accept: y_structure_lonely_null.json"""
+    """Accept: y_structure_lonely_null.json."""
     var data = List[UInt8]()
     data.append(UInt8(110))
     data.append(UInt8(117))
@@ -2234,7 +2234,7 @@ def test_y_structure_lonely_null() -> Bool:
 
 
 def test_y_structure_lonely_string() -> Bool:
-    """Accept: y_structure_lonely_string.json"""
+    """Accept: y_structure_lonely_string.json."""
     var data = List[UInt8]()
     data.append(UInt8(34))
     data.append(UInt8(97))
@@ -2251,7 +2251,7 @@ def test_y_structure_lonely_string() -> Bool:
 
 
 def test_y_structure_lonely_true() -> Bool:
-    """Accept: y_structure_lonely_true.json"""
+    """Accept: y_structure_lonely_true.json."""
     var data = List[UInt8]()
     data.append(UInt8(116))
     data.append(UInt8(114))
@@ -2267,7 +2267,7 @@ def test_y_structure_lonely_true() -> Bool:
 
 
 def test_y_structure_string_empty() -> Bool:
-    """Accept: y_structure_string_empty.json"""
+    """Accept: y_structure_string_empty.json."""
     var data = List[UInt8]()
     data.append(UInt8(34))
     data.append(UInt8(34))
@@ -2281,7 +2281,7 @@ def test_y_structure_string_empty() -> Bool:
 
 
 def test_y_structure_trailing_newline() -> Bool:
-    """Accept: y_structure_trailing_newline.json"""
+    """Accept: y_structure_trailing_newline.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -2299,7 +2299,7 @@ def test_y_structure_trailing_newline() -> Bool:
 
 
 def test_y_structure_true_in_array() -> Bool:
-    """Accept: y_structure_true_in_array.json"""
+    """Accept: y_structure_true_in_array.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(116))
@@ -2317,7 +2317,7 @@ def test_y_structure_true_in_array() -> Bool:
 
 
 def test_y_structure_whitespace_array() -> Bool:
-    """Accept: y_structure_whitespace_array.json"""
+    """Accept: y_structure_whitespace_array.json."""
     var data = List[UInt8]()
     data.append(UInt8(32))
     data.append(UInt8(91))

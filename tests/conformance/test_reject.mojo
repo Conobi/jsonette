@@ -3,7 +3,7 @@ from simdjson.document import Document
 
 
 def test_n_incomplete_false() -> Bool:
-    """Reject: n_incomplete_false.json"""
+    """Reject: n_incomplete_false.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(102))
@@ -21,7 +21,7 @@ def test_n_incomplete_false() -> Bool:
 
 
 def test_n_incomplete_null() -> Bool:
-    """Reject: n_incomplete_null.json"""
+    """Reject: n_incomplete_null.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(110))
@@ -38,7 +38,7 @@ def test_n_incomplete_null() -> Bool:
 
 
 def test_n_incomplete_true() -> Bool:
-    """Reject: n_incomplete_true.json"""
+    """Reject: n_incomplete_true.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(116))
@@ -55,7 +55,7 @@ def test_n_incomplete_true() -> Bool:
 
 
 def test_n_number() -> Bool:
-    """Reject: n_number_++.json"""
+    """Reject: n_number_++.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(43))
@@ -75,7 +75,7 @@ def test_n_number() -> Bool:
 
 
 def test_n_string_invalid_utf_8_in_escape() -> Bool:
-    """Reject: n_string_invalid-utf-8-in-escape.json"""
+    """Reject: n_string_invalid-utf-8-in-escape.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
@@ -94,7 +94,7 @@ def test_n_string_invalid_utf_8_in_escape() -> Bool:
 
 
 def test_n_string_leading_uescaped_thinspace() -> Bool:
-    """Reject: n_string_leading_uescaped_thinspace.json"""
+    """Reject: n_string_leading_uescaped_thinspace.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(92))
@@ -119,7 +119,7 @@ def test_n_string_leading_uescaped_thinspace() -> Bool:
 
 
 def test_n_structure_U_2060_word_joined() -> Bool:
-    """Reject: n_structure_U+2060_word_joined.json"""
+    """Reject: n_structure_U+2060_word_joined.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(226))
@@ -136,7 +136,7 @@ def test_n_structure_U_2060_word_joined() -> Bool:
 
 
 def test_n_structure_array_trailing_garbage() -> Bool:
-    """Reject: n_structure_array_trailing_garbage.json"""
+    """Reject: n_structure_array_trailing_garbage.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -152,7 +152,7 @@ def test_n_structure_array_trailing_garbage() -> Bool:
 
 
 def test_n_structure_array_with_extra_array_close() -> Bool:
-    """Reject: n_structure_array_with_extra_array_close.json"""
+    """Reject: n_structure_array_with_extra_array_close.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(49))
@@ -168,7 +168,7 @@ def test_n_structure_array_with_extra_array_close() -> Bool:
 
 
 def test_n_structure_array_with_unclosed_string() -> Bool:
-    """Reject: n_structure_array_with_unclosed_string.json"""
+    """Reject: n_structure_array_with_unclosed_string.json."""
     var data = List[UInt8]()
     data.append(UInt8(91))
     data.append(UInt8(34))
