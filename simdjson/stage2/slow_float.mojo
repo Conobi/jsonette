@@ -151,7 +151,12 @@ def parse_decimal_token(
 def _prefix_less_than(a: Decimal, cutoff: String) -> Bool:
     """Is the leading prefix of `a.d` lexicographically below `cutoff`?"""
     var cb = cutoff.as_bytes()
-    for i in range(len(cb)):
+    # Iterate over the cutoff's LOGICAL byte length, not len(cb): if the byte
+    # source ever carries a trailing NUL terminator, a NUL byte would compare
+    # below every digit and wrongly flip the result when the digit count equals
+    # the cutoff length. byte_length() excludes any terminator.
+    var n = cutoff.byte_length()
+    for i in range(n):
         if i >= a.nd:
             return True
         var ad = a.d[i] + UInt8(0x30)  # back to ASCII for comparison
@@ -420,7 +425,15 @@ def _should_round_up(a: Decimal, nd: Int) -> Bool:
 
 
 def _rounded_integer(a: Decimal) -> UInt64:
-    """Integer part of `a`, rounded half-to-even. No overflow guarantees."""
+    """Integer part of `a`, rounded half-to-even. No overflow guarantees.
+
+    Precondition: `a.dp <= 20`. Callers reach this only after scaling the
+    decimal into [0.5, 1) and extracting 1 + 52 mantissa bits, so `dp` is small.
+    The `dp > 20` branch returns a sentinel that would corrupt the mantissa if
+    ever hit; the assert documents and enforces the invariant under ASSERT=all
+    without changing runtime behaviour when assertions are off.
+    """
+    debug_assert(a.dp <= 20, "_rounded_integer precondition violated: a.dp > 20")
     if a.dp > 20:
         return UInt64(0xFFFFFFFFFFFFFFFF)
     var i = 0
