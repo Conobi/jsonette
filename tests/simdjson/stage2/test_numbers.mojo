@@ -1,6 +1,8 @@
 from std.testing import assert_equal, assert_true
 from std.memory import bitcast
 from simdjson.stage2.numbers import _parse_number, NumberResult
+from simdjson.tape import TAG_UINT64, TAG_INT64, TAG_FLOAT64
+from simdjson.error import ParseError
 
 
 def _nul_padded(s: String) -> List[UInt8]:
@@ -204,6 +206,176 @@ def test_parse_5e_minus_324() raises:
     # Should not crash — may use fallback
 
 
+# --- Task 9: maximal-prefix contract (trailing junk is the validator's job) ---
+
+
+def test_maximal_prefix_double_dot_value() raises:
+    """'1.2.3' consumes only '1.2'; trailing '.3' is left to the validator."""
+
+    var s = String("1.2.3")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.bytes_consumed, 3)
+
+
+def test_maximal_prefix_dot_dot() raises:
+    """'1..2' consumes only '1'; the second '.' has no fractional digit."""
+
+    var s = String("1..2")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.bytes_consumed, 1)
+
+
+def test_maximal_prefix_double_exponent() raises:
+    """'1e1e1' consumes only '1e1'; trailing 'e1' is left to the validator."""
+
+    var s = String("1e1e1")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.bytes_consumed, 3)
+
+
+def test_maximal_prefix_trailing_alpha() raises:
+    """'123abc' consumes only '123'."""
+
+    var s = String("123abc")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.bytes_consumed, 3)
+
+
+# --- Task 9: integer / sign edge cases ---
+
+
+def test_negative_zero_integer() raises:
+    """'-0' is uint64 0 (two's-complement -0 == 0; no information lost)."""
+
+    var s = String("-0")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_UINT64)
+    assert_equal(result.value, UInt64(0))
+
+
+def test_negative_zero_float() raises:
+    """'-0.0' is float64 -0.0 (sign bit set): oracle 0x8000000000000000."""
+
+    var s = String("-0.0")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x8000000000000000))
+
+
+def test_two_pow_64_routes_to_float() raises:
+    """'18446744073709551616' (2^64) overflows uint64 -> correctly-rounded float64."""
+
+    var s = String("18446744073709551616")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x43F0000000000000))
+
+
+def test_uint64_max_stays_integer() raises:
+    """'18446744073709551615' (2^64-1) is uint64 UInt64.MAX, not float."""
+
+    var s = String("18446744073709551615")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_UINT64)
+    assert_equal(result.value, UInt64.MAX)
+
+
+# --- Task 9: malformed numbers must raise NUMBER_ERROR ---
+
+
+def test_leading_plus_raises() raises:
+    """'+1' is not in the RFC 8259 number grammar."""
+
+    var s = String("+1")
+    var buf = _nul_padded(s)
+    var raised = False
+    try:
+        _ = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    except e:
+        raised = True
+    assert_true(raised, "'+1' must raise NUMBER_ERROR")
+
+
+def test_trailing_dot_raises() raises:
+    """'1.' has a dot but no fractional digit before the terminator."""
+
+    var s = String("1.")
+    var buf = _nul_padded(s)
+    var raised = False
+    try:
+        _ = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    except e:
+        raised = True
+    assert_true(raised, "'1.' must raise NUMBER_ERROR")
+
+
+def test_bare_exponent_raises() raises:
+    """'1e' has no exponent digit."""
+
+    var s = String("1e")
+    var buf = _nul_padded(s)
+    var raised = False
+    try:
+        _ = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    except e:
+        raised = True
+    assert_true(raised, "'1e' must raise NUMBER_ERROR")
+
+
+def test_exponent_sign_only_raises() raises:
+    """'1e+' has an exponent sign but no exponent digit."""
+
+    var s = String("1e+")
+    var buf = _nul_padded(s)
+    var raised = False
+    try:
+        _ = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    except e:
+        raised = True
+    assert_true(raised, "'1e+' must raise NUMBER_ERROR")
+
+
+# --- Task 9: valid exponent signs / leading-zero fraction must NOT raise ---
+
+
+def test_exponent_plus_sign() raises:
+    """'1e+5' is a valid float: oracle 0x40F86A0000000000."""
+
+    var s = String("1e+5")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x40F86A0000000000))
+
+
+def test_exponent_minus_sign() raises:
+    """'1e-5' is a valid float: oracle 0x3EE4F8B588E368F1."""
+
+    var s = String("1e-5")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x3EE4F8B588E368F1))
+
+
+def test_leading_zero_fraction() raises:
+    """'0.5' is a valid float (leading-zero rule allows it): oracle 0x3FE0000000000000."""
+
+    var s = String("0.5")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x3FE0000000000000))
+
+
 def main() raises:
     test_parse_positive_int()
     test_parse_zero()
@@ -222,4 +394,19 @@ def main() raises:
     test_parse_9_digit_int()
     test_parse_float_many_decimals()
     test_parse_negative_8_digit()
+    test_maximal_prefix_double_dot_value()
+    test_maximal_prefix_dot_dot()
+    test_maximal_prefix_double_exponent()
+    test_maximal_prefix_trailing_alpha()
+    test_negative_zero_integer()
+    test_negative_zero_float()
+    test_two_pow_64_routes_to_float()
+    test_uint64_max_stays_integer()
+    test_leading_plus_raises()
+    test_trailing_dot_raises()
+    test_bare_exponent_raises()
+    test_exponent_sign_only_raises()
+    test_exponent_plus_sign()
+    test_exponent_minus_sign()
+    test_leading_zero_fraction()
     print("test_numbers: all passed")
