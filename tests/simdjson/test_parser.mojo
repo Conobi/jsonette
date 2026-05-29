@@ -98,6 +98,17 @@ def test_parser_negative() raises:
     assert_equal(doc.root().get(doc, String("val")).get_int(doc), Int64(-42))
 
 
+def test_parser_reused_across_parses() raises:
+    """One Parser instance parses twice; both yield correct values."""
+    var p = Parser()
+    var doc1 = p.parse(_make_bytes(String('{"a": 1}')))
+    assert_equal(doc1.root().get(doc1, String("a")).get_uint(doc1), UInt64(1))
+    var doc2 = p.parse(_make_bytes(String("[1, 2, 3]")))
+    assert_equal(doc2.root().count(doc2), 3)
+    assert_equal(doc2.root().at(doc2, 0).get_uint(doc2), UInt64(1))
+    assert_equal(doc2.root().at(doc2, 2).get_uint(doc2), UInt64(3))
+
+
 def main() raises:
     test_document_root()
     test_parser_parse_true()
@@ -110,4 +121,5 @@ def main() raises:
     test_parser_nested()
     test_parser_array_of_objects()
     test_parser_negative()
+    test_parser_reused_across_parses()
     print("test_parser: all passed")

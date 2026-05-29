@@ -12,31 +12,36 @@ struct Parser:
 
     var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
     var count_stack: List[UInt32]     # unused after interleaving, kept for API compat
+    var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
         self.count_stack = List[UInt32](capacity=1024)
+        self.padded = List[UInt8]()
 
     def __init__(out self, *, deinit take: Self):
         self.container_stack = take.container_stack^
         self.count_stack = take.count_stack^
+        self.padded = take.padded^
 
     def parse(mut self, data: List[UInt8]) raises -> Document:
         """Parse JSON bytes into a Document."""
         var input_len = len(data)
 
-        # Create padded buffer: input + 128 zero bytes (enough for SIMD overread)
+        # Reusable padded buffer: input + 128 zero bytes (enough for SIMD overread).
+        # Grow only when the current input needs more room than prior parses.
         var num_chunks = (input_len + 63) // 64
         var padded_len = num_chunks * 64 + 128
-        var padded = List[UInt8](unsafe_uninit_length=padded_len)
-        memcpy(dest=padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-        memset(padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        if len(self.padded) < padded_len:
+            self.padded = List[UInt8](unsafe_uninit_length=padded_len)
+        memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
-        var positions = structural_index(padded, input_len)
+        var positions = structural_index(self.padded, input_len)
         self.container_stack.resize(0, UInt32(0))
         self.count_stack.resize(0, UInt32(0))
         try:
-            var tape = build_tape(padded, input_len, positions, self.container_stack, self.count_stack)
+            var tape = build_tape(self.padded, input_len, positions, self.container_stack, self.count_stack)
             var doc = Document(tape^)
             return doc^
         except e:
