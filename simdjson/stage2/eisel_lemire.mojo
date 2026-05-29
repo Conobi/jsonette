@@ -1,5 +1,6 @@
 """Eisel-Lemire float parsing: Uint128, umul128, and compute_float_64."""
 
+from std.bit import count_leading_zeros
 from simdjson.stage2.pow5_table import get_pow5, SMALLEST_POWER_OF_FIVE, LARGEST_POWER_OF_FIVE
 
 
@@ -26,32 +27,6 @@ def umul128(a: UInt64, b: UInt64) -> Uint128:
     return Uint128(hi=UInt64(product >> 64), lo=UInt64(product & 0xFFFFFFFFFFFFFFFF))
 
 
-def _leading_zeros(x: UInt64) -> Int:
-    """Count leading zeros of a 64-bit integer."""
-    if x == 0:
-        return 64
-    var n = 0
-    var val = x
-    if val & 0xFFFFFFFF00000000 == 0:
-        n += 32
-        val <<= 32
-    if val & 0xFFFF000000000000 == 0:
-        n += 16
-        val <<= 16
-    if val & 0xFF00000000000000 == 0:
-        n += 8
-        val <<= 8
-    if val & 0xF000000000000000 == 0:
-        n += 4
-        val <<= 4
-    if val & 0xC000000000000000 == 0:
-        n += 2
-        val <<= 2
-    if val & 0x8000000000000000 == 0:
-        n += 1
-    return n
-
-
 def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatResult:
     """Convert mantissa * 10^exponent to IEEE 754 double via Eisel-Lemire."""
     # Zero mantissa.
@@ -64,7 +39,7 @@ def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatRe
         return FloatResult(value=UInt64(0), valid=False)
 
     # Normalize: shift mantissa so bit 63 is set.
-    var lz = _leading_zeros(mantissa)
+    var lz = Int(count_leading_zeros(SIMD[DType.uint64, 1](mantissa))[0])
     var w = mantissa << UInt64(lz)
 
     # Get 128-bit power of 5.
