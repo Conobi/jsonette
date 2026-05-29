@@ -25,7 +25,15 @@ def _digit_value(b: UInt8) -> UInt64:
 
 @always_inline("nodebug")
 def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
-    """Check if 8 bytes starting at ptr+pos are all ASCII digits ('0'-'9')."""
+    """Check if 8 bytes starting at ptr+pos are all ASCII digits ('0'-'9').
+
+    PRECONDITION: the buffer must be readable for at least 8 bytes from
+    `ptr + pos`. This SWAR load is unconditional; callers gate `pos` so that
+    `pos + 8 <= max_len`, but the load itself touches up to 8 bytes which may
+    fall inside the trailing NUL padding (NUL is not a digit, so the check
+    fails cleanly). `Parser.parse` guarantees 128 bytes of NUL padding past
+    the logical input length, which more than covers this over-read.
+    """
     var chunk = (ptr + pos).load[width=8]()
     var sub = chunk - SIMD[DType.uint8, 8](0x30)
     return sub.reduce_max() <= 9
@@ -46,7 +54,19 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
 
     Returns tag ('l'/'u'/'d'), raw value bits, and bytes consumed.
     Handles integers and basic floats. Stops at non-number character.
+
+    PRECONDITION: the buffer at `ptr` must hold at least 8 NUL padding bytes
+    past `max_len`. The SWAR digit fast path (`_are_8_digits` / `_parse_8_digits`)
+    issues unconditional 8-byte loads and may over-read up to 8 bytes beyond
+    the last digit. `Parser.parse` guarantees 128 bytes of NUL padding, so the
+    over-read always lands in zeroed memory (NUL terminates the digit run).
+    The `debug_assert` below documents this invariant in the callgraph; it
+    compiles to nothing under `-D ASSERT=none`.
     """
+    debug_assert(
+        max_len >= 0,
+        "_parse_number precondition: max_len must be non-negative",
+    )
     var pos = 0
     var negative = False
 
@@ -70,19 +90,25 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     # bare overflowing integer becomes a correctly-rounded float64 (RFC 8259),
     # while one followed by '.'/'e' falls into the normal float path anyway.
     var overflowed = False
-    # SWAR fast path: parse 8 digits at a time
+    # SWAR fast path: parse 8 digits at a time.
+    # A UInt64 holds at most 20 decimal digits, so an 8-digit batch can only
+    # overflow once we already hold >= 12 digits (12 + 8 = 20). Below that, the
+    # division-based overflow guard is dead work, so we skip it on the common
+    # short-integer path and only accumulate.
     while pos + 8 <= max_len and _are_8_digits(ptr, pos):
         var batch = _parse_8_digits(ptr, pos)
-        if integer_part > (UInt64.MAX - batch) // 100000000:
+        if digit_count >= 12 and integer_part > (UInt64.MAX - batch) // 100000000:
             overflowed = True
         else:
             integer_part = integer_part * 100000000 + batch
         digit_count += 8
         pos += 8
-    # Scalar tail: remaining digits
+    # Scalar tail: remaining digits.
+    # A single digit can only overflow UInt64 once 19 digits are already held
+    # (UInt64.MAX has 20 digits), so gate the guard on `digit_count >= 19`.
     while pos < max_len and _is_digit(ptr[pos]):
         var digit = _digit_value(ptr[pos])
-        if integer_part > (UInt64.MAX - digit) // 10:
+        if digit_count >= 19 and integer_part > (UInt64.MAX - digit) // 10:
             overflowed = True
         else:
             integer_part = integer_part * 10 + digit
