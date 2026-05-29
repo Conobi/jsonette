@@ -115,10 +115,22 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
         digit_count += 1
         pos += 1
 
-    # Check for float indicators
+    # Check for float indicators.
+    #
+    # A '.' starts a fraction only when it is followed by a digit, or when it
+    # is a trailing dot at the end of the available input (so a malformed
+    # token like "1." still routes into _parse_float and raises). A '.'
+    # followed by an in-bounds non-digit (e.g. "1..2") is NOT part of the
+    # number: by the maximal-prefix contract we stop at the integer prefix and
+    # leave the stray '.' for the structural validator.
     var is_float = False
-    if pos < max_len and (ptr[pos] == UInt8(0x2E) or ptr[pos] == UInt8(0x65) or ptr[pos] == UInt8(0x45)):
-        is_float = True
+    if pos < max_len:
+        var b = ptr[pos]
+        if b == UInt8(0x2E):  # '.'
+            if pos + 1 >= max_len or _is_digit(ptr[pos + 1]):
+                is_float = True
+        elif b == UInt8(0x65) or b == UInt8(0x45):  # 'e' / 'E'
+            is_float = True
 
     comptime INT64_MIN_ABS: UInt64 = UInt64(1) << 63
 
@@ -135,7 +147,7 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
 
 
 def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises ParseError -> NumberResult:
-    if negative:
+    if negative and integer_part != 0:
         # Int64 range: -9223372036854775808 to 9223372036854775807.
         # integer_part == 2^63 is valid (it's INT64_MIN's absolute value).
         # Magnitudes above 2^63 are routed to float64 by the caller, so this
