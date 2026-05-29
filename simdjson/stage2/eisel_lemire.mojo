@@ -73,16 +73,16 @@ def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatRe
     # First multiply.
     var product = umul128(w, pow5.hi)
 
-    # Ambiguity check: low 9 bits all ones means we need more precision.
-    if (product.lo & 0x1FF) == 0x1FF:
+    # Precision guard (fast_float compute_product_approximation): when the top
+    # 9 bits of the high word are all ones, the single 64x64 product may be too
+    # imprecise to round correctly, so fold in the second 128-bit power-of-five
+    # word. The mask is on the HIGH word (0xFFFF...FFFF >> 55 == 0x1FF).
+    if (product.hi & 0x1FF) == 0x1FF:
         var second = umul128(w, pow5.lo)
-        var lo_sum = product.lo + second.hi
-        # Detect carry.
-        if lo_sum < product.lo:
+        product.lo += second.hi
+        # Carry out of the low word into the high word.
+        if second.hi > product.lo:
             product.hi += 1
-        product.lo = lo_sum
-        if (product.lo & 0x1FF) == 0x1FF and product.hi == UInt64.MAX:
-            return FloatResult(value=UInt64(0), valid=False)
 
     # Extract mantissa from upper 64 bits.
     var upper = product.hi
@@ -103,6 +103,21 @@ def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatRe
     # Subnormal -> fallback.
     if ieee_e <= 0:
         return FloatResult(value=UInt64(0), valid=False)
+
+    # Round-to-nearest-ties-to-even correction (fast_float compute_float):
+    # usually we round up, but a value falling exactly halfway between two
+    # representable floats must round to even. This can only happen for small
+    # |exponent| where 5^q fits in a single 64-bit word. Detect the exact-tie
+    # case and clear the low bit so the +1 below does not round it up.
+    var shift = UInt64(upperbit + 9)
+    if (
+        product.lo <= 1
+        and exponent >= -4
+        and exponent <= 23
+        and (ieee_m & 3) == 1
+        and (ieee_m << shift) == upper
+    ):
+        ieee_m &= ~UInt64(1)
 
     # Round to even.
     ieee_m += ieee_m & 1
