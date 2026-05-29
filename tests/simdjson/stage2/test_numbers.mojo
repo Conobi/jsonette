@@ -203,7 +203,8 @@ def test_parse_5e_minus_324() raises:
     var buf = _nul_padded(s)
     var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
     assert_equal(result.tag, UInt8(0x64))
-    # Should not crash — may use fallback
+    # Smallest positive subnormal double: IEEE-754 bits 0x0...01.
+    assert_equal(result.value, UInt64(0x0000000000000001))
 
 
 # --- Task 9: maximal-prefix contract (trailing junk is the validator's job) ---

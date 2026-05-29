@@ -103,6 +103,10 @@ EDGE_CASES = [
     "1e309", "1e400", "-1e400", "1e-400", "0.30000000000000004",
     "1.0000000000000002", "-0.0", "-0e0", "0.0", "0e0",
     "0.1000000000000000055511151231257827021181583404541015625",
+    # Negative-float edge cases (sign bit on the float path): large/small
+    # magnitudes, subnormal floor, and over/underflow to -inf / -0.0.
+    "-1.5e300", "-2.2250738585072014e-308", "-5e-324",
+    "-0.30000000000000004", "-1e309", "-1e-400",
 ]
 
 
@@ -121,7 +125,13 @@ def main():
         mant_len = 1 + (nxt() % 25)
         digits = "".join(str(nxt() % 10) for _ in range(mant_len)).lstrip("0") or "0"
         exp = (nxt() % 661) - 330
-        rows.append((f"{digits}e{exp}", expected_hex(f"{digits}e{exp}")))
+        pos = f"{digits}e{exp}"
+        rows.append((pos, expected_hex(pos)))
+        # Also emit the negated float form. expected_hex handles the leading '-'
+        # (sets the sign bit), so a sign-bit regression in the float path would
+        # surface here as a differential mismatch.
+        neg = f"-{digits}e{exp}"
+        rows.append((neg, expected_hex(neg)))
         # Record the bare-integer form (digits only) for later negation.
         bare_ints.append(digits)
     for _ in range(2000):
