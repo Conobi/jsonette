@@ -25,6 +25,7 @@ rm -f *.mojopkg
 
 PASSED=0
 FAILED=0
+WARNED=0
 
 for test in "${TESTS[@]}"; do
     if [ ! -f "$test" ]; then
@@ -33,7 +34,15 @@ for test in "${TESTS[@]}"; do
     fi
     echo -n "RUN  $test ... "
     if mojo run -I . -D ASSERT=all "$test" > /tmp/mojo_test_out.txt 2>&1; then
-        echo "PASS"
+        # A test can pass while the compiler still emits warnings on stderr;
+        # surface them so the codebase stays warning-free.
+        if grep -qi "warning" /tmp/mojo_test_out.txt; then
+            echo "PASS (with warnings)"
+            grep -i "warning" /tmp/mojo_test_out.txt
+            WARNED=$((WARNED + 1))
+        else
+            echo "PASS"
+        fi
         PASSED=$((PASSED + 1))
     else
         echo "FAIL"
@@ -43,5 +52,6 @@ for test in "${TESTS[@]}"; do
 done
 
 echo ""
-echo "Results: $PASSED passed, $FAILED failed"
+echo "Results: $PASSED passed, $FAILED failed, $WARNED with warnings"
 [ $FAILED -eq 0 ] || exit 1
+[ $WARNED -eq 0 ] || exit 1

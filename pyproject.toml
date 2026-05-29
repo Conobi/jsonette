@@ -10,8 +10,18 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["mojox-build>=0.2", "mojo-compiler==1.0.0b1"]
+# mojo-compiler-mojo-libs is a transitive pre-release dep of mojo-compiler;
+# build-isolation environments can't opt into pre-releases automatically, so
+# it must be pinned explicitly here.
+requires = [
+    "mojox-build>=0.2",
+    "mojo-compiler==1.0.0b1",
+    "mojo-compiler-mojo-libs==1.0.0b1",
+]
 build-backend = "mojox_build"
+
+[tool.uv]
+prerelease = "allow"
 
 [tool.mojox-build]
 packages = ["simdjson"]
