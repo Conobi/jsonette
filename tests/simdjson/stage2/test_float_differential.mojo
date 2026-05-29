@@ -1,5 +1,6 @@
 from std.memory import bitcast
 from simdjson.stage2.numbers import _parse_number
+from simdjson.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 
 
 def _nul_padded(s: String) -> List[UInt8]:
@@ -67,7 +68,18 @@ def main() raises:
         var got_bits: UInt64
         try:
             var r = _parse_number(buf.unsafe_ptr(), len(dec.as_bytes()))
-            got_bits = r.value
+            # The oracle expresses every token as a double. Integer results
+            # (in-range UINT64/INT64) carry exact integer bits, so convert them
+            # to the equivalent Float64 bit pattern before comparing.
+            if r.tag == TAG_UINT64:
+                var f = Float64(r.value)
+                got_bits = bitcast[DType.uint64](SIMD[DType.float64, 1](f))
+            elif r.tag == TAG_INT64:
+                var signed = bitcast[DType.int64](SIMD[DType.uint64, 1](r.value))[0]
+                var f = Float64(signed)
+                got_bits = bitcast[DType.uint64](SIMD[DType.float64, 1](f))
+            else:
+                got_bits = r.value
         except:
             print("PARSE-ERROR on:", dec)
             mismatches += 1

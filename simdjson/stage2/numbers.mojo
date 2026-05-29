@@ -1,5 +1,6 @@
 from std.memory import bitcast
 from simdjson.stage2.eisel_lemire import compute_float_64
+from simdjson.stage2.slow_float import parse_float_slow
 from simdjson.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 from simdjson.error import ParseError, ErrorCode
 
@@ -64,20 +65,27 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     # Parse integer digits
     var integer_part: UInt64 = 0
     var digit_count = 0
+    # `overflowed` marks that the integer no longer fits in UInt64. We keep
+    # consuming digits (so the token is fully measured) and decide later: a
+    # bare overflowing integer becomes a correctly-rounded float64 (RFC 8259),
+    # while one followed by '.'/'e' falls into the normal float path anyway.
+    var overflowed = False
     # SWAR fast path: parse 8 digits at a time
     while pos + 8 <= max_len and _are_8_digits(ptr, pos):
         var batch = _parse_8_digits(ptr, pos)
         if integer_part > (UInt64.MAX - batch) // 100000000:
-            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
-        integer_part = integer_part * 100000000 + batch
+            overflowed = True
+        else:
+            integer_part = integer_part * 100000000 + batch
         digit_count += 8
         pos += 8
     # Scalar tail: remaining digits
     while pos < max_len and _is_digit(ptr[pos]):
         var digit = _digit_value(ptr[pos])
         if integer_part > (UInt64.MAX - digit) // 10:
-            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
-        integer_part = integer_part * 10 + digit
+            overflowed = True
+        else:
+            integer_part = integer_part * 10 + digit
         digit_count += 1
         pos += 1
 
@@ -88,6 +96,10 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
 
     if is_float:
         return _parse_float(ptr, pos, max_len, negative, integer_part, digit_count)
+    elif overflowed:
+        # Oversized bare integer -> correctly-rounded float64 over the token.
+        var bits = parse_float_slow(ptr, 0, pos, negative)
+        return NumberResult(tag=TAG_FLOAT64, value=bits, bytes_consumed=pos)
     else:
         return _finish_integer(negative, integer_part, pos)
 
@@ -169,35 +181,7 @@ def _parse_float(
         if result.valid:
             return NumberResult(tag=TAG_FLOAT64, value=result.value, bytes_consumed=pos)
 
-    # Fallback: rebuild Float64 from components.
-    return _parse_float_fallback(negative, mantissa, frac_digits, parsed_exponent, pos)
-
-
-def _parse_float_fallback(
-    negative: Bool,
-    mantissa: UInt64,
-    frac_digits: Int,
-    parsed_exponent: Int,
-    pos: Int,
-) raises ParseError -> NumberResult:
-    """Slow-path float construction using Float64 arithmetic."""
-    var value = Float64(mantissa)
-
-    # Apply fractional shift: mantissa was built without the decimal point,
-    # so divide by 10^frac_digits.
-    for _ in range(frac_digits):
-        value /= 10.0
-
-    # Apply parsed exponent.
-    if parsed_exponent >= 0:
-        for _ in range(parsed_exponent):
-            value *= 10.0
-    else:
-        for _ in range(-parsed_exponent):
-            value /= 10.0
-
-    if negative:
-        value = -value
-
-    var raw = bitcast[DType.uint64](SIMD[DType.float64, 1](value))
-    return NumberResult(tag=TAG_FLOAT64, value=UInt64(raw), bytes_consumed=pos)
+    # Fallback: correctly-rounded decimal->double over the whole token bytes.
+    # The token spans ptr[0:pos]; `negative` was stripped at the front.
+    var bits = parse_float_slow(ptr, 0, pos, negative)
+    return NumberResult(tag=TAG_FLOAT64, value=bits, bytes_consumed=pos)
