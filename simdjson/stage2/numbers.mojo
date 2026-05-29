@@ -135,7 +135,9 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     comptime INT64_MIN_ABS: UInt64 = UInt64(1) << 63
 
     if is_float:
-        return _parse_float(ptr, pos, max_len, negative, integer_part, digit_count)
+        return _parse_float(
+            ptr, pos, max_len, negative, integer_part, digit_count, overflowed
+        )
     elif overflowed or (negative and integer_part > INT64_MIN_ABS):
         # Out-of-INT64-range bare integer -> correctly-rounded float64 over the
         # token (RFC 8259). This covers both UInt64 overflow and a negative
@@ -172,12 +174,19 @@ def _parse_float(
     negative: Bool,
     integer_part: UInt64,
     digit_count: Int,
+    overflowed: Bool,
 ) raises ParseError -> NumberResult:
     # Build mantissa (all significant digits) and track decimal exponent.
     var mantissa = integer_part
     var total_digits = digit_count
     var frac_digits = 0
-    var too_many_digits = digit_count > 19
+    # `overflowed` means the integer part did not fit UInt64, so `integer_part`
+    # (and thus `mantissa`) is stale/truncated and the Eisel-Lemire fast path
+    # must NOT be trusted. Force the correctly-rounded slow path in that case.
+    # This is currently implied by `digit_count > 19` (overflow needs >= 20
+    # digits), but stating it explicitly keeps the routing invariant robust to
+    # future changes in the digit-counting logic.
+    var too_many_digits = (digit_count > 19) or overflowed
 
     if pos < max_len and ptr[pos] == UInt8(0x2E):
         pos += 1
