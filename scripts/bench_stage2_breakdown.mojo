@@ -10,7 +10,7 @@ from std.time import perf_counter_ns
 from simdjson.stage1.indexer import structural_index
 from simdjson.stage2.builder import build_tape
 from simdjson.stage2.strings import parse_string
-from simdjson.stage2.numbers import parse_number
+from simdjson.stage2.numbers import _parse_number
 from simdjson.tape import (
     Tape,
     TAG_STRING,
@@ -228,13 +228,13 @@ def profile_file(path: String, name: String) raises:
     for _ in range(WARMUP):
         for idx in range(len(number_positions)):
             var npos = Int(number_positions[idx])
-            var result = parse_number(input_ptr + npos, input_len - npos)
+            var result = _parse_number(input_ptr + npos, input_len - npos)
 
     var num_start = perf_counter_ns()
     for _ in range(ITERS):
         for idx in range(len(number_positions)):
             var npos = Int(number_positions[idx])
-            var result = parse_number(input_ptr + npos, input_len - npos)
+            var result = _parse_number(input_ptr + npos, input_len - npos)
     var num_end = perf_counter_ns()
     var num_total_ns = Int(num_end - num_start)
     var num_avg_ns = num_total_ns // ITERS

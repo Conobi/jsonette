@@ -1,6 +1,6 @@
 from std.testing import assert_equal, assert_true
 from std.memory import bitcast
-from simdjson.stage2.numbers import parse_number, NumberResult
+from simdjson.stage2.numbers import _parse_number, NumberResult
 
 
 def test_parse_positive_int() raises:
@@ -10,7 +10,7 @@ def test_parse_positive_int() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(123))
     assert_equal(result.bytes_consumed, 3)
@@ -23,7 +23,7 @@ def test_parse_zero() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(0))
     assert_equal(result.bytes_consumed, 1)
@@ -36,7 +36,7 @@ def test_parse_negative_int() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x6C))  # 'l'
     var val = bitcast[DType.int64](SIMD[DType.uint64, 1](result.value))
     assert_equal(Int64(val), Int64(-42))
@@ -50,7 +50,7 @@ def test_parse_int_with_terminator() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(42))
     assert_equal(result.bytes_consumed, 2)
@@ -63,7 +63,7 @@ def test_parse_large_uint() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64.MAX)
 
@@ -75,7 +75,7 @@ def test_parse_int64_min() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x6C))  # 'l'
     # INT64_MIN in two's complement = 0x8000000000000000
     assert_equal(result.value, UInt64(1) << 63)
@@ -90,7 +90,7 @@ def test_parse_float_3_14() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x64))
     var val = Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](result.value)))
     assert_equal(val, 3.14)
@@ -103,7 +103,7 @@ def test_parse_1e10() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x64))
     var val = Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](result.value)))
     assert_equal(val, 1e10)
@@ -116,7 +116,7 @@ def test_parse_negative_float() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x64))
     var val = Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](result.value)))
     assert_equal(val, -0.5)
@@ -129,7 +129,7 @@ def test_parse_1e308() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x64))
     var val = Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](result.value)))
     assert_true(val > 0.0)
@@ -144,7 +144,7 @@ def test_parse_8_digit_int() raises:
         buf.append(b)
     for _ in range(128):
         buf.append(UInt8(0))
-    var result = parse_number(buf.unsafe_ptr(), s.byte_length())
+    var result = _parse_number(buf.unsafe_ptr(), s.byte_length())
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(12345678))
     assert_equal(result.bytes_consumed, 8)
@@ -159,7 +159,7 @@ def test_parse_16_digit_int() raises:
         buf.append(b)
     for _ in range(128):
         buf.append(UInt8(0))
-    var result = parse_number(buf.unsafe_ptr(), s.byte_length())
+    var result = _parse_number(buf.unsafe_ptr(), s.byte_length())
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(1234567890123456))
     assert_equal(result.bytes_consumed, 16)
@@ -174,7 +174,7 @@ def test_parse_19_digit_int() raises:
         buf.append(b)
     for _ in range(128):
         buf.append(UInt8(0))
-    var result = parse_number(buf.unsafe_ptr(), s.byte_length())
+    var result = _parse_number(buf.unsafe_ptr(), s.byte_length())
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(9999999999999999999))
     assert_equal(result.bytes_consumed, 19)
@@ -189,7 +189,7 @@ def test_parse_9_digit_int() raises:
         buf.append(b)
     for _ in range(128):
         buf.append(UInt8(0))
-    var result = parse_number(buf.unsafe_ptr(), s.byte_length())
+    var result = _parse_number(buf.unsafe_ptr(), s.byte_length())
     assert_equal(result.tag, UInt8(0x75))  # 'u'
     assert_equal(result.value, UInt64(123456789))
     assert_equal(result.bytes_consumed, 9)
@@ -204,7 +204,7 @@ def test_parse_float_many_decimals() raises:
         buf.append(b)
     for _ in range(128):
         buf.append(UInt8(0))
-    var result = parse_number(buf.unsafe_ptr(), s.byte_length())
+    var result = _parse_number(buf.unsafe_ptr(), s.byte_length())
     assert_equal(result.tag, UInt8(0x64))  # 'd'
     var val = Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](result.value)))
     assert_equal(val, 3.14159265358979)
@@ -220,7 +220,7 @@ def test_parse_negative_8_digit() raises:
         buf.append(b)
     for _ in range(128):
         buf.append(UInt8(0))
-    var result = parse_number(buf.unsafe_ptr(), s.byte_length())
+    var result = _parse_number(buf.unsafe_ptr(), s.byte_length())
     assert_equal(result.tag, UInt8(0x6C))  # 'l'
     var val = bitcast[DType.int64](SIMD[DType.uint64, 1](result.value))
     assert_equal(Int64(val), Int64(-12345678))
@@ -234,7 +234,7 @@ def test_parse_5e_minus_324() raises:
     var buf = List[UInt8]()
     for b in s.as_bytes():
         buf.append(b)
-    var result = parse_number(buf.unsafe_ptr(), len(buf))
+    var result = _parse_number(buf.unsafe_ptr(), len(buf))
     assert_equal(result.tag, UInt8(0x64))
     # Should not crash — may use fallback
 

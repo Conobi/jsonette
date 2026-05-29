@@ -6,7 +6,7 @@ numbers into a flat tape format with root envelope.
 
 from simdjson.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from simdjson.error import ParseError, ErrorCode
-from simdjson.stage2.numbers import parse_number
+from simdjson.stage2.numbers import _parse_number
 from simdjson.stage2.strings import parse_string
 
 comptime MAX_DEPTH: Int = 1024
@@ -20,7 +20,7 @@ def build_tape(
 
     Args:
         input_buf: Padded input buffer (must have >= 128 zero bytes after input_len
-            for safe SIMD overread in parse_string and parse_number).
+            for safe SIMD overread in parse_string and _parse_number).
         input_len: Real (unpadded) length of the JSON input.
         structural_positions: Structural character positions from Stage 1.
         container_stack: Pre-allocated stack for container open positions (capacity >= MAX_DEPTH).
@@ -82,7 +82,7 @@ def build_tape(
         elif byte == UInt8(0x3A):  # ':'
             si += 1
         elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):
-            var result = parse_number(input_ptr + pos, input_len - pos)
+            var result = _parse_number(input_ptr + pos, input_len - pos)
             tape_ptr[tape_pos] = make_tape_entry(result.tag, UInt64(0))
             tape_ptr[tape_pos + 1] = result.value
             tape_pos += 2

@@ -40,7 +40,7 @@ def _parse_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
     return g1 * 10000 + g2
 
 
-def parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError -> NumberResult:
+def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError -> NumberResult:
     """Parse a JSON number starting at ptr[0].
 
     Returns tag ('l'/'u'/'d'), raw value bits, and bytes consumed.
