@@ -137,6 +137,14 @@ def test_eisel_lemire_half() raises:
     assert_equal(result.value, UInt64(0x3FE0000000000000))
 
 
+def test_eisel_lemire_common_negative_decimal() raises:
+    """Converts -79.123456 via the EFL fast path (not slow-path)."""
+
+    var result = compute_float_64(UInt64(79123456), -6, True)
+    assert_equal(result.valid, True)
+    assert_equal(result.value, UInt64(0xC053C7E6B3FE9FAE))
+
+
 def main() raises:
     test_umul128_small()
     test_umul128_max_times_2()
@@ -154,4 +162,5 @@ def main() raises:
     test_eisel_lemire_negative_zero()
     test_eisel_lemire_one_point_zero()
     test_eisel_lemire_half()
+    test_eisel_lemire_common_negative_decimal()
     print("test_eisel_lemire: all passed")
