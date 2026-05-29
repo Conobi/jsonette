@@ -94,10 +94,14 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     if pos < max_len and (ptr[pos] == UInt8(0x2E) or ptr[pos] == UInt8(0x65) or ptr[pos] == UInt8(0x45)):
         is_float = True
 
+    comptime INT64_MIN_ABS: UInt64 = UInt64(1) << 63
+
     if is_float:
         return _parse_float(ptr, pos, max_len, negative, integer_part, digit_count)
-    elif overflowed:
-        # Oversized bare integer -> correctly-rounded float64 over the token.
+    elif overflowed or (negative and integer_part > INT64_MIN_ABS):
+        # Out-of-INT64-range bare integer -> correctly-rounded float64 over the
+        # token (RFC 8259). This covers both UInt64 overflow and a negative
+        # magnitude in (2^63, 2^64-1] that fits UInt64 yet exceeds INT64 range.
         var bits = parse_float_slow(ptr, 0, pos, negative)
         return NumberResult(tag=TAG_FLOAT64, value=bits, bytes_consumed=pos)
     else:
@@ -106,11 +110,11 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
 
 def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises ParseError -> NumberResult:
     if negative:
-        # Int64 range: -9223372036854775808 to 9223372036854775807
-        # integer_part == 2^63 is valid (it's INT64_MIN's absolute value)
+        # Int64 range: -9223372036854775808 to 9223372036854775807.
+        # integer_part == 2^63 is valid (it's INT64_MIN's absolute value).
+        # Magnitudes above 2^63 are routed to float64 by the caller, so this
+        # path only sees in-range values.
         comptime INT64_MIN_ABS: UInt64 = UInt64(1) << 63
-        if integer_part > INT64_MIN_ABS:
-            raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
         # Special case: 2^63 can't be negated via Int64 (overflow), use bitcast
         var raw: UInt64
         if integer_part == INT64_MIN_ABS:

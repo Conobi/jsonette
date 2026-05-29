@@ -113,17 +113,52 @@ def main():
         nonlocal seed
         seed = (seed * 6364136223846793005 + 1442695040888963407) & ((1 << 64) - 1)
         return seed
+    # Bare integer-form decimal strings (no '.'/'e') generated below; a
+    # deterministic subset is later negated to exercise the signed-integer
+    # (TAG_INT64) and negative-overflow->float64 parser paths against the oracle.
+    bare_ints = []
     for _ in range(2000):
         mant_len = 1 + (nxt() % 25)
         digits = "".join(str(nxt() % 10) for _ in range(mant_len)).lstrip("0") or "0"
         exp = (nxt() % 661) - 330
         rows.append((f"{digits}e{exp}", expected_hex(f"{digits}e{exp}")))
+        # Record the bare-integer form (digits only) for later negation.
+        bare_ints.append(digits)
     for _ in range(2000):
         bits = nxt() & 0x7FEFFFFFFFFFFFFF
         if bits == 0:
             continue
         for s in _adjacent_midpoint_decimals(bits):
             rows.append((s, expected_hex(s)))
+
+    # Negative-integer coverage: closes the gap where the differential test's
+    # TAG_INT64 branch and the parser's negative-integer / negative-overflow
+    # paths were never checked against the oracle (the corpus had no negatives).
+    neg_cases = [
+        # In-range INT64 boundaries (exact integers, TAG_INT64 path).
+        "-1",
+        "-9223372036854775808",  # INT64_MIN
+        "-9223372036854775807",  # INT64_MIN + 1
+        # Just past INT64_MIN -> must route to float64 (negative overflow path).
+        "-9223372036854775809",
+        "-18446744073709551616",  # 2^64, well past INT64 range -> float64
+    ]
+    # Negate a deterministic subset (~200) of the bare integers generated above.
+    # Many of these are large and out of INT64 range, exercising the
+    # negative-overflow -> correctly-rounded float64 path.
+    step = max(1, len(bare_ints) // 200)
+    for i in range(0, len(bare_ints), step):
+        # Skip "0": bare "-0" is integer zero in the parser (TAG_INT64 value 0,
+        # i.e. +0.0), but the oracle treats it as float negative zero. That is a
+        # representational ambiguity of bare integer "-0", not a parser bug, so
+        # it would cause a spurious mismatch. Signed/float "-0.0"/"-0e0" are
+        # already covered in EDGE_CASES.
+        if bare_ints[i] == "0":
+            continue
+        neg_cases.append("-" + bare_ints[i])
+    for s in neg_cases:
+        rows.append((s, expected_hex(s)))
+
     out = "\n".join(f"{s}\t{h}" for s, h in rows) + "\n"
     if "--check" in sys.argv:
         sys.stdout.write(out)
