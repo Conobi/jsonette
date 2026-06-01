@@ -1,3 +1,5 @@
+from simdjson._alloc_count import record_alloc
+
 comptime TAG_ROOT = UInt8(0x72)
 comptime TAG_OBJECT_OPEN = UInt8(0x7B)
 comptime TAG_OBJECT_CLOSE = UInt8(0x7D)
@@ -24,7 +26,10 @@ struct Tape(Movable):
 
     def __init__(out self, element_capacity: Int, string_capacity: Int):
         # Use unsafe_uninit_length to avoid zeroing — raw pointer writes fill before read
+        # Two heap allocs per parse: the elements list and the string buffer.
+        record_alloc()
         self.elements = List[UInt64](unsafe_uninit_length=element_capacity)
+        record_alloc()
         self.string_buf = List[UInt8](unsafe_uninit_length=string_capacity)
 
     def __init__(out self, *, deinit take: Self):

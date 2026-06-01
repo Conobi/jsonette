@@ -6,6 +6,7 @@ numbers into a flat tape format with root envelope.
 
 from simdjson.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from simdjson.error import ParseError, ErrorCode
+from simdjson._alloc_count import record_alloc
 from simdjson.stage2.numbers import _parse_number
 from simdjson.stage2.strings import parse_string
 
@@ -15,8 +16,15 @@ comptime MAX_DEPTH: Int = 1024
 def build_tape(
     input_buf: List[UInt8], input_len: Int, mut structural_positions: List[UInt32],
     mut container_stack: List[UInt32], mut count_stack: List[UInt32],
-) raises ParseError -> Tape:
-    """Stage 2 entry point: build a tape from structural positions and input bytes.
+    mut tape: Tape,
+) raises ParseError:
+    """Stage 2 entry point: fill a caller-owned tape from structural positions and input bytes.
+
+    The tape is supplied by the caller (the Parser owns it across parses). Its
+    backing Lists are grown only when the current input needs more room than a
+    prior parse left allocated; a warm tape with sufficient capacity contributes
+    0 allocations. The function shrinks the Lists to the exact used length at the
+    end, so capacity (not length) drives the grow decision.
 
     Args:
         input_buf: Padded input buffer (must have >= 128 zero bytes after input_len
@@ -25,6 +33,7 @@ def build_tape(
         structural_positions: Structural character positions from Stage 1.
         container_stack: Pre-allocated stack for container open positions (capacity >= MAX_DEPTH).
         count_stack: Pre-allocated stack for element counts (capacity >= MAX_DEPTH).
+        tape: Caller-owned tape to fill (reused across parses for zero warm allocs).
     """
     var num_structurals = len(structural_positions)
     if num_structurals == 0:
@@ -33,8 +42,19 @@ def build_tape(
     # Append sentinel to structural_positions — eliminates si < num_structurals check in loop
     structural_positions.append(UInt32(0xFFFFFFFF))
 
-    # Pre-allocate tape (unsafe_uninit_length — no zeroing, raw pointer writes fill before read)
-    var tape = Tape(element_capacity=input_len * 2 + 2, string_capacity=input_len + 64)
+    # Capacity-grow the caller tape (unsafe_uninit_length — no zeroing, raw pointer
+    # writes fill before read). record_alloc() fires only on the grow branches, so a
+    # warm tape with enough capacity contributes 0 allocations.
+    var need_elem = input_len * 2 + 2
+    var need_str = input_len + 64
+    if tape.elements.capacity < need_elem:
+        record_alloc()
+        tape.elements.reserve(need_elem)
+    tape.elements.resize(unsafe_uninit_length=need_elem)
+    if tape.string_buf.capacity < need_str:
+        record_alloc()
+        tape.string_buf.reserve(need_str)
+    tape.string_buf.resize(unsafe_uninit_length=need_str)
     var tape_ptr = tape.elements.unsafe_ptr()
     var tape_pos = 0
     var sbuf_pos = 0  # tracks used bytes in string_buf
@@ -164,8 +184,6 @@ def build_tape(
     # Shrink tape and string_buf to actual used size (no zeroing on shrink)
     tape.elements.resize(tape_pos, UInt64(0))
     tape.string_buf.resize(sbuf_pos, UInt8(0))
-
-    return tape^
 
 
 @always_inline("nodebug")

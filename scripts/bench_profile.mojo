@@ -1,5 +1,6 @@
 """Profile Stage 1 vs Stage 2 parsing time breakdown."""
 from std.time import perf_counter_ns
+from simdjson.tape import Tape
 from simdjson.stage1.indexer import structural_index
 from simdjson.stage2.builder import build_tape
 
@@ -38,40 +39,45 @@ def profile_file(path: String, name: String) raises:
 
     var cs = List[UInt32](capacity=1024)
     var ks = List[UInt32](capacity=1024)
+    var tape = Tape()
 
     # Warmup both stages
     for _ in range(WARMUP):
-        var pos = structural_index(padded, size)
+        var pos = List[UInt32]()
+        structural_index(padded, size, pos)
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(padded, size, pos, cs, ks)
+        build_tape(padded, size, pos, cs, ks, tape)
 
     # Time Stage 1 alone
     var s1_start = perf_counter_ns()
     for _ in range(ITERS):
-        var pos = structural_index(padded, size)
+        var pos = List[UInt32]()
+        structural_index(padded, size, pos)
     var s1_end = perf_counter_ns()
     var s1_ns = s1_end - s1_start
 
     # Get positions for Stage 2 timing
-    var positions = structural_index(padded, size)
+    var positions = List[UInt32]()
+    structural_index(padded, size, positions)
 
     # Time Stage 2 alone
     var s2_start = perf_counter_ns()
     for _ in range(ITERS):
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(padded, size, positions, cs, ks)
+        build_tape(padded, size, positions, cs, ks, tape)
     var s2_end = perf_counter_ns()
     var s2_ns = s2_end - s2_start
 
     # Time full pipeline
     var full_start = perf_counter_ns()
     for _ in range(ITERS):
-        var pos = structural_index(padded, size)
+        var pos = List[UInt32]()
+        structural_index(padded, size, pos)
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(padded, size, pos, cs, ks)
+        build_tape(padded, size, pos, cs, ks, tape)
     var full_end = perf_counter_ns()
     var full_ns = full_end - full_start
 

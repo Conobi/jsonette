@@ -16,6 +16,13 @@ def _pad(data: List[UInt8]) -> List[UInt8]:
     return buf^
 
 
+def _index(padded: List[UInt8], input_len: Int) -> List[UInt32]:
+    """Run Stage 1 into a fresh buffer and return the structural positions."""
+    var positions = List[UInt32]()
+    structural_index(padded, input_len, positions)
+    return positions^
+
+
 # ===== BitIndexer tests =====
 
 
@@ -73,7 +80,7 @@ def test_structural_index_empty_object() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(_pad(data), len(data))
+    var positions = _index(_pad(data), len(data))
     assert_equal(len(positions), 2)
     assert_equal(positions[0], UInt32(0))
     assert_equal(positions[1], UInt32(1))
@@ -86,7 +93,7 @@ def test_structural_index_simple_object() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(_pad(data), len(data))
+    var positions = _index(_pad(data), len(data))
 
     # Must contain: { at 0, " at 1, " at 3, : at 4, 1-start at 5, } at 6
     assert_true(has_position(positions, UInt32(0)), "missing {")
@@ -104,7 +111,7 @@ def test_structural_index_nested() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(_pad(data), len(data))
+    var positions = _index(_pad(data), len(data))
 
     # { at 0
     assert_true(has_position(positions, UInt32(0)), "missing opening {")
@@ -126,7 +133,7 @@ def test_structural_index_escaped_quotes() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(_pad(data), len(data))
+    var positions = _index(_pad(data), len(data))
 
     # The escaped quote (preceded by \) should not appear as a structural position.
     # In the string: {"key": "val\"ue"}
@@ -146,7 +153,7 @@ def test_structural_index_long_string() raises:
     var bytes = s.as_bytes()
     for i in range(len(bytes)):
         data.append(bytes[i])
-    var positions = structural_index(_pad(data), len(data))
+    var positions = _index(_pad(data), len(data))
 
     # { at 0
     assert_true(has_position(positions, UInt32(0)), "missing {")

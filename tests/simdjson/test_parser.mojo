@@ -18,7 +18,7 @@ def test_document_root() raises:
     tape.elements.append((UInt64(0x72) << 56) | UInt64(2))  # root open -> 2
     tape.elements.append(UInt64(0x74) << 56)  # true
     tape.elements.append(UInt64(0x72) << 56)  # root close
-    var doc = Document(tape^)
+    var doc = Document(tape)  # borrowing view over the local tape
     var root = doc.root()
     assert_equal(root._idx, 1)
 

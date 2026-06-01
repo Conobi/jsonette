@@ -77,7 +77,8 @@ def profile_file(path: String, name: String) raises:
     var input_len = len(data)
 
     # --- Stage 1: get structural positions ---
-    var positions = structural_index(data)
+    var positions = List[UInt32]()
+    structural_index(data, input_len, positions)
     var num_structurals = len(positions)
 
     # --- Classify structurals by type ---
@@ -192,34 +193,34 @@ def profile_file(path: String, name: String) raises:
     # --- Full Stage 2 baseline ---
     var cs = List[UInt32](capacity=1024)
     var ks = List[UInt32](capacity=1024)
+    var tape = Tape()
     for _ in range(WARMUP):
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(data, input_len, positions, cs, ks)
+        build_tape(data, input_len, positions, cs, ks, tape)
 
     var s2_start = perf_counter_ns()
     for _ in range(ITERS):
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(data, input_len, positions, cs, ks)
+        build_tape(data, input_len, positions, cs, ks, tape)
     var s2_end = perf_counter_ns()
     var s2_total_ns = Int(s2_end - s2_start)
     var s2_avg_ns = s2_total_ns // ITERS
 
     # --- String parsing micro-bench ---
     # Warmup
+    var tmp_buf = List[UInt8](unsafe_uninit_length=input_len + 64)
     for _ in range(WARMUP):
         for idx in range(len(string_positions)):
             var spos = Int(string_positions[idx])
-            var tmp_buf = List[UInt8]()
-            var consumed = parse_string(input_ptr, spos, input_len, tmp_buf)
+            var consumed = parse_string(input_ptr, spos, input_len, tmp_buf.unsafe_ptr(), 0)
 
     var str_start = perf_counter_ns()
     for _ in range(ITERS):
         for idx in range(len(string_positions)):
             var spos = Int(string_positions[idx])
-            var tmp_buf = List[UInt8]()
-            var consumed = parse_string(input_ptr, spos, input_len, tmp_buf)
+            var consumed = parse_string(input_ptr, spos, input_len, tmp_buf.unsafe_ptr(), 0)
     var str_end = perf_counter_ns()
     var str_total_ns = Int(str_end - str_start)
     var str_avg_ns = str_total_ns // ITERS

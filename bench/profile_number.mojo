@@ -64,13 +64,13 @@ def bench_full_parse(name: String, data: List[UInt8]) raises:
     var sink: UInt64 = 0
     for _ in range(WARMUP):
         var doc = parser.parse(data)
-        sink += doc.tape.elements[0]
+        sink += doc._tape[].elements[0]
     var best = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
         var doc = parser.parse(data)
         var t1 = perf_counter_ns()
-        sink += doc.tape.elements[0]
+        sink += doc._tape[].elements[0]
         var dt = Int(t1 - t0)
         if dt < best:
             best = dt

@@ -69,13 +69,13 @@ def profile(name: String, data: List[UInt8]) raises:
     var parser = Parser()
     for _ in range(WARMUP):
         var doc = parser.parse(data)
-        sink += doc.tape.elements[0]
+        sink += doc._tape[].elements[0]
     var full_min = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
         var doc = parser.parse(data)
         var t1 = perf_counter_ns()
-        sink += doc.tape.elements[0]
+        sink += doc._tape[].elements[0]
         var dt = Int(t1 - t0)
         if dt < full_min:
             full_min = dt
@@ -83,12 +83,14 @@ def profile(name: String, data: List[UInt8]) raises:
 
     # --- (b) Stage 1 only ---
     for _ in range(WARMUP):
-        var p = structural_index(padded, size)
+        var p = List[UInt32]()
+        structural_index(padded, size, p)
         sink += UInt64(len(p))
     var s1_min = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var p = structural_index(padded, size)
+        var p = List[UInt32]()
+        structural_index(padded, size, p)
         var t1 = perf_counter_ns()
         sink += UInt64(len(p)) + UInt64(p.unsafe_get(0))
         var dt = Int(t1 - t0)
@@ -97,16 +99,18 @@ def profile(name: String, data: List[UInt8]) raises:
     print("  stage1_only:      min " + fmt_us(s1_min) + " us   " + fmt_gbs(size, s1_min) + " GB/s")
 
     # --- (c) Stage 2 only (pre-built positions; truncate sentinels each iter) ---
-    var positions = structural_index(padded, size)
+    var positions = List[UInt32]()
+    structural_index(padded, size, positions)
     var n_struct = len(positions)
     var cs = List[UInt32](capacity=4096)
     var ks = List[UInt32](capacity=1024)
+    var tape = Tape()
 
     for _ in range(WARMUP):
         positions.resize(n_struct, UInt32(0))
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(padded, size, positions, cs, ks)
+        build_tape(padded, size, positions, cs, ks, tape)
         sink += UInt64(len(tape.elements)) + tape.elements.unsafe_get(0)
     var s2_min = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
@@ -114,7 +118,7 @@ def profile(name: String, data: List[UInt8]) raises:
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
         var t0 = perf_counter_ns()
-        var tape = build_tape(padded, size, positions, cs, ks)
+        build_tape(padded, size, positions, cs, ks, tape)
         var t1 = perf_counter_ns()
         sink += UInt64(len(tape.elements)) + tape.elements.unsafe_get(0)
         var dt = Int(t1 - t0)
@@ -125,18 +129,20 @@ def profile(name: String, data: List[UInt8]) raises:
     # --- (d) s1+s2 on pre-padded buffer (sum-of-stages full parse, no per-call pad) ---
     for _ in range(WARMUP):
         positions.resize(n_struct, UInt32(0))
-        var p = structural_index(padded, size)
+        var p = List[UInt32]()
+        structural_index(padded, size, p)
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(padded, size, p, cs, ks)
+        build_tape(padded, size, p, cs, ks, tape)
         sink += tape.elements.unsafe_get(0)
     var sum_min = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var p = structural_index(padded, size)
+        var p = List[UInt32]()
+        structural_index(padded, size, p)
         cs.resize(0, UInt32(0))
         ks.resize(0, UInt32(0))
-        var tape = build_tape(padded, size, p, cs, ks)
+        build_tape(padded, size, p, cs, ks, tape)
         var t1 = perf_counter_ns()
         sink += tape.elements.unsafe_get(0)
         var dt = Int(t1 - t0)

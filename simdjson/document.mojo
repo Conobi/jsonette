@@ -2,18 +2,25 @@ from simdjson.tape import Tape
 from simdjson.value import Value
 
 
-struct Document(Movable):
-    """Owns a parsed JSON tape and provides root access."""
-    var tape: Tape
+struct Document[o: Origin[mut=True]](Movable):
+    """Non-owning view over a Parser-owned tape.
 
-    def __init__(out self, var tape: Tape):
-        self.tape = tape^
+    The Document borrows the Parser's tape through an origin-parameterized
+    `Pointer`; it allocates nothing of its own. It is valid ONLY while its Parser
+    is alive and is neither reparsed nor moved (mirrors simdjson, and matches
+    one-request-at-a-time server usage). The origin parameter `o` ties the view's
+    lifetime to the Parser's tape so the borrow checker enforces this.
+    """
 
-    def __init__(out self):
-        self.tape = Tape()
+    var _tape: Pointer[Tape, Self.o]
+
+    def __init__(out self, ref [Self.o] tape: Tape):
+        """Borrow the given Parser-owned tape (no allocation)."""
+        self._tape = Pointer(to=tape)
 
     def __init__(out self, *, deinit take: Self):
-        self.tape = take.tape^
+        """Move constructor: transfer the borrowed-tape pointer."""
+        self._tape = take._tape
 
     def root(self) -> Value:
         """Return a Value pointing to the root JSON value (tape index 1)."""

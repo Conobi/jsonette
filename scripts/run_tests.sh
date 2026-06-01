@@ -18,6 +18,7 @@ TESTS=(
     tests/simdjson/stage2/test_float_differential.mojo
     tests/simdjson/test_parser.mojo
     tests/simdjson/test_value.mojo
+    tests/simdjson/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
     tests/conformance/test_reject.mojo
 )
