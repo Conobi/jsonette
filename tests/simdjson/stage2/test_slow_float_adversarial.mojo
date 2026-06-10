@@ -59,4 +59,15 @@ def main() raises:
     # expensive shift phase is capped at MAX_DIGITS, so this is fast, not a hang.
     _check("1." + _repeat("0", 100000) + "1", one)
 
+    # Sticky-trunc tie, PAST the cap (verifies part 2 of the MAX_DIGITS proof,
+    # not just the magnitude bound). `tie` is the exact half-ulp midpoint between
+    # 1.0 and 1+2^-52 (== 1 + 2^-53, a finite 54-digit decimal):
+    #   - the exact tie rounds to even -> 1.0;
+    #   - the SAME value with one nonzero digit past the 800-digit cap is strictly
+    #     above the midpoint, so the sticky `trunc` flag must round it UP to
+    #     1+2^-52. If past-cap trunc were dropped, this would wrongly stay 1.0.
+    var tie = String("1.00000000000000011102230246251565404236316680908203125")
+    _check(tie, one)  # exact tie -> ties-to-even -> 1.0
+    _check(tie + _repeat("0", 800) + "1", UInt64(0x3FF0000000000001))  # round up
+
     print("test_slow_float_adversarial: all passed")
