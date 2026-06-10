@@ -16,6 +16,7 @@ TESTS=(
     tests/simdjson/stage2/test_builder.mojo
     tests/simdjson/stage2/test_eisel_lemire.mojo
     tests/simdjson/stage2/test_slow_float.mojo
+    tests/simdjson/stage2/test_slow_float_adversarial.mojo
     tests/simdjson/stage2/test_float_differential.mojo
     tests/simdjson/test_parser.mojo
     tests/simdjson/test_value.mojo
