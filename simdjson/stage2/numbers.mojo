@@ -29,8 +29,10 @@ def _load_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
     """Load 8 bytes at ptr+pos as one little-endian UInt64 (unaligned-safe).
 
     Shared by `_are_8_digits` and `_parse_8_digits` so detect-true guarantees
-    parse-exact by construction. PRECONDITION: >=8 readable bytes from ptr+pos
-    (Parser.parse provides 128 NUL pad bytes past the input).
+    parse-exact by construction. PRECONDITION: >=8 readable bytes from ptr+pos.
+    Production callers gate the SWAR loops with `pos + 8 <= max_len`, so the load
+    stays within the logical input; `Parser.parse`'s 128 NUL pad bytes are a
+    defense-in-depth backstop, not a license for an unbounded over-read.
     """
     comptime assert is_little_endian(), "SWAR number parsing requires a little-endian target"
     return (ptr + pos).bitcast[UInt64]().load[alignment=1]()

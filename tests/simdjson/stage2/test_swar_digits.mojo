@@ -39,10 +39,11 @@ def main() raises:
         for v in range(256):
             b[lane] = UInt8(v)
             var p = b.unsafe_ptr()
-            if _are_8_digits(p, 0) != _ref_are_8(p, 0):
+            var ref_digit = _ref_are_8(p, 0)
+            if _are_8_digits(p, 0) != ref_digit:
                 raise Error("detect mismatch lane " + String(lane) + " v " + String(v))
             # parse equivalence only defined when all 8 are digits
-            if _ref_are_8(p, 0) and _parse_8_digits(p, 0) != _ref_parse_8(p, 0):
+            if ref_digit and _parse_8_digits(p, 0) != _ref_parse_8(p, 0):
                 raise Error("parse mismatch lane " + String(lane) + " v " + String(v))
 
     # All-9s maximum-carry row.
