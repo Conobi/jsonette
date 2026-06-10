@@ -24,6 +24,7 @@ TESTS=(
     tests/simdjson/serialize/test_roundtrip.mojo
     tests/simdjson/serialize/test_float_lock.mojo
     tests/simdjson/serialize/test_adversarial.mojo
+    tests/simdjson/serialize/test_reflect.mojo
     tests/simdjson/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
     tests/conformance/test_reject.mojo

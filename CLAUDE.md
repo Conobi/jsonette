@@ -24,6 +24,8 @@ Two parsing stages:
 - **Stage 1 — Structural indexing** (`simdjson/stage1/`): classify 64-byte chunks into backslash/quote/structural/whitespace bitsets using `SIMD[DType.uint8, 64]`; produce a flat `List[UInt32]` of structural character positions.
 - **Stage 2 — Tape building** (`simdjson/stage2/`): walk the structural index and materialise a depth-first tape of JSON values; no allocation per value.
 
+An encoder (`simdjson/serialize/`) surfaces `to_string`/`to_json` for round-tripping a parsed Document and `dumps[T]` for serializing arbitrary structs via reflection.
+
 ## Architecture
 
 ```
@@ -39,9 +41,14 @@ simdjson/                            # Public API
 │   ├── classifier.mojo              # Chunk classifier: backslash / quote / structural / whitespace
 │   ├── string_mask.mojo             # In-string bitmask via carry-less SIMD
 │   └── indexer.mojo                 # Walks chunks → emits structural positions
-└── stage2/                          # Tape builder
-    ├── __init__.mojo
-    └── builder.mojo                 # State machine over structural index
+├── stage2/                          # Tape builder
+│   ├── __init__.mojo
+│   └── builder.mojo                 # State machine over structural index
+└── serialize/                       # JSON encoder (output side)
+    ├── writer.mojo                  # JsonWriter sink: escaping, numbers, indent
+    ├── tape_writer.mojo             # Document tape → JSON (round-trip)
+    ├── roundtrip.mojo               # tape-equality helper for round-trip tests
+    └── reflect_writer.mojo          # dumps[T] for user structs via std.reflection
 
 tests/
 ├── simdjson/
