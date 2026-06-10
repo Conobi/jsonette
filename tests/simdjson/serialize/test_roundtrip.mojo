@@ -1,6 +1,7 @@
-from std.testing import assert_equal
+from std.testing import assert_equal, assert_true, assert_false
 from simdjson.parser import Parser
 from simdjson.serialize.tape_writer import to_string, to_json
+from simdjson.serialize.roundtrip import tapes_equal
 
 
 def _bytes(s: String) -> List[UInt8]:
@@ -36,7 +37,19 @@ def test_pretty() raises:
     assert_equal(to_json[pretty=True](doc), expected)
 
 
+def test_tapes_equal_smoke() raises:
+    var p1 = Parser()
+    var d1 = p1.parse(_bytes(String('{"a":1}')))
+    var p2 = Parser()
+    var d2 = p2.parse(_bytes(String('{"a":1}')))
+    var p3 = Parser()
+    var d3 = p3.parse(_bytes(String('{"a":2}')))
+    assert_true(tapes_equal(d1, d2))
+    assert_false(tapes_equal(d1, d3))
+
+
 def main() raises:
     test_scalars_and_containers()
     test_pretty()
+    test_tapes_equal_smoke()
     print("test_roundtrip: basic passed")
