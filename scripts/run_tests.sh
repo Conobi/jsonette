@@ -11,6 +11,7 @@ TESTS=(
     tests/simdjson/stage1/test_indexer.mojo
     tests/simdjson/test_tape.mojo
     tests/simdjson/stage2/test_numbers.mojo
+    tests/simdjson/stage2/test_swar_digits.mojo
     tests/simdjson/stage2/test_strings.mojo
     tests/simdjson/stage2/test_builder.mojo
     tests/simdjson/stage2/test_eisel_lemire.mojo
