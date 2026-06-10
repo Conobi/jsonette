@@ -28,7 +28,13 @@ def umul128(a: UInt64, b: UInt64) -> Uint128:
 
 
 def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatResult:
-    """Convert mantissa * 10^exponent to IEEE 754 double via Eisel-Lemire."""
+    """Convert mantissa * 10^exponent to IEEE 754 double via Eisel-Lemire.
+
+    NOT `@always_inline`: measured A/B (2026-06-10) showed inlining this body into
+    the per-float call site raises both instruction count and cycles (canada
+    412->430 ins/tok, ~96.7->~101 cyc/tok) — the large EFL body bloats codegen.
+    Left as an out-of-line call deliberately.
+    """
     # Zero mantissa.
     if mantissa == 0:
         var bits = UInt64(1) << 63 if negative else UInt64(0)
