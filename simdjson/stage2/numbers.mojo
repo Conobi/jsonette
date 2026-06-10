@@ -1,4 +1,5 @@
 from std.memory import bitcast
+from std.sys.info import is_little_endian
 from simdjson.stage2.eisel_lemire import compute_float_64
 from simdjson.stage2.slow_float import parse_float_slow
 from simdjson.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
@@ -24,29 +25,55 @@ def _digit_value(b: UInt8) -> UInt64:
 
 
 @always_inline("nodebug")
-def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
-    """Check if 8 bytes starting at ptr+pos are all ASCII digits ('0'-'9').
+def _load_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
+    """Load 8 bytes at ptr+pos as one little-endian UInt64 (unaligned-safe).
 
-    PRECONDITION: the buffer must be readable for at least 8 bytes from
-    `ptr + pos`. This SWAR load is unconditional; callers gate `pos` so that
-    `pos + 8 <= max_len`, but the load itself touches up to 8 bytes which may
-    fall inside the trailing NUL padding (NUL is not a digit, so the check
-    fails cleanly). `Parser.parse` guarantees 128 bytes of NUL padding past
-    the logical input length, which more than covers this over-read.
+    Shared by `_are_8_digits` and `_parse_8_digits` so detect-true guarantees
+    parse-exact by construction. PRECONDITION: >=8 readable bytes from ptr+pos
+    (Parser.parse provides 128 NUL pad bytes past the input).
     """
-    var chunk = (ptr + pos).load[width=8]()
-    var sub = chunk - SIMD[DType.uint8, 8](0x30)
-    return sub.reduce_max() <= 9
+    comptime assert is_little_endian(), "SWAR number parsing requires a little-endian target"
+    return (ptr + pos).bitcast[UInt64]().load[alignment=1]()
+
+
+@always_inline("nodebug")
+def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
+    """True iff 8 bytes at ptr+pos are all ASCII digits ('0'-'9').
+
+    In-register SWAR (`is_made_of_eight_digits_fast`): a byte is a digit iff its
+    high nibble is 0x3 and its low nibble <= 9; both checks fold into one compare.
+
+    PRECONDITION: >=8 readable bytes from `ptr + pos`. Production callers gate
+    the SWAR loop with `pos + 8 <= max_len`, so the load stays within the logical
+    input. `Parser.parse`'s 128 NUL pad bytes past the input are defense-in-depth
+    (a NUL is not a digit, so the check fails cleanly), NOT a substitute for the
+    caller's gate.
+    """
+    var v = _load_8(ptr, pos)
+    return (
+        (v & 0xF0F0F0F0F0F0F0F0)
+        | (((v + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)
+    ) == 0x3333333333333333
 
 
 @always_inline("nodebug")
 def _parse_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
-    """Parse exactly 8 ASCII digits into a UInt64. Caller ensures all are digits."""
-    var chunk = (ptr + pos).load[width=8]()
-    var digits = (chunk - SIMD[DType.uint8, 8](0x30)).cast[DType.uint64]()
-    var g1 = digits[0] * 1000 + digits[1] * 100 + digits[2] * 10 + digits[3]
-    var g2 = digits[4] * 1000 + digits[5] * 100 + digits[6] * 10 + digits[7]
-    return g1 * 10000 + g2
+    """Parse exactly 8 ASCII digits to a UInt64. Caller ensures all are digits.
+
+    In-register SWAR (Lemire `parse_eight_digits_unrolled`): subtract '0' from
+    all lanes, then a pyramidal place-value fold (pairs -> 4-digit -> 8-digit)
+    where each masked multiply does 4 independent multiply-accumulates. The full
+    expression is `(((v & mask) * mul1) + (((v >> 16) & mask) * mul2)) >> 32`;
+    the `& mask` is load-bearing — it isolates the byte lanes each multiply
+    combines so the place-value products do not bleed across lanes. `mul1`/`mul2`
+    carry the 10^k weights; without the masks the result is garbage.
+    """
+    var v = _load_8(ptr, pos) - 0x3030303030303030
+    v = (v * 10) + (v >> 8)
+    var mask = UInt64(0x000000FF000000FF)
+    var mul1 = UInt64(0x000F424000000064)
+    var mul2 = UInt64(0x0000271000000001)
+    return (((v & mask) * mul1) + (((v >> 16) & mask) * mul2)) >> 32
 
 
 def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError -> NumberResult:
