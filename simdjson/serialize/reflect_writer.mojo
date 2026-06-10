@@ -1,0 +1,84 @@
+"""Layer 2 — serialize arbitrary user structs via compile-time reflection.
+
+Dispatch is conformance-driven (no overloads): `emit[T]` routes types that
+conform to `JsonSerializable` (user overrides + containers retrofitted in
+Task 8) to `write_json`, and everything else to `_default_emit` — a reflection
+field-walk that discriminates leaf types by `reflect[T]().name()` and bridges
+via `rebind`. The trait's default `write_json` body calls `_default_emit`, so a
+plain struct conforms with zero methods.
+
+Verified on the active toolchain: `conforms_to` + type refinement + the name/
+rebind table all compile and emit correct JSON.
+"""
+from std.reflection import reflect
+from simdjson.serialize.writer import JsonWriter
+
+
+trait JsonSerializable:
+    """A type that can write itself as JSON. Default body uses reflection."""
+    def write_json(self, mut w: JsonWriter) raises:
+        _default_emit(self, w)
+
+
+def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
+    """Reflection field-walk for structs; name/rebind dispatch for leaf types."""
+    comptime tn = reflect[T]().name()
+    comptime if tn == "Int":
+        w.write_int(Int64(rebind[Int](value)))
+    elif tn == "Bool":
+        w.write_bool(rebind[Bool](value))
+    elif tn == "String":
+        w.write_escaped_str(rebind[String](value))
+    elif tn == "SIMD[DType.float64, 1]":
+        w.write_float(rebind[Float64](value))
+    elif tn == "SIMD[DType.float32, 1]":
+        w.write_float(Float64(rebind[Float32](value)))
+    elif tn == "SIMD[DType.int64, 1]":
+        w.write_int(rebind[Int64](value))
+    elif tn == "SIMD[DType.int32, 1]":
+        w.write_int(Int64(rebind[Int32](value)))
+    elif tn == "SIMD[DType.int16, 1]":
+        w.write_int(Int64(rebind[Int16](value)))
+    elif tn == "SIMD[DType.int8, 1]":
+        w.write_int(Int64(rebind[Int8](value)))
+    elif tn == "SIMD[DType.uint64, 1]":
+        w.write_uint(rebind[UInt64](value))
+    elif tn == "SIMD[DType.uint32, 1]":
+        w.write_uint(UInt64(rebind[UInt32](value)))
+    elif tn == "SIMD[DType.uint16, 1]":
+        w.write_uint(UInt64(rebind[UInt16](value)))
+    elif tn == "SIMD[DType.uint8, 1]":
+        w.write_uint(UInt64(rebind[UInt8](value)))
+    elif reflect[T]().is_struct():
+        comptime r = reflect[T]()
+        comptime names = r.field_names()
+        w.raw("{")
+        w.depth += 1
+        comptime for i in range(r.field_count()):
+            comptime if i > 0:
+                w.raw(",")
+            w.newline_indent()
+            w.write_escaped_str(String(names[i]))
+            w.colon()
+            emit(r.field_ref[i](value), w)
+        w.depth -= 1
+        if r.field_count() > 0:
+            w.newline_indent()
+        w.raw("}")
+    else:
+        raise "JSON_ENCODE_ERROR: unsupported type '" + String(tn) + "'"
+
+
+def emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
+    """Emit any value: conforming types via `write_json`, else reflection."""
+    comptime if conforms_to(T, JsonSerializable):
+        value.write_json(w)
+    else:
+        _default_emit(value, w)
+
+
+def dumps[T: AnyType, //](value: T, indent: String = String("")) raises -> String:
+    """Serialize a user value to JSON. Non-empty `indent` enables pretty mode."""
+    var w = JsonWriter(indent)
+    emit(value, w)
+    return w^.finish()
