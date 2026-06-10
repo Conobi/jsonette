@@ -53,9 +53,46 @@ def test_dict() raises:
     assert_equal(dumps(d), String('{"k":1}'))
 
 
+@fieldwise_init
+struct HasFloat(Copyable, Movable):
+    var f: Float64
+
+
+def test_non_finite_raises() raises:
+    """Non-finite float fields (Inf, NaN) must raise — JSON (RFC 8259) has no
+    representation for infinity or not-a-number."""
+    from std.testing import assert_true
+    var inf = Float64(1.0) / Float64(0.0)
+    var raised = False
+    try:
+        _ = dumps(HasFloat(inf))
+    except:
+        raised = True
+    assert_true(raised)
+
+
+def test_cpython_parity() raises:
+    """Output matches json.dumps(ensure_ascii=False, separators=(",",":"))
+    for nested structs with escaped characters and custom serializers."""
+    assert_equal(dumps(Outer("a\"b", Inner(0, False), 1.0)),
+                 String('{"name":"a\\"b","inner":{"a":0,"b":false},"score":1.0}'))
+    assert_equal(dumps(Money(150)), String("150.00"))
+
+
+def test_dict_multikey() raises:
+    """Dict serialises in insertion order (Mojo Dict is insertion-ordered)."""
+    var d = Dict[String, Int]()
+    d["b"] = 1
+    d["a"] = 2
+    assert_equal(dumps(d), String('{"b":1,"a":2}'))
+
+
 def main() raises:
     test_primitives_and_nested()
     test_pretty()
     test_containers_and_override()
     test_dict()
+    test_non_finite_raises()
+    test_cpython_parity()
+    test_dict_multikey()
     print("test_reflect: all passed")
