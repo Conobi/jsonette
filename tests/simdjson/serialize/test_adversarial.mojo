@@ -1,6 +1,7 @@
-from std.testing import assert_equal
+from std.testing import assert_equal, assert_true
 from simdjson.parser import Parser
 from simdjson.serialize.tape_writer import to_string
+from simdjson.serialize.roundtrip import tapes_equal
 
 
 def _bytes(s: String) -> List[UInt8]:
@@ -48,10 +49,30 @@ def test_deep_nesting() raises:
     assert_equal(_emit(String('{"a":{"b":{"c":{}}}}')), String('{"a":{"b":{"c":{}}}}'))
 
 
+def test_deep_nesting_stack_safety() raises:
+    """Round-trip a 1000-level-deep nested array to prove the recursive tape
+    walk survives depths approaching MAX_DEPTH (1024) without stack overflow
+    or tape-identity divergence."""
+    var depth = 1000
+    var s = String("")
+    for _ in range(depth):
+        s += "["
+    s += "1"
+    for _ in range(depth):
+        s += "]"
+    var p1 = Parser()
+    var d1 = p1.parse(_bytes(s))
+    var emitted = to_string(d1)
+    var p2 = Parser()
+    var d2 = p2.parse(_bytes(emitted))
+    assert_true(tapes_equal(d1, d2), msg=String("deep-nesting round-trip mismatch"))
+
+
 def main() raises:
     test_scalar_roots()
     test_escapes()
     test_unicode_passthrough()
     test_int_bounds()
     test_deep_nesting()
+    test_deep_nesting_stack_safety()
     print("test_adversarial: all passed")

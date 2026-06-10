@@ -88,6 +88,14 @@ def test_accept_vectors_roundtrip() raises:
     _assert_roundtrips(String("tests/fixtures/test_vectors/y_object_extreme_numbers.json"))
     _assert_roundtrips(String("tests/fixtures/test_vectors/y_array_heterogeneous.json"))
     _assert_roundtrips(String("tests/fixtures/test_vectors/y_object_string_unicode.json"))
+    # Security-relevant byte ranges: embedded NUL, DEL, escaped control,
+    # NUL-in-key — regression guards for the encoder's string serialisation.
+    _assert_roundtrips(String("tests/fixtures/test_vectors/y_string_null_escape.json"))
+    _assert_roundtrips(String("tests/fixtures/test_vectors/y_string_backslash_and_u_escaped_zero.json"))
+    _assert_roundtrips(String("tests/fixtures/test_vectors/y_string_escaped_control_character.json"))
+    _assert_roundtrips(String("tests/fixtures/test_vectors/y_string_unescaped_char_delete.json"))
+    _assert_roundtrips(String("tests/fixtures/test_vectors/y_string_with_del_character.json"))
+    _assert_roundtrips(String("tests/fixtures/test_vectors/y_object_escaped_null_in_key.json"))
 
 
 def main() raises:
