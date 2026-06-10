@@ -15,8 +15,13 @@ if awk -v l="$load1" -v t="$THRESHOLD" 'BEGIN { exit !(l > t) }'; then
   exit 1
 fi
 
-# Abort if a foreign CPU-heavy process is competing (>50% CPU, excluding this script).
-foreign="$(ps -eo pcpu,comm --sort=-pcpu | awk 'NR>1 && $1>50 {print}')"
+# Abort if a foreign CPU-heavy process is competing (>50% CPU, excluding this
+# script). Skip self/infra processes: the `ps` measurement tool itself (a
+# freshly-spawned ps shows ~100% pcpu = cputime/walltime artifact) and the
+# steam-run FHS sandbox wrapper (`bwrap`/`steam-run`/`reaper`) that this audit
+# is invoked *inside* — none of these are competing foreign workloads.
+foreign="$(ps -eo pcpu,comm --sort=-pcpu | awk 'NR>1 && $1>50 \
+  && $2!="ps" && $2!="bwrap" && $2!="steam-run" && $2!="reaper" && $2!="srt-bwrap" {print}')"
 if [ -n "$foreign" ]; then
   echo "ABORT: foreign process(es) >50% CPU detected:"
   echo "$foreign"
