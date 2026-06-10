@@ -98,10 +98,32 @@ def test_accept_vectors_roundtrip() raises:
     _assert_roundtrips(String("tests/fixtures/test_vectors/y_object_escaped_null_in_key.json"))
 
 
+def _assert_roundtrips_pretty(path: String) raises:
+    """Parse a JSON file, pretty-print it, re-parse, and verify tape equality.
+
+    This proves the pretty-printer emits valid, semantically-identical JSON
+    that the parser can re-ingest without loss or corruption.
+    """
+    var data = read_file(path)
+    var p1 = Parser()
+    var d1 = p1.parse(data)
+    var emitted = to_json[pretty=True](d1)
+    var p2 = Parser()
+    var d2 = p2.parse(_bytes(emitted))
+    assert_true(tapes_equal(d1, d2), msg=String("pretty round-trip tape mismatch: ") + path)
+
+
+def test_pretty_roundtrip() raises:
+    """Pretty-printed output must be valid JSON that round-trips to the same tape."""
+    _assert_roundtrips_pretty(String("tests/fixtures/corpus/twitter.json"))
+    _assert_roundtrips_pretty(String("tests/fixtures/corpus/citm_catalog.json"))
+
+
 def main() raises:
     test_scalars_and_containers()
     test_pretty()
     test_tapes_equal_smoke()
     test_corpus_roundtrip()
     test_accept_vectors_roundtrip()
+    test_pretty_roundtrip()
     print("test_roundtrip: basic passed")

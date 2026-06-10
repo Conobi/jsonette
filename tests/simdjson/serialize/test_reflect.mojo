@@ -87,6 +87,29 @@ def test_dict_multikey() raises:
     assert_equal(dumps(d), String('{"b":1,"a":2}'))
 
 
+@fieldwise_init
+struct Nums(Copyable, Movable):
+    var i8: Int8
+    var i16: Int16
+    var i32: Int32
+    var u8: UInt8
+    var u16: UInt16
+    var u32: UInt32
+    var u64: UInt64
+    var f32: Float32
+
+
+def test_sized_numerics() raises:
+    """All sized integer and float types (Int8/16/32, UInt8/16/32/64, Float32)
+    must be dispatched correctly by the reflection writer without truncation,
+    sign errors, or missing branches."""
+    var n = Nums(Int8(-128), Int16(-32768), Int32(-2000000000),
+                 UInt8(255), UInt16(65535), UInt32(4000000000),
+                 UInt64(18446744073709551615), Float32(1.5))
+    assert_equal(dumps(n),
+                 String('{"i8":-128,"i16":-32768,"i32":-2000000000,"u8":255,"u16":65535,"u32":4000000000,"u64":18446744073709551615,"f32":1.5}'))
+
+
 def main() raises:
     test_primitives_and_nested()
     test_pretty()
@@ -95,4 +118,5 @@ def main() raises:
     test_non_finite_raises()
     test_cpython_parity()
     test_dict_multikey()
+    test_sized_numerics()
     print("test_reflect: all passed")
