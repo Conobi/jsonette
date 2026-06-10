@@ -95,12 +95,10 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
         "_parse_number precondition: max_len must be non-negative",
     )
     var pos = 0
-    var negative = False
 
-    # Optional leading minus
-    if ptr[pos] == UInt8(0x2D):  # '-'
-        negative = True
-        pos += 1
+    # Branchless optional leading minus: advance pos by the bool's int value.
+    var negative = ptr[pos] == UInt8(0x2D)  # '-'
+    pos += Int(negative)
 
     if pos >= max_len or not _is_digit(ptr[pos]):
         raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
