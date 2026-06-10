@@ -17,7 +17,26 @@ from std.memory import bitcast
 
 
 comptime MAX_DIGITS: Int = 800
-"""Big-endian digit array capacity (matches Go strconv.decimal)."""
+"""Big-endian digit array capacity (matches Go strconv.decimal).
+
+This cap is BOTH a correctness bound and an adversarial-input (DoS) bound; both
+halves are load-bearing for correct round-to-nearest-ties-to-even:
+
+1. cap >= worst-case boundary length. Correct rounding compares the value to the
+   half-ulp boundaries between adjacent doubles. Those boundaries are exact
+   decimals of <= ~767 significant digits (worst case near the smallest denormal
+   2^-1074). With >= that many retained digits, the kept digits alone decide
+   every NON-tie comparison. 800 >= 767, with margin.
+2. sticky `trunc` decides the exact tie. When the kept digits exactly equal a
+   boundary's, the discarded tail decides; truncation only drops digits, so the
+   true value is >= the retained value, and `trunc` (set ONLY on a nonzero
+   discarded digit) reports "strictly greater" -> round up. Trailing zeros leave
+   `trunc` false and do not spuriously round up.
+
+Discarding digits past 800 therefore changes no correctly-rounded result, and
+bounds per-token slow-path work to O(800) digits independent of input length:
+an adversarial `1.<10^6 digits>` token cannot scale CPU with its digit count.
+"""
 
 comptime MAX_SHIFT: Int = 60
 """Largest single binary shift without overflowing UInt64 (9<<60 fits)."""
@@ -156,8 +175,13 @@ def parse_decimal_token(
 
 
 @always_inline
-def _prefix_less_than(a: Decimal, cutoff: String) -> Bool:
-    """Is the leading prefix of `a.d` lexicographically below `cutoff`?"""
+def _prefix_less_than(a: Decimal, cutoff: StaticString) -> Bool:
+    """Is the leading prefix of `a.d` lexicographically below `cutoff`?
+
+    `cutoff` is a `StaticString` (a view into static storage), so the slow path
+    allocates nothing here — the previous `String` return from `_left_cutoff`
+    heap-allocated on every shift step.
+    """
     var cb = cutoff.as_bytes()
     # Iterate over the cutoff's LOGICAL byte length, not len(cb): if the byte
     # source ever carries a trailing NUL terminator, a NUL byte would compare
@@ -192,129 +216,133 @@ def _build_left_delta() -> InlineArray[Int, 61]:
 comptime _LEFT_DELTA = _build_left_delta()
 
 
-def _left_cutoff(k: Int) -> String:
-    """Return the prefix cutoff string (leading digits of 5^k) for shift k."""
+def _left_cutoff(k: Int) -> StaticString:
+    """Return the prefix cutoff (leading digits of 5^k) for shift k.
+
+    Returns a `StaticString` backed by static storage — no heap allocation
+    (these literals were `String(...)` before, which allocated per shift step).
+    """
     if k == 0:
-        return String("")
+        return ""
     if k == 1:
-        return String("5")
+        return "5"
     if k == 2:
-        return String("25")
+        return "25"
     if k == 3:
-        return String("125")
+        return "125"
     if k == 4:
-        return String("625")
+        return "625"
     if k == 5:
-        return String("3125")
+        return "3125"
     if k == 6:
-        return String("15625")
+        return "15625"
     if k == 7:
-        return String("78125")
+        return "78125"
     if k == 8:
-        return String("390625")
+        return "390625"
     if k == 9:
-        return String("1953125")
+        return "1953125"
     if k == 10:
-        return String("9765625")
+        return "9765625"
     if k == 11:
-        return String("48828125")
+        return "48828125"
     if k == 12:
-        return String("244140625")
+        return "244140625"
     if k == 13:
-        return String("1220703125")
+        return "1220703125"
     if k == 14:
-        return String("6103515625")
+        return "6103515625"
     if k == 15:
-        return String("30517578125")
+        return "30517578125"
     if k == 16:
-        return String("152587890625")
+        return "152587890625"
     if k == 17:
-        return String("762939453125")
+        return "762939453125"
     if k == 18:
-        return String("3814697265625")
+        return "3814697265625"
     if k == 19:
-        return String("19073486328125")
+        return "19073486328125"
     if k == 20:
-        return String("95367431640625")
+        return "95367431640625"
     if k == 21:
-        return String("476837158203125")
+        return "476837158203125"
     if k == 22:
-        return String("2384185791015625")
+        return "2384185791015625"
     if k == 23:
-        return String("11920928955078125")
+        return "11920928955078125"
     if k == 24:
-        return String("59604644775390625")
+        return "59604644775390625"
     if k == 25:
-        return String("298023223876953125")
+        return "298023223876953125"
     if k == 26:
-        return String("1490116119384765625")
+        return "1490116119384765625"
     if k == 27:
-        return String("7450580596923828125")
+        return "7450580596923828125"
     if k == 28:
-        return String("37252902984619140625")
+        return "37252902984619140625"
     if k == 29:
-        return String("186264514923095703125")
+        return "186264514923095703125"
     if k == 30:
-        return String("931322574615478515625")
+        return "931322574615478515625"
     if k == 31:
-        return String("4656612873077392578125")
+        return "4656612873077392578125"
     if k == 32:
-        return String("23283064365386962890625")
+        return "23283064365386962890625"
     if k == 33:
-        return String("116415321826934814453125")
+        return "116415321826934814453125"
     if k == 34:
-        return String("582076609134674072265625")
+        return "582076609134674072265625"
     if k == 35:
-        return String("2910383045673370361328125")
+        return "2910383045673370361328125"
     if k == 36:
-        return String("14551915228366851806640625")
+        return "14551915228366851806640625"
     if k == 37:
-        return String("72759576141834259033203125")
+        return "72759576141834259033203125"
     if k == 38:
-        return String("363797880709171295166015625")
+        return "363797880709171295166015625"
     if k == 39:
-        return String("1818989403545856475830078125")
+        return "1818989403545856475830078125"
     if k == 40:
-        return String("9094947017729282379150390625")
+        return "9094947017729282379150390625"
     if k == 41:
-        return String("45474735088646411895751953125")
+        return "45474735088646411895751953125"
     if k == 42:
-        return String("227373675443232059478759765625")
+        return "227373675443232059478759765625"
     if k == 43:
-        return String("1136868377216160297393798828125")
+        return "1136868377216160297393798828125"
     if k == 44:
-        return String("5684341886080801486968994140625")
+        return "5684341886080801486968994140625"
     if k == 45:
-        return String("28421709430404007434844970703125")
+        return "28421709430404007434844970703125"
     if k == 46:
-        return String("142108547152020037174224853515625")
+        return "142108547152020037174224853515625"
     if k == 47:
-        return String("710542735760100185871124267578125")
+        return "710542735760100185871124267578125"
     if k == 48:
-        return String("3552713678800500929355621337890625")
+        return "3552713678800500929355621337890625"
     if k == 49:
-        return String("17763568394002504646778106689453125")
+        return "17763568394002504646778106689453125"
     if k == 50:
-        return String("88817841970012523233890533447265625")
+        return "88817841970012523233890533447265625"
     if k == 51:
-        return String("444089209850062616169452667236328125")
+        return "444089209850062616169452667236328125"
     if k == 52:
-        return String("2220446049250313080847263336181640625")
+        return "2220446049250313080847263336181640625"
     if k == 53:
-        return String("11102230246251565404236316680908203125")
+        return "11102230246251565404236316680908203125"
     if k == 54:
-        return String("55511151231257827021181583404541015625")
+        return "55511151231257827021181583404541015625"
     if k == 55:
-        return String("277555756156289135105907917022705078125")
+        return "277555756156289135105907917022705078125"
     if k == 56:
-        return String("1387778780781445675529539585113525390625")
+        return "1387778780781445675529539585113525390625"
     if k == 57:
-        return String("6938893903907228377647697925567626953125")
+        return "6938893903907228377647697925567626953125"
     if k == 58:
-        return String("34694469519536141888238489627838134765625")
+        return "34694469519536141888238489627838134765625"
     if k == 59:
-        return String("173472347597680709441192448139190673828125")
-    return String("867361737988403547205962240695953369140625")  # k == 60
+        return "173472347597680709441192448139190673828125"
+    return "867361737988403547205962240695953369140625"  # k == 60
 
 
 def _left_shift(mut a: Decimal, k: Int):
