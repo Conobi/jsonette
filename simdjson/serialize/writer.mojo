@@ -1,0 +1,128 @@
+"""JSON output sink and scalar emitters shared by both encoder layers.
+
+`JsonWriter` accumulates UTF-8 bytes in a `List[UInt8]` and is consumed once via
+`finish()`. It owns the only definition of JSON string escaping, number
+formatting, and pretty-print indentation, so the tape round-trip path and the
+reflection path emit byte-identical structure for the same logical value.
+"""
+from std.math import isfinite
+
+comptime _HEX = String("0123456789abcdef")
+
+
+struct JsonWriter:
+    """Growable UTF-8 byte sink for JSON. Write-only; consume once via `finish()`.
+
+    A non-empty `indent_unit` selects pretty mode: `newline_indent()` emits a
+    newline plus `depth` indent units, and `colon()` emits `": "` instead of
+    `":"`. In compact mode both are minimal.
+    """
+
+    var buf: List[UInt8]
+    var indent_unit: String
+    var depth: Int
+
+    def __init__(out self, indent_unit: String = String("")):
+        """Create an empty writer. Non-empty `indent_unit` enables pretty mode."""
+        self.buf = List[UInt8]()
+        self.indent_unit = indent_unit
+        self.depth = 0
+
+    @always_inline("nodebug")
+    def is_pretty(self) -> Bool:
+        """True when an indent unit was supplied (pretty-print mode)."""
+        return self.indent_unit.byte_length() > 0
+
+    def raw(mut self, s: String):
+        """Append the UTF-8 bytes of `s` verbatim (no escaping)."""
+        for b in s.as_bytes():
+            self.buf.append(b)
+
+    def _esc_one(mut self, c: UInt8):
+        """Append one source byte in JSON-escaped form.
+
+        `"` and `\\` are backslash-escaped; control bytes `< 0x20` use the short
+        escapes (`\\b \\f \\n \\r \\t`) or `\\u00XX` for all others;
+        every other byte (incl. 0x7F and UTF-8 continuation bytes) passes
+        through verbatim.
+        """
+        if c == 0x22:
+            self.buf.append(0x5C); self.buf.append(0x22)
+        elif c == 0x5C:
+            self.buf.append(0x5C); self.buf.append(0x5C)
+        elif c >= 0x20:
+            self.buf.append(c)
+        elif c == 0x08:
+            self.buf.append(0x5C); self.buf.append(0x62)
+        elif c == 0x0C:
+            self.buf.append(0x5C); self.buf.append(0x66)
+        elif c == 0x0A:
+            self.buf.append(0x5C); self.buf.append(0x6E)
+        elif c == 0x09:
+            self.buf.append(0x5C); self.buf.append(0x74)
+        elif c == 0x0D:
+            self.buf.append(0x5C); self.buf.append(0x72)  # \r
+        else:
+            self.buf.append(0x5C); self.buf.append(0x75)  # \u
+            self.buf.append(0x30); self.buf.append(0x30)  # 00
+            self.buf.append(_HEX.as_bytes()[Int(c >> 4)])
+            self.buf.append(_HEX.as_bytes()[Int(c & 0xF)])
+
+    def write_escaped_str(mut self, s: String):
+        """Write a Mojo `String` as a quoted, escaped JSON string."""
+        self.buf.append(0x22)
+        for b in s.as_bytes():
+            self._esc_one(b)
+        self.buf.append(0x22)
+
+    def write_escaped_buf(mut self, ref buf: List[UInt8], start: Int, length: Int):
+        """Write `length` bytes of `buf` from `start` as a quoted, escaped string."""
+        self.buf.append(0x22)
+        for i in range(length):
+            self._esc_one(buf[start + i])
+        self.buf.append(0x22)
+
+    def write_int(mut self, v: Int64):
+        """Append a signed integer in decimal."""
+        self.raw(String(v))
+
+    def write_uint(mut self, v: UInt64):
+        """Append an unsigned integer in decimal."""
+        self.raw(String(v))
+
+    def write_float(mut self, v: Float64) raises:
+        """Append a float via the stdlib shortest-round-trip formatter.
+
+        Raises on NaN/±Infinity (no JSON representation). Parsed JSON can never
+        reach here; only user structs (reflection path) can trigger it.
+        """
+        if not isfinite(v):
+            raise "JSON_ENCODE_ERROR: non-finite float (NaN/Infinity) is not valid JSON"
+        self.raw(String(v))
+
+    def write_bool(mut self, v: Bool):
+        """Append `true`/`false`."""
+        self.raw(String("true") if v else String("false"))
+
+    def write_null(mut self):
+        """Append `null`."""
+        self.raw(String("null"))
+
+    def colon(mut self):
+        """Append the key/value separator (`": "` pretty, `":"` compact)."""
+        if self.is_pretty():
+            self.buf.append(0x3A); self.buf.append(0x20)
+        else:
+            self.buf.append(0x3A)
+
+    def newline_indent(mut self):
+        """In pretty mode, emit a newline then `depth` indent units. No-op compact."""
+        if self.is_pretty():
+            self.buf.append(0x0A)
+            var unit = self.indent_unit
+            for _ in range(self.depth):
+                self.raw(unit)
+
+    def finish(deinit self) raises -> String:
+        """Consume the writer, returning the accumulated bytes as a String."""
+        return String(from_utf8=self.buf^)
