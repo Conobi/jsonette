@@ -1,11 +1,12 @@
 """Layer 2 — serialize arbitrary user structs via compile-time reflection.
 
 Dispatch is conformance-driven (no overloads): `emit[T]` routes types that
-conform to `JsonSerializable` (user overrides + containers retrofitted in
-Task 8) to `write_json`, and everything else to `_default_emit` — a reflection
-field-walk that discriminates leaf types by `reflect[T]().name()` and bridges
-via `rebind`. The trait's default `write_json` body calls `_default_emit`, so a
-plain struct conforms with zero methods.
+conform to `JsonSerializable` (user overrides, plus `List`/`Dict`/`Optional`
+via retroactive `__extension` conformance) to `write_json`, and everything
+else to `_default_emit` — a reflection field-walk that discriminates leaf types
+by `reflect[T]().name()` and bridges via `rebind`. The trait's default
+`write_json` body calls `_default_emit`, so a plain struct conforms with zero
+methods.
 
 Verified on the active toolchain: `conforms_to` + type refinement + the name/
 rebind table all compile and emit correct JSON.
@@ -21,7 +22,14 @@ trait JsonSerializable:
 
 
 def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
-    """Reflection field-walk for structs; name/rebind dispatch for leaf types."""
+    """Reflection field-walk for structs; name/rebind dispatch for leaf types.
+
+    Note: the word-sized `UInt` type is unsupported as a field type. Mojo
+    reflection's `name()` calls `get_type_name` internally, which errors on its
+    non-concrete dtype (`scalar<uindex>`), crashing before any branch can be
+    reached. Use `UInt64` or `Int` instead. Supported sized unsigned types are
+    `UInt8`, `UInt16`, `UInt32`, and `UInt64`.
+    """
     comptime tn = reflect[T]().name()
     comptime if tn == "Int":
         w.write_int(Int64(rebind[Int](value)))
