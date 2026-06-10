@@ -86,7 +86,9 @@ def parse_decimal_token(
 
     var saw_dot = False
     var seen_digit = False
-    # Number of digits seen after the decimal point.
+    # Number of STORED digits after the decimal point (digits dropped past the
+    # MAX_DIGITS cap are excluded, so `nd - frac` is the stored integer-digit
+    # count even when the fraction is truncated).
     var frac = 0
     while i < token_end:
         var c = ptr[i]
@@ -109,10 +111,14 @@ def parse_decimal_token(
         if a.nd < MAX_DIGITS:
             a.d[a.nd] = digit
             a.nd += 1
+            # Count only STORED fraction digits. Fraction digits discarded past
+            # the cap must NOT move the decimal point: otherwise dp (computed
+            # below as nd - frac) is short by the number of dropped fraction
+            # digits and the magnitude comes out wrong by 10^k.
+            if saw_dot:
+                frac += 1
         elif digit != 0:
             a.trunc = True
-        if saw_dot:
-            frac += 1
         i += 1
 
     if not seen_digit:
@@ -122,8 +128,10 @@ def parse_decimal_token(
         return a^
 
     # `dp` after the integer digits, before folding the explicit exponent.
-    # Integer-digit count = (digits placed) - frac, but leading zeros may have
-    # decremented dp already; recompute from nd and frac.
+    # Stored integer-digit count = (stored digits) - (stored fraction digits);
+    # leading zeros may have decremented dp already. Because `frac` counts only
+    # stored fraction digits, this stays correct under cap truncation. (Integer
+    # runs long enough to truncate exceed 10^800 and saturate to inf regardless.)
     a.dp += a.nd - frac
 
     # Optional explicit exponent.

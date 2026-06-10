@@ -169,6 +169,24 @@ def main():
     for s in neg_cases:
         rows.append((s, expected_hex(s)))
 
+    # Cap-truncation coverage: numbers whose significant-digit count exceeds the
+    # parser's MAX_DIGITS truncation cap, with nonzero digits PAST the cap. These
+    # exercise decimal-point bookkeeping under truncation (a dp bug here yields
+    # magnitudes off by 10^k, not 1 ULP). The oracle is exact at any length, so
+    # the expected bits are correct. The previous corpus capped mantissas at 25
+    # digits and never reached this path.
+    cap_cases = [
+        "1." + "0" * 799 + "1",       # ~1.0; trailing 1 just past the cap
+        "1." + "0" * 820 + "1",       # ~1.0; well past the cap
+        "123." + "0" * 800 + "456",   # multi-digit integer part
+        "-1." + "0" * 810 + "1",      # negative, past the cap
+        "0." + "1" * 850,             # long all-significant fraction (no int part)
+        "9." + "9" * 850,             # long run of 9s (max carry) near 10.0
+        "1234567890." + "1" * 820,    # larger integer part + long fraction
+    ]
+    for s in cap_cases:
+        rows.append((s, expected_hex(s)))
+
     out = "\n".join(f"{s}\t{h}" for s, h in rows) + "\n"
     if "--check" in sys.argv:
         sys.stdout.write(out)
