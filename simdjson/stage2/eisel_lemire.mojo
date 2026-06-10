@@ -38,8 +38,10 @@ def compute_float_64(mantissa: UInt64, exponent: Int, negative: Bool) -> FloatRe
     if exponent < SMALLEST_POWER_OF_FIVE or exponent > LARGEST_POWER_OF_FIVE:
         return FloatResult(value=UInt64(0), valid=False)
 
-    # Normalize: shift mantissa so bit 63 is set.
-    var lz = Int(count_leading_zeros(SIMD[DType.uint64, 1](mantissa))[0])
+    # Normalize: shift mantissa so bit 63 is set. `mantissa` is already a scalar
+    # UInt64 (== SIMD[uint64, 1]), so call count_leading_zeros on it directly —
+    # the prior SIMD wrap + [0] extract was redundant scaffolding around lzcnt.
+    var lz = Int(count_leading_zeros(mantissa))
     var w = mantissa << UInt64(lz)
 
     # Get 128-bit power of 5.
