@@ -1,4 +1,4 @@
-"""Layer 2 — serialize arbitrary user structs via compile-time reflection.
+"""Serialize arbitrary user structs via compile-time reflection.
 
 Dispatch is conformance-driven (no overloads): `emit[T]` routes types that
 conform to `JsonSerializable` (user overrides, plus `List`/`Dict`/`Optional`

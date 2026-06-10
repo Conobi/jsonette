@@ -1,4 +1,4 @@
-"""Layer 1 — serialize a parsed `Document` back to JSON text (round-trip).
+"""Serialize a parsed `Document` back to JSON text (round-trip).
 
 Walks the depth-first tape from the root (index 1), reusing the tag layout and
 container payload encoding established in `value.mojo` (low 32 payload bits =
