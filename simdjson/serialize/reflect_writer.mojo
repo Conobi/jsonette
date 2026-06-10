@@ -82,3 +82,53 @@ def dumps[T: AnyType, //](value: T, indent: String = String("")) raises -> Strin
     var w = JsonWriter(indent)
     emit(value, w)
     return w^.finish()
+
+
+__extension List(JsonSerializable):
+    def write_json(self, mut w: JsonWriter) raises:
+        """Emit a JSON array; element type recovered from `Self.T`, not reflection."""
+        if len(self) == 0:
+            w.raw("[]")
+            return
+        w.raw("[")
+        w.depth += 1
+        for i in range(len(self)):
+            if i > 0:
+                w.raw(",")
+            w.newline_indent()
+            emit(self[i], w)
+        w.depth -= 1
+        w.newline_indent()
+        w.raw("]")
+
+
+__extension Optional(JsonSerializable):
+    def write_json(self, mut w: JsonWriter) raises:
+        """Emit the contained value, or `null` when empty."""
+        if self:
+            emit(self.value(), w)
+        else:
+            w.write_null()
+
+
+__extension Dict(JsonSerializable):
+    def write_json(self, mut w: JsonWriter) raises:
+        """Emit a JSON object. Keys must be `String` (compile-time enforced)."""
+        comptime assert reflect[Self.K]().name() == "String", "JSON object keys must be String"
+        if len(self) == 0:
+            w.raw("{}")
+            return
+        w.raw("{")
+        w.depth += 1
+        var i = 0
+        for item in self.items():
+            if i > 0:
+                w.raw(",")
+            w.newline_indent()
+            w.write_escaped_str(rebind[String](item.key))
+            w.colon()
+            emit(item.value, w)
+            i += 1
+        w.depth -= 1
+        w.newline_indent()
+        w.raw("}")
