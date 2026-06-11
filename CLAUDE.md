@@ -1,4 +1,4 @@
-# json-simd-mojo
+# jsonette
 
 SIMD-accelerated JSON parser for Mojo, implementing the two-stage structural indexing algorithm from Langdale & Lemire (arXiv:1902.08318). Targets multi-gigabyte-per-second throughput by processing 64 bytes per SIMD vector pass.
 

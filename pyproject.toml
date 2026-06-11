@@ -1,5 +1,5 @@
 [project]
-name = "json-simd-mojo"
+name = "jsonette"
 version = "0.1.0"
 description = "SIMD-accelerated JSON parser for Mojo"
 license = "Apache-2.0"
