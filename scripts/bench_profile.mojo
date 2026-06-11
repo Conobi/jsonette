@@ -1,8 +1,8 @@
 """Profile Stage 1 vs Stage 2 parsing time breakdown."""
 from std.time import perf_counter_ns
-from simdjson.tape import Tape
-from simdjson.stage1.indexer import structural_index
-from simdjson.stage2.builder import build_tape
+from jsonette.tape import Tape
+from jsonette.stage1.indexer import structural_index
+from jsonette.stage2.builder import build_tape
 
 
 def read_file(path: String) raises -> List[UInt8]:
@@ -96,6 +96,6 @@ def profile_file(path: String, name: String) raises:
 
 
 def main() raises:
-    print("simdjson-mojo Stage Profile (" + String(20) + " iterations)\n")
+    print("jsonette Stage Profile (" + String(20) + " iterations)\n")
     profile_file(String("tests/fixtures/corpus/twitter.json"), String("twitter.json"))
     profile_file(String("tests/fixtures/corpus/canada.json"), String("canada.json"))

@@ -24,4 +24,4 @@ build-backend = "mojox_build"
 prerelease = "allow"
 
 [tool.mojox-build]
-packages = ["simdjson"]
+packages = ["jsonette"]

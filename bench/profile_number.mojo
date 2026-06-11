@@ -16,8 +16,8 @@ min-time is trustworthy; perf counters are not required.
 """
 
 from std.time import perf_counter_ns
-from simdjson.parser import Parser
-from simdjson.stage2.numbers import _parse_number
+from jsonette.parser import Parser
+from jsonette.stage2.numbers import _parse_number
 
 
 comptime WARMUP: Int = 10
@@ -135,7 +135,7 @@ def bench_numbers(name: String, data: List[UInt8]) raises:
 
 
 def main() raises:
-    print("simdjson-mojo number bench  WARMUP=" + String(WARMUP) + " ITERS=" + String(ITERS) + " (min-time)")
+    print("jsonette number bench  WARMUP=" + String(WARMUP) + " ITERS=" + String(ITERS) + " (min-time)")
     var twitter = read_file(String("tests/fixtures/corpus/twitter.json"))
     var canada = read_file(String("tests/fixtures/corpus/canada.json"))
     print("== full parse (NFR-2 no-regression) ==")

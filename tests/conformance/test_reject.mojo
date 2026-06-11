@@ -1,5 +1,5 @@
-from simdjson.parser import Parser
-from simdjson.document import Document
+from jsonette.parser import Parser
+from jsonette.document import Document
 
 
 def test_n_incomplete_false() -> Bool:

@@ -1,4 +1,4 @@
-"""REST-workload decode benchmark for the simdjson-mojo parser.
+"""REST-workload decode benchmark for the jsonette parser.
 
 Models a web server that reuses ONE parser across many request/response
 documents: most payloads are small-to-medium and object-heavy, so per-call
@@ -34,8 +34,8 @@ Builds and runs:
 """
 
 from std.time import perf_counter_ns
-from simdjson.parser import Parser
-from simdjson._alloc_count import (
+from jsonette.parser import Parser
+from jsonette._alloc_count import (
     reset_alloc_count,
     get_alloc_count,
     ALLOC_COUNT_ENABLED,

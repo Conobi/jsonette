@@ -6,14 +6,14 @@ SIMD-accelerated JSON parser for Mojo, implementing the two-stage structural ind
 
 ```bash
 uv sync                                                        # Install dev dependencies
-uv run -- bash scripts/build.sh                                # Build simdjson.mojopkg
+uv run -- bash scripts/build.sh                                # Build jsonette.mojopkg
 uv run -- bash scripts/run_tests.sh                            # Run all tests
 uv run -- mojo run -I . -D ASSERT=all tests/<path>.mojo        # Run single test
 ```
 
 ## Package Name
 
-The source directory is `simdjson/` (not `json/`). Mojo's implicit stdlib imports cause `json` to collide with `std.json`. All imports use `simdjson.*` (e.g., `from simdjson.parser import Parser`).
+The source directory is `jsonette/` (not `json/`). Mojo's implicit stdlib imports cause `json` to collide with `std.json`. All imports use `jsonette.*` (e.g., `from jsonette.parser import Parser`).
 
 ## Vision
 
@@ -21,15 +21,15 @@ A faithful Mojo port of the simdjson algorithm: parse structurally valid JSON at
 
 Two parsing stages:
 
-- **Stage 1 — Structural indexing** (`simdjson/stage1/`): classify 64-byte chunks into backslash/quote/structural/whitespace bitsets using `SIMD[DType.uint8, 64]`; produce a flat `List[UInt32]` of structural character positions.
-- **Stage 2 — Tape building** (`simdjson/stage2/`): walk the structural index and materialise a depth-first tape of JSON values; no allocation per value.
+- **Stage 1 — Structural indexing** (`jsonette/stage1/`): classify 64-byte chunks into backslash/quote/structural/whitespace bitsets using `SIMD[DType.uint8, 64]`; produce a flat `List[UInt32]` of structural character positions.
+- **Stage 2 — Tape building** (`jsonette/stage2/`): walk the structural index and materialise a depth-first tape of JSON values; no allocation per value.
 
-An encoder (`simdjson/serialize/`) surfaces `to_string`/`to_json` for round-tripping a parsed Document and `dumps[T]` for serializing arbitrary structs via reflection.
+An encoder (`jsonette/serialize/`) surfaces `to_string`/`to_json` for round-tripping a parsed Document and `dumps[T]` for serializing arbitrary structs via reflection.
 
 ## Architecture
 
 ```
-simdjson/                            # Public API
+jsonette/                            # Public API
 ├── __init__.mojo                    # Re-exports: Parser, Document, Value, Error
 ├── parser.mojo                      # Parser struct — entry point
 ├── document.mojo                    # Document struct (owns Tape + input buffer)
@@ -51,7 +51,7 @@ simdjson/                            # Public API
     └── reflect_writer.mojo          # dumps[T] for user structs via std.reflection
 
 tests/
-├── simdjson/
+├── jsonette/
 │   ├── stage1/
 │   │   ├── test_classifier.mojo
 │   │   ├── test_string_mask.mojo
@@ -88,7 +88,7 @@ String content is excluded from structural character detection using a carry-les
 `indexer.mojo` returns `List[UInt32]` of structural positions. `builder.mojo` takes that list and the original input. Each stage has its own test suite. You can fuzz Stage 1 independently.
 
 ### No I/O in the parser
-`Parser.parse(ref data: List[UInt8]) -> Value` takes a pre-loaded buffer. Callers own I/O. No file handles, no streams inside `simdjson/`.
+`Parser.parse(ref data: List[UInt8]) -> Value` takes a pre-loaded buffer. Callers own I/O. No file handles, no streams inside `jsonette/`.
 
 ## Mojo Conventions (1.0.0b1)
 

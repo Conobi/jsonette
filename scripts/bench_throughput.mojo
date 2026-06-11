@@ -1,5 +1,5 @@
 from std.time import perf_counter_ns
-from simdjson.parser import Parser
+from jsonette.parser import Parser
 
 
 def read_file(path: String) raises -> List[UInt8]:
@@ -43,7 +43,7 @@ def bench_file(path: String, name: String) raises:
 
 
 def main() raises:
-    print("=== simdjson-mojo Throughput Benchmark ===")
+    print("=== jsonette Throughput Benchmark ===")
     print()
     bench_file(String("tests/fixtures/corpus/twitter.json"), String("twitter.json"))
     bench_file(String("tests/fixtures/corpus/canada.json"), String("canada.json"))

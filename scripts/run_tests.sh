@@ -5,28 +5,28 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TESTS=(
-    tests/simdjson/stage1/test_simd_primitives.mojo
-    tests/simdjson/stage1/test_classifier.mojo
-    tests/simdjson/stage1/test_string_mask.mojo
-    tests/simdjson/stage1/test_indexer.mojo
-    tests/simdjson/test_tape.mojo
-    tests/simdjson/stage2/test_numbers.mojo
-    tests/simdjson/stage2/test_swar_digits.mojo
-    tests/simdjson/stage2/test_strings.mojo
-    tests/simdjson/stage2/test_builder.mojo
-    tests/simdjson/stage2/test_eisel_lemire.mojo
-    tests/simdjson/stage2/test_slow_float.mojo
-    tests/simdjson/stage2/test_slow_float_adversarial.mojo
-    tests/simdjson/stage2/test_float_differential.mojo
-    tests/simdjson/test_parser.mojo
-    tests/simdjson/test_value.mojo
-    tests/simdjson/serialize/test_writer.mojo
-    tests/simdjson/serialize/test_roundtrip.mojo
-    tests/simdjson/serialize/test_float_lock.mojo
-    tests/simdjson/serialize/test_adversarial.mojo
-    tests/simdjson/serialize/test_reflect.mojo
-    tests/simdjson/serialize/test_fuzz_roundtrip.mojo
-    tests/simdjson/test_alloc_count.mojo
+    tests/jsonette/stage1/test_simd_primitives.mojo
+    tests/jsonette/stage1/test_classifier.mojo
+    tests/jsonette/stage1/test_string_mask.mojo
+    tests/jsonette/stage1/test_indexer.mojo
+    tests/jsonette/test_tape.mojo
+    tests/jsonette/stage2/test_numbers.mojo
+    tests/jsonette/stage2/test_swar_digits.mojo
+    tests/jsonette/stage2/test_strings.mojo
+    tests/jsonette/stage2/test_builder.mojo
+    tests/jsonette/stage2/test_eisel_lemire.mojo
+    tests/jsonette/stage2/test_slow_float.mojo
+    tests/jsonette/stage2/test_slow_float_adversarial.mojo
+    tests/jsonette/stage2/test_float_differential.mojo
+    tests/jsonette/test_parser.mojo
+    tests/jsonette/test_value.mojo
+    tests/jsonette/serialize/test_writer.mojo
+    tests/jsonette/serialize/test_roundtrip.mojo
+    tests/jsonette/serialize/test_float_lock.mojo
+    tests/jsonette/serialize/test_adversarial.mojo
+    tests/jsonette/serialize/test_reflect.mojo
+    tests/jsonette/serialize/test_fuzz_roundtrip.mojo
+    tests/jsonette/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
     tests/conformance/test_reject.mojo
 )

@@ -21,7 +21,7 @@ use the fixed-freq bench VPS for trustworthy figures.
 """
 
 from std.time import perf_counter_ns
-from simdjson.stage2.numbers import _parse_number
+from jsonette.stage2.numbers import _parse_number
 from bench._metrics import PerfGroup
 
 

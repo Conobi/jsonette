@@ -7,11 +7,11 @@ Loads test corpus files, runs Stage 1 to get structural positions, then:
 """
 
 from std.time import perf_counter_ns
-from simdjson.stage1.indexer import structural_index
-from simdjson.stage2.builder import build_tape
-from simdjson.stage2.strings import parse_string
-from simdjson.stage2.numbers import _parse_number
-from simdjson.tape import (
+from jsonette.stage1.indexer import structural_index
+from jsonette.stage2.builder import build_tape
+from jsonette.stage2.strings import parse_string
+from jsonette.stage2.numbers import _parse_number
+from jsonette.tape import (
     Tape,
     TAG_STRING,
     TAG_TRUE,
@@ -358,7 +358,7 @@ def _bench_container_ops(
 
 
 def main() raises:
-    print("=== simdjson-mojo Stage 2 Hotspot Breakdown ===")
+    print("=== jsonette Stage 2 Hotspot Breakdown ===")
     print()
     profile_file(String("tests/fixtures/corpus/twitter.json"), String("twitter.json"))
     profile_file(String("tests/fixtures/corpus/canada.json"), String("canada.json"))

@@ -1,4 +1,4 @@
-"""Honest Stage-1 vs Stage-2 throughput split for the simdjson-mojo parser.
+"""Honest Stage-1 vs Stage-2 throughput split for the jsonette parser.
 
 Methodology:
 - Min-time over many iterations (simdjson convention): WARMUP warmups + ITERS timed.
@@ -15,10 +15,10 @@ Run with -D ASSERT=none for a meaningful profile; compare to -D ASSERT=all.
 """
 
 from std.time import perf_counter_ns
-from simdjson.parser import Parser
-from simdjson.stage1.indexer import structural_index
-from simdjson.stage2.builder import build_tape
-from simdjson.tape import Tape
+from jsonette.parser import Parser
+from jsonette.stage1.indexer import structural_index
+from jsonette.stage2.builder import build_tape
+from jsonette.tape import Tape
 
 
 comptime WARMUP: Int = 5
@@ -192,7 +192,7 @@ def gen_number_heavy(n: Int) raises -> List[UInt8]:
 
 
 def main() raises:
-    print("simdjson-mojo stage split profile")
+    print("jsonette stage split profile")
     print("WARMUP=" + String(WARMUP) + " ITERS=" + String(ITERS) + " (min-time)")
     print()
     profile(String("twitter.json"), read_file(String("tests/fixtures/corpus/twitter.json")))

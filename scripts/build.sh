@@ -9,8 +9,8 @@ cd "$PROJECT_DIR"
 echo "Removing stale .mojopkg files..."
 rm -f *.mojopkg
 
-echo "Building simdjson..."
-mojo package simdjson -o simdjson.mojopkg
+echo "Building jsonette..."
+mojo package jsonette -o jsonette.mojopkg
 
 echo "All packages built."
 ls -lh *.mojopkg
