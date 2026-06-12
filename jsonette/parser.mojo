@@ -20,23 +20,23 @@ struct Parser(Movable):
     var count_stack: List[UInt32]     # unused after interleaving, kept for API compat
     var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)
     var positions: List[UInt32]       # reusable Stage 1 structural-offset buffer (grows only)
-    var tape: Tape                    # parser-owned tape, reused across parses (grows only)
+    var _tape: Tape                   # parser-owned tape, reused across parses (grows only)
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
         self.count_stack = List[UInt32](capacity=1024)
         self.padded = List[UInt8]()
         self.positions = List[UInt32]()
-        self.tape = Tape()  # empty Lists -> no allocation until first parse grows them
+        self._tape = Tape()  # empty Lists -> no allocation until first parse grows them
 
     def __init__(out self, *, deinit take: Self):
         self.container_stack = take.container_stack^
         self.count_stack = take.count_stack^
         self.padded = take.padded^
         self.positions = take.positions^
-        self.tape = take.tape^
+        self._tape = take._tape^
 
-    def parse(mut self, data: List[UInt8]) raises -> Document[origin_of(self.tape)]:
+    def parse(mut self, data: List[UInt8]) raises -> Document[origin_of(self._tape)]:
         """Parse JSON bytes into a Document view over this parser's tape.
 
         The returned Document borrows this parser's tape; it is valid only while
@@ -62,12 +62,12 @@ struct Parser(Movable):
         self.container_stack.resize(0, UInt32(0))
         self.count_stack.resize(0, UInt32(0))
         try:
-            build_tape(self.padded, input_len, self.positions, self.container_stack, self.count_stack, self.tape)
+            build_tape(self.padded, input_len, self.positions, self.container_stack, self.count_stack, self._tape)
         except e:
             raise format_parse_error(e.code, e.position)
-        return Document(self.tape)
+        return Document(self._tape)
 
-    def document(mut self) -> Document[origin_of(self.tape)]:
+    def document(mut self) -> Document[origin_of(self._tape)]:
         """Return a Document viewing this parser's most recent parse.
 
         Must be called only after at least one successful `parse(...)`. The
@@ -82,4 +82,4 @@ struct Parser(Movable):
         Lets embedders avoid reaching into the parser's internal tape field: a
         caller names the return type with `type_of(parser.document())`.
         """
-        return Document(self.tape)
+        return Document(self._tape)

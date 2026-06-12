@@ -13,7 +13,7 @@ def _make_bytes(s: String) -> List[UInt8]:
     return buf^
 
 
-def _parse[o: Origin[mut=True]](ref [o] parser: Parser, s: String) raises -> Document[origin_of(parser.tape)]:
+def _parse[o: Origin[mut=True]](ref [o] parser: Parser, s: String) raises -> Document[origin_of(parser._tape)]:
     """Parse `s` through the caller-owned parser, returning a view over its tape."""
     return parser.parse(_make_bytes(s))
 
