@@ -1,4 +1,4 @@
-from std.bit import count_trailing_zeros
+from std.bit import count_trailing_zeros, pop_count
 
 from jsonette.stage1.simd_ops import SimdInput
 from jsonette.stage1.classifier import classify, CharacterBlock
@@ -57,13 +57,15 @@ def structural_index(
         positions.resize(0, UInt32(0))
         return
 
-    # Capacity-based reuse: worst case is one structural per byte, so the writer
-    # can index up to input_len - 1. Only grow (and count) when too small.
-    if positions.capacity < input_len:
+    # Capacity-based reuse: worst case is one structural per byte. The branchless
+    # 8-at-a-time emit can over-write up to 7 entries past the true count, so the
+    # buffer carries EMIT_SLACK extra slots; those over-writes are never read.
+    comptime EMIT_SLACK = 8
+    if positions.capacity < input_len + EMIT_SLACK:
         record_alloc()  # genuine grow: the sole heap alloc on this path
-        positions.reserve(input_len)
+        positions.reserve(input_len + EMIT_SLACK)
     # Length must cover the raw-pointer write phase (writer indexes [write_pos]).
-    positions.resize(unsafe_uninit_length=input_len)
+    positions.resize(unsafe_uninit_length=input_len + EMIT_SLACK)
 
     var num_chunks = (input_len + 63) // 64
 
@@ -81,12 +83,42 @@ def structural_index(
     @parameter
     @always_inline("nodebug")
     def emit(base_idx: UInt32, bits: UInt64):
-        """Write offsets of each set bit (relative to base_idx) into positions."""
+        """Write offsets of each set bit (relative to base_idx) into positions.
+
+        Branchless 8-at-a-time scatter (simdjson AVX2-kernel style): each
+        iteration writes 8 indices unconditionally and advances a local cursor by
+        8, but write_pos advances only by the true popcount. The spurious tail
+        (<8 entries, where count_trailing_zeros(0)==64) is overwritten by the
+        next emit or lands in the buffer's EMIT_SLACK and is never read. This
+        removes the per-set-bit branch (one mispredict per structural char) that
+        the stage-1 profile showed was ~2/3 of stage-1 cost on object input.
+        """
+        if bits == 0:
+            return
+        var cnt = Int(pop_count(bits))
         var b = bits
-        while b != 0:
-            out_ptr[write_pos] = base_idx + UInt32(count_trailing_zeros(b))
-            write_pos += 1
+        var w = write_pos
+        var done = 0
+        while done < cnt:
+            out_ptr[w + 0] = base_idx + UInt32(count_trailing_zeros(b))
             b = b & (b - 1)
+            out_ptr[w + 1] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            out_ptr[w + 2] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            out_ptr[w + 3] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            out_ptr[w + 4] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            out_ptr[w + 5] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            out_ptr[w + 6] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            out_ptr[w + 7] = base_idx + UInt32(count_trailing_zeros(b))
+            b = b & (b - 1)
+            w += 8
+            done += 8
+        write_pos += cnt
 
     for chunk_idx in range(num_chunks):
         var base_idx = UInt32(chunk_idx * 64)
@@ -128,11 +160,12 @@ def structural_index(
     # Flush last chunk
     emit(prev_base, prev_structurals)
 
-    # In-place filter: compact valid positions (< input_len) to front
-    var write = 0
-    for i in range(write_pos):
-        if Int(out_ptr[i]) < input_len:
-            out_ptr[write] = out_ptr[i]
-            write += 1
+    # Positions are emitted in strictly ascending order (chunks in order, bits
+    # low->high within each chunk), so any position >= input_len — the spurious
+    # structurals from the final chunk's zero-padding — forms a contiguous tail.
+    # Trim that tail instead of filtering all n positions (was an O(n) pass with
+    # a branch per structural that filtered only ~1 entry).
+    while write_pos > 0 and Int(out_ptr[write_pos - 1]) >= input_len:
+        write_pos -= 1
     # Shrink to actual structural count so Stage 2 sees the right len().
-    positions.resize(write, UInt32(0))
+    positions.resize(write_pos, UInt32(0))
