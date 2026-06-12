@@ -8,8 +8,13 @@ from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
 
 
-struct Parser:
-    """JSON parser. Orchestrates Stage 1 + Stage 2."""
+struct Parser(Movable):
+    """JSON parser. Orchestrates Stage 1 + Stage 2.
+
+    Movable: the parser owns its reusable buffers and tape; moving it transfers
+    that ownership (the existing `deinit take` constructor is the move). Any
+    `Document` borrowing the old location is invalidated by the move, enforced by
+    the Document's origin parameter."""
 
     var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
     var count_stack: List[UInt32]     # unused after interleaving, kept for API compat
@@ -60,4 +65,21 @@ struct Parser:
             build_tape(self.padded, input_len, self.positions, self.container_stack, self.count_stack, self.tape)
         except e:
             raise format_parse_error(e.code, e.position)
+        return Document(self.tape)
+
+    def document(mut self) -> Document[origin_of(self.tape)]:
+        """Return a Document viewing this parser's most recent parse.
+
+        Must be called only after at least one successful `parse(...)`. The
+        returned Document borrows this parser's tape; it is valid only while the
+        parser is alive and is neither reparsed nor moved. A subsequent
+        `parse(...)` reuses the tape, so any earlier Document then reflects the
+        new data (reparse invalidation) — obtain a fresh Document after each
+        parse.
+
+        Takes `mut self` to bind the borrow's origin as mutable, which the
+        Document's origin parameter requires; it does not modify the parser.
+        Lets embedders avoid reaching into the parser's internal tape field: a
+        caller names the return type with `type_of(parser.document())`.
+        """
         return Document(self.tape)

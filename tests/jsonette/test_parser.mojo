@@ -109,7 +109,43 @@ def test_parser_reused_across_parses() raises:
     assert_equal(doc2.root().at(doc2, 2).get_uint(doc2), UInt64(3))
 
 
+def _move_through[T: Movable](var t: T) -> T:
+    """Round-trip a value through an owned generic slot requiring Movable."""
+    return t^
+
+
+def test_parser_movable_through_generic() raises:
+    """Parser conforms to Movable, so it can move through a [T: Movable] slot
+    and the moved instance remains functional (state transferred, not copied)."""
+    var parser = Parser()
+    var moved = _move_through(parser^)
+    var doc = moved.parse(_make_bytes(String("true")))
+    assert_equal(doc.root().get_bool(doc), True)
+
+
+def test_document_accessor_returns_current_parse() raises:
+    """Parser.document() returns a Document over the most recent parse's tape."""
+    var parser = Parser()
+    _ = parser.parse(_make_bytes(String("42")))
+    var doc = parser.document()
+    assert_equal(doc.root().get_uint(doc), UInt64(42))
+
+
+def test_document_accessor_reflects_latest_parse() raises:
+    """Reparse invalidation: the tape is reused across parses, so a view obtained
+    after reparsing sees the new data, not the earlier parse's."""
+    var parser = Parser()
+    _ = parser.parse(_make_bytes(String('{"a": 1}')))
+    _ = parser.parse(_make_bytes(String("[1, 2, 3]")))
+    var doc = parser.document()
+    assert_equal(doc.root().count(doc), 3)
+    assert_equal(doc.root().at(doc, 2).get_uint(doc), UInt64(3))
+
+
 def main() raises:
+    test_parser_movable_through_generic()
+    test_document_accessor_returns_current_parse()
+    test_document_accessor_reflects_latest_parse()
     test_document_root()
     test_parser_parse_true()
     test_parser_parse_false()
