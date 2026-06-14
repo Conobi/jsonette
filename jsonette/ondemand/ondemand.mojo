@@ -104,6 +104,11 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
         if r.tag != TAG_INT64 and r.tag != TAG_UINT64:
             raise Error("get_int: value is not an integer")
+        # A positive integer above Int64.MAX is tagged UINT64; bitcasting it would
+        # silently return a negative Int64. Raise instead (matches the DOM), so a
+        # valid-but-out-of-range integer never returns silently wrong bits.
+        if r.tag == TAG_UINT64 and r.value > UInt64(0x7FFF_FFFF_FFFF_FFFF):
+            raise Error("get_int: integer out of Int64 range")
         return bitcast[DType.int64](r.value)
 
 

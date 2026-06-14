@@ -230,6 +230,30 @@ def test_find_field_unterminated_key_raises() raises:
     assert_true(raised, "find_field on an unterminated key must raise, not crash")
 
 
+def test_get_int_uint64_overflow_raises() raises:
+    """A positive integer above Int64.MAX (tagged uint64) raises, not wraps.
+
+    `{"id":18446744073709551615}` (uint64 max) must raise from get_int rather
+    than silently returning -1; `9223372036854775807` (Int64.MAX) is fine.
+    """
+    var data = _make_bytes(String('{"id":18446744073709551615}'))
+    var parser = Parser()
+    var root = parser.iter(data)
+    var raised = False
+    try:
+        _ = root.find_field(String("id")).get_int()
+    except:
+        raised = True
+    assert_true(raised, "get_int on a uint64 above Int64.MAX must raise")
+
+    var data2 = _make_bytes(String('{"m":9223372036854775807}'))
+    var parser2 = Parser()
+    var root2 = parser2.iter(data2)
+    assert_equal(
+        root2.find_field(String("m")).get_int(), Int64(9223372036854775807)
+    )
+
+
 def main() raises:
     test_find_field_get_string()
     test_find_field_get_string_last_field()
@@ -247,4 +271,5 @@ def main() raises:
     test_container_as_leaf_raises()
     test_find_field_non_object_root_raises()
     test_find_field_unterminated_key_raises()
+    test_get_int_uint64_overflow_raises()
     print("test_flat_object: all passed")
