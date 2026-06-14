@@ -31,6 +31,7 @@ from jsonette.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 
 
 comptime _QUOTE = UInt8(0x22)  # '"'
+comptime _BACKSLASH = UInt8(0x5C)  # '\'
 comptime _COLON = UInt8(0x3A)  # ':'
 comptime _LBRACE = UInt8(0x7B)  # '{'
 comptime _RBRACE = UInt8(0x7D)  # '}'
@@ -234,28 +235,134 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         return self._first_byte() == _LBRACK
 
 
+@always_inline("nodebug")
+def _unescaped_key_into(
+    ip: UnsafePointer[UInt8, _],
+    key_pos: Int,
+    input_len: Int,
+    mut scratch: List[UInt8],
+) raises -> String:
+    """Unescape the key string opening at `ip[key_pos]` and return it as a String.
+
+    Reuses `parse_string` (which writes `[u32 len LE][bytes]` into `scratch`,
+    growing it to `input_len + 64` first), then reads the length prefix and the
+    UTF-8 bytes back. Shared by `find_field`'s escaped-key compare and
+    `Field.key()` so both unescape identically.
+    """
+    var needed = input_len + 64  # parse_string requires input_len + 64
+    if len(scratch) < needed:
+        scratch = List[UInt8](unsafe_uninit_length=needed)
+    _ = parse_string(ip, key_pos, input_len, scratch.unsafe_ptr(), 0)
+    var sp = scratch.unsafe_ptr()
+    var ln = Int(
+        UInt32(sp[0])
+        | (UInt32(sp[1]) << 8)
+        | (UInt32(sp[2]) << 16)
+        | (UInt32(sp[3]) << 24)
+    )
+    return String(StringSlice(ptr=sp + 4, length=ln))
+
+
+struct Field[o: Origin[mut=True]](Movable):
+    """A single top-level object field (key + value) yielded by forward iteration.
+
+    Borrows the owning `Parser` directly through an origin-tracked pointer (a
+    1-hop chain, like `ValueHandle`), recording the structural indices of the
+    key's open quote and of its value. `key()` returns the UNESCAPED key;
+    `value()` hands back a `ValueHandle` at the value.
+
+    Lifetime: a `Field` (and the `ValueHandle` it yields) is live only until the
+    issuing `ObjectHandle` cursor advances again (the next `next_field`) — the
+    cursor is forward-only and the unescape scratch is shared. Read the field's
+    key/value before calling `next_field` again. Like all on-demand handles it is
+    also valid only while the `Parser` is alive and is neither reparsed nor moved.
+    """
+
+    var _parser: Pointer[Parser, Self.o]
+    var _key_si: Int     # structural index of the key's open quote
+    var _value_si: Int   # structural index of the value (key_si + 3)
+    var _input_len: Int  # real (unpadded) input length
+
+    def __init__(
+        out self,
+        ref [Self.o] parser: Parser,
+        key_si: Int,
+        value_si: Int,
+        input_len: Int,
+    ):
+        """Borrow `parser`; record the key/value structural indices and length."""
+        self._parser = Pointer(to=parser)
+        self._key_si = key_si
+        self._value_si = value_si
+        self._input_len = input_len
+
+    def __init__(out self, *, deinit take: Self):
+        """Move constructor: transfer the borrowed-parser pointer and fields."""
+        self._parser = take._parser
+        self._key_si = take._key_si
+        self._value_si = take._value_si
+        self._input_len = take._input_len
+
+    @no_inline
+    def key(self) raises -> String:
+        """Return this field's UNESCAPED key as an owned String.
+
+        Unescapes the key string via the shared `parse_string` (handling JSON
+        escapes correctly), into the parser's reusable on-demand scratch buffer.
+        Note the scratch is shared with `value().get_string()`: call `key()`
+        before reading a sibling string value if both are needed.
+        """
+        ref p = self._parser[]
+        var key_pos = Int(p.positions[self._key_si])
+        return _unescaped_key_into(
+            p.padded.unsafe_ptr(), key_pos, self._input_len, p._od_scratch
+        )
+
+    @always_inline("nodebug")
+    def value(self) -> ValueHandle[Self.o]:
+        """Return a `ValueHandle` at this field's value, sharing this origin."""
+        return ValueHandle[Self.o](self._parser[], self._value_si, self._input_len)
+
+
 struct ObjectHandle[o: Origin[mut=True]](Movable):
     """Forward navigator over a flat top-level JSON object.
 
-    Borrows the owning `Parser` through an origin-tracked pointer. `find_field`
-    scans the object's structural positions left to right and returns a
-    `ValueHandle` at the matched key's value, unified with this handle's origin
-    so the whole borrow chain shares one lifetime root. Valid only while the
-    `Parser` is alive and is neither reparsed nor moved.
+    Borrows the owning `Parser` through an origin-tracked pointer. Two ways to
+    read fields:
+
+    - `find_field(key)` re-scans the object's structural positions left to right
+      from the start (independent of the cursor) and returns a `ValueHandle` at
+      the matched key's value, unified with this handle's origin so the whole
+      borrow chain shares one lifetime root.
+    - Forward iteration via `at_end()` / `next_field()`, which walk the
+      TOP-LEVEL fields in document order using a mutable cursor `_si`. Each
+      `next_field` advances the cursor PAST the value (depth-aware, skipping
+      nested containers) and yields a `Field`. Forward-only: a yielded `Field`
+      is live until the cursor advances again.
+
+    `find_field` is cursor-independent, so the two styles do not interfere.
+    Valid only while the `Parser` is alive and is neither reparsed nor moved.
     """
 
     var _parser: Pointer[Parser, Self.o]
     var _input_len: Int
+    var _si: Int  # forward-iteration cursor: a top-level key, or the root '}'
 
     def __init__(out self, ref [Self.o] parser: Parser, input_len: Int):
-        """Borrow `parser` as a cursor over the root object (positions[0] is '{')."""
+        """Borrow `parser` as a cursor over the root object (positions[0] is '{').
+
+        The forward-iteration cursor `_si` starts at 1 — the first top-level key
+        (positions[0] is the root `'{'`).
+        """
         self._parser = Pointer(to=parser)
         self._input_len = input_len
+        self._si = 1  # first top-level key (positions[0] is the root '{')
 
     def __init__(out self, *, deinit take: Self):
-        """Move constructor: transfer the borrowed-parser pointer and length."""
+        """Move constructor: transfer the borrowed-parser pointer, length, cursor."""
         self._parser = take._parser
         self._input_len = take._input_len
+        self._si = take._si
 
     @no_inline
     def _skip_value(self, value_si: Int) -> Int:
@@ -296,6 +403,55 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
             return value_si + 1
 
     @no_inline
+    def at_end(self) -> Bool:
+        """Return True when the forward cursor is past the last top-level field.
+
+        True when the cursor `_si` has reached the root `'}'`, run off the end of
+        the positions list (truncated input), or landed on a position that is not
+        the open quote of a complete key (no closing-quote structural at `_si+1`).
+        In all those cases `next_field` would have nothing well-formed to yield.
+        """
+        ref p = self._parser[]
+        var n = len(p.positions)
+        if self._si >= n:
+            return True
+        var b = p.padded.unsafe_ptr()[Int(p.positions[self._si])]
+        if b == _RBRACE:
+            return True
+        # A complete top-level key needs its closing-quote structural at _si+1;
+        # if that is missing the object is exhausted/truncated — treat as end so
+        # callers never read positions out of bounds.
+        if self._si + 1 >= n:
+            return True
+        return False
+
+    @no_inline
+    def next_field(mut self) raises -> Field[Self.o]:
+        """Advance the forward cursor past one top-level field and yield it.
+
+        Precondition: `at_end()` is False (the cursor is at a complete top-level
+        key). Captures `(key_si, value_si = key_si + 3)`, advances the cursor PAST
+        the whole value via the depth-aware `_skip_value` (so nested containers
+        are skipped wholesale, never descended), then past a following comma, and
+        returns a `Field` borrowing the parser. Raises if the key has no value
+        (truncated input) rather than yielding a `Field` whose value index is out
+        of bounds. Forward-only: the yielded `Field` is live until the next call.
+        """
+        ref p = self._parser[]
+        var ip = p.padded.unsafe_ptr()
+        var n = len(p.positions)
+        var key_si = self._si
+        var value_si = key_si + 3
+        if value_si >= n:
+            raise Error("next_field: top-level key has no value")
+        # Advance the cursor past the value (depth-aware) and an optional comma.
+        var nxt = self._skip_value(value_si)
+        if nxt < n and ip[Int(p.positions[nxt])] == _COMMA:
+            nxt += 1
+        self._si = nxt
+        return Field[Self.o](p, key_si, value_si, self._input_len)
+
+    @no_inline
     def find_field(self, key: String) raises -> ValueHandle[Self.o]:
         """Find the value for `key` in the flat root object; raise if absent.
 
@@ -306,7 +462,10 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
         their interior keys never masquerade as top-level keys. On a key match,
         returns a `ValueHandle` at the value's structural index (`si+3`), raising
         if that value is missing (truncated input) rather than indexing past the
-        positions list. M0 keys are matched byte-for-byte (no escape handling).
+        positions list. Keys are matched ESCAPE-AWARE: a candidate key with no
+        backslash is byte-compared on the fast path; a candidate with an escape is
+        unescaped (via `parse_string`) and compared to the search key (which is a
+        normal, already-unescaped Mojo String).
         """
         ref p = self._parser[]
         var ip = p.padded.unsafe_ptr()
@@ -328,13 +487,29 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
             var pos = Int(p.positions[si])
             var kclose = Int(p.positions[si + 1])
             var klen = kclose - pos - 1
-            var matched = klen == key.byte_length()
-            if matched:
-                var kb = key.as_bytes()
-                for k in range(klen):
-                    if ip[pos + 1 + k] != kb[k]:
-                        matched = False
-                        break
+            # Fast path: a candidate key with no backslash can be byte-compared
+            # directly against the (already-unescaped) search key. A candidate
+            # with an escape must be unescaped before comparison — its raw byte
+            # span is longer than its decoded form.
+            var has_escape = False
+            for k in range(klen):
+                if ip[pos + 1 + k] == _BACKSLASH:
+                    has_escape = True
+                    break
+            var matched: Bool
+            if has_escape:
+                var decoded = _unescaped_key_into(
+                    ip, pos, self._input_len, p._od_scratch
+                )
+                matched = decoded == key
+            else:
+                matched = klen == key.byte_length()
+                if matched:
+                    var kb = key.as_bytes()
+                    for k in range(klen):
+                        if ip[pos + 1 + k] != kb[k]:
+                            matched = False
+                            break
             if matched:
                 if value_si >= n:
                     raise Error("field has no value: " + key)
