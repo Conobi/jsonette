@@ -24,6 +24,7 @@ TESTS=(
     tests/jsonette/ondemand/test_fuzz_flat.mojo
     tests/jsonette/ondemand/test_leaf_types.mojo
     tests/jsonette/ondemand/test_leaf_errors.mojo
+    tests/jsonette/ondemand/test_lazy_contract.mojo
     tests/jsonette/ondemand/test_iteration.mojo
     tests/jsonette/ondemand/test_nested_object.mojo
     tests/jsonette/ondemand/test_array.mojo
