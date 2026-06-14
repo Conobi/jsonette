@@ -7,6 +7,7 @@ from jsonette._alloc_count import record_alloc
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
 from jsonette.ondemand.ondemand import ObjectHandle
+from jsonette.ondemand.validate import _validate_document
 
 
 struct Parser(Movable):
@@ -117,3 +118,54 @@ struct Parser(Movable):
         structural_index(self.padded, input_len, self.positions)
         # Root object: its first key is positions[1] (positions[0] is the '{').
         return ObjectHandle(self, input_len, 1)
+
+    def validate(mut self, data: List[UInt8]) raises -> None:
+        """Validate JSON bytes strictly (RFC 8259); build NO tape, return no value.
+
+        Runs Stage 1 (reusing the same grow-only padded/positions buffers as
+        `parse`/`iter`), then walks the structural index with a strict
+        recursive-descent grammar that materialises nothing. Returns normally iff
+        the document is valid RFC 8259; raises a `ParseError` (formatted, like
+        `parse`) on any malformed input — empty/whitespace-only document,
+        truncated or mismatched container, trailing content, a glued or invalid
+        number, a leading/double/trailing comma, a missing colon/comma, a
+        non-string key, a bare structural byte, an unclosed string, or a bad
+        escape. The nesting-depth bound matches the tape builder's, so the
+        validator and the DOM reject deeply-nested input at the same depth.
+
+        Unlike `iter`, this is a whole-document validator, not lazy navigation:
+        every structural is grammar-checked and every leaf is parsed for
+        validity. It allocates no `Document` and exposes no handle.
+        """
+        var input_len = len(data)
+
+        # Reusable padded buffer: input + 128 zero bytes (SIMD overread headroom).
+        # Same grow-only buffer the tape and On-Demand paths use.
+        var num_chunks = (input_len + 63) // 64
+        var padded_len = num_chunks * 64 + 128
+        if len(self.padded) < padded_len:
+            record_alloc()
+            self.padded = List[UInt8](unsafe_uninit_length=padded_len)
+        memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+
+        # Stage 1 only — no tape is built on the validate path.
+        structural_index(self.padded, input_len, self.positions)
+
+        # The shared leaf parsers (parse_string, _parse_number via the strings
+        # path) write into / read from a scratch buffer sized input_len + 64;
+        # grow it once like get_string does, reusing the parser-owned buffer.
+        var needed = input_len + 64
+        if len(self._od_scratch) < needed:
+            self._od_scratch = List[UInt8](unsafe_uninit_length=needed)
+
+        try:
+            _validate_document(
+                self.padded.unsafe_ptr(),
+                self.positions,
+                len(self.positions),
+                input_len,
+                self._od_scratch,
+            )
+        except e:
+            raise format_parse_error(e.code, e.position)
