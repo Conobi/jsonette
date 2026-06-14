@@ -1,24 +1,35 @@
-"""On-Demand (lazy) JSON reader — M0: flat top-level object.
+"""On-Demand (lazy) JSON reader — navigable handles over the structural index.
 
 A second, additive parsing layer beside the DOM. Stage 1 runs (the structural
-index is built) but NO tape is materialised; a leaf is parsed only when its value
-is actually read. This file holds the M0 surface:
+index is built) but NO tape is materialised; a leaf is parsed and validated only
+when its value is actually read. This file holds the navigation surface:
 
-- `ObjectHandle[o]` — a forward navigator over the flat root object's structural
-  positions, obtained from `Parser.iter(...)`.
-- `ValueHandle[o]` — a lazily-parsed leaf, obtained from `ObjectHandle.find_field`.
+- `ObjectHandle[o]` — forward navigator over an object's structural positions
+  (root object via `Parser.iter(...)`, nested via `ValueHandle.get_object`):
+  `find_field(key)` (depth-aware, escape-aware) and forward iteration
+  (`at_end`/`next_field` yielding `Field`).
+- `ArrayHandle[o]` — forward navigator over an array (`ValueHandle.get_array`):
+  `at_end`/`next_element` yielding `ValueHandle`.
+- `ValueHandle[o]` — a lazily-parsed value: leaf accessors (`get_string`,
+  `get_int`/`get_uint`/`get_double`, `get_bool`, `is_null`) and byte-level type
+  predicates (`is_string`/`is_number`/`is_bool`/`is_object`/`is_array`), plus
+  `get_object`/`get_array` to descend.
+- `Field[o]` — a `(key, value)` pair from object iteration.
 
-Both handles borrow the owning `Parser` through an origin-tracked
+Validation is **lazy / path-local**: a leaf is fully validated on access (a
+malformed accessed leaf raises — incl. a number's `_scalar_token_ok` trailing-junk
+guard), but structure off the navigated path is NOT checked, and a skipped
+malformed sibling is tolerated. For a strict whole-document yes/no, use
+`Parser.validate` (the no-tape full walk in `validate.mojo`).
+
+All handles borrow the owning `Parser` through an origin-tracked
 `Pointer[Parser, Self.o]` (the verified pattern; a bare `UnsafePointer` field
 miscompiles on 1.0.0b1). They reuse stage 1's `structural_index` and the leaf
-parsers `parse_string` / `_parse_number` as-is. The handles are valid only while
-their `Parser` is alive and is neither reparsed nor moved — the same lifetime
-contract as `Document[o]`. Callers never name these `[o]`-parametric types: the
-public entry `Parser.iter(...)` returns the root handle by inference.
-
-M0 scope: a flat top-level object whose root is `{...}` (positions[0] is `'{'`),
-string and integer leaves only. Arrays, nesting, other leaf types, key-escape
-handling, and validation modes are later milestones.
+parsers `parse_string` / `_parse_number` as-is. A handle is valid only while its
+`Parser` is alive and is neither reparsed nor moved (the same lifetime contract as
+`Document[o]`) and, being forward-only, only until its issuing cursor advances
+again. Callers never name these `[o]`-parametric types: the public entries
+(`Parser.iter`, the accessors) return handles by inference.
 """
 
 from std.memory import bitcast
