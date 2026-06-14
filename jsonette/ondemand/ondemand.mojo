@@ -31,7 +31,11 @@ from jsonette.tape import TAG_INT64, TAG_UINT64
 
 comptime _QUOTE = UInt8(0x22)  # '"'
 comptime _COLON = UInt8(0x3A)  # ':'
+comptime _LBRACE = UInt8(0x7B)  # '{'
 comptime _RBRACE = UInt8(0x7D)  # '}'
+comptime _LBRACK = UInt8(0x5B)  # '['
+comptime _RBRACK = UInt8(0x5D)  # ']'
+comptime _COMMA = UInt8(0x2C)  # ','
 
 
 struct ValueHandle[o: Origin[mut=True]](Movable):
@@ -65,10 +69,13 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
 
         Parses lazily into the parser's reusable scratch buffer via the shared
         `parse_string`, then reads the 4-byte little-endian length prefix and the
-        UTF-8 bytes it wrote. The value must be a JSON string (M0 leaf type).
+        UTF-8 bytes it wrote. Raises if the value is not a JSON string (mirroring
+        `get_int`'s tag guard), so a non-string never returns silently empty.
         """
         ref p = self._parser[]
         var pos = Int(p.positions[self._si])
+        if p.padded.unsafe_ptr()[pos] != _QUOTE:
+            raise Error("get_string: value is not a string")
         var needed = self._input_len + 64  # parse_string requires input_len + 64
         if len(p._od_scratch) < needed:
             p._od_scratch = List[UInt8](unsafe_uninit_length=needed)
@@ -124,43 +131,81 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
         self._input_len = take._input_len
 
     @no_inline
+    def _skip_value(self, value_si: Int) -> Int:
+        """Return the structural index just past the value starting at `value_si`.
+
+        Depth-aware so the cursor never descends into a nested value's interior:
+
+        - Object/array (`'{'`/`'['`): scan forward counting nesting depth (+1 on
+          `'{'`/`'['`, -1 on `'}'`/`']'`); return the index AFTER the matching
+          close. If the scan runs off the end (truncated input), return `n`.
+        - String (`'"'`): two structurals (open + close), so `value_si + 2`.
+        - Number/literal: a single structural, so `value_si + 1`.
+
+        Modelled on the depth-aware skip used by the multi-hop on-demand PoC.
+        """
+        ref p = self._parser[]
+        var ip = p.padded.unsafe_ptr()
+        var n = len(p.positions)
+        if value_si >= n:
+            return n  # truncated: key had no value
+        var vb = ip[Int(p.positions[value_si])]
+        if vb == _LBRACE or vb == _LBRACK:
+            var depth = 0
+            var si = value_si
+            while si < n:
+                var ch = ip[Int(p.positions[si])]
+                if ch == _LBRACE or ch == _LBRACK:
+                    depth += 1
+                elif ch == _RBRACE or ch == _RBRACK:
+                    depth -= 1
+                    if depth == 0:
+                        return si + 1
+                si += 1
+            return n  # truncated: matching close never found
+        elif vb == _QUOTE:
+            return value_si + 2
+        else:
+            return value_si + 1
+
+    @no_inline
     def find_field(self, key: String) raises -> ValueHandle[Self.o]:
         """Find the value for `key` in the flat root object; raise if absent.
 
-        Walks the object's structural positions: a `'"'` whose closing quote is
-        the very next structural (stage 1 masks in-string operators/scalars and
-        excludes escaped quotes — see the indexer's string masking — so a string's
-        only interior structural is its closing quote) and which is followed by
-        `':'` is a KEY. String pairs advance the cursor by 2. On a key match,
-        returns a `ValueHandle` at the value's structural index (the structural
-        after the `':'`). M0 keys are matched byte-for-byte (no escape handling).
+        Walks the root object's KEY→VALUE pairs left to right, DEPTH-AWARE: each
+        top-level key is a string at `si` (close quote at `si+1`, `':'` at `si+2`,
+        value at `si+3`); after a non-matching pair the cursor jumps past the whole
+        value via `_skip_value`, so nested objects/arrays are skipped wholesale and
+        their interior keys never masquerade as top-level keys. On a key match,
+        returns a `ValueHandle` at the value's structural index (`si+3`), raising
+        if that value is missing (truncated input) rather than indexing past the
+        positions list. M0 keys are matched byte-for-byte (no escape handling).
         """
         ref p = self._parser[]
         var ip = p.padded.unsafe_ptr()
         var n = len(p.positions)
         var si = 1  # skip the root '{' at positions[0]
         while si < n:
-            var pos = Int(p.positions[si])
-            var b = ip[pos]
+            var b = ip[Int(p.positions[si])]
             if b == _RBRACE:
-                break
-            if b == _QUOTE:
-                # A string. Its closing quote is positions[si+1]; the structural
-                # after that (positions[si+2]) is ':' iff this string is a KEY.
-                var after = si + 2
-                if after < n and ip[Int(p.positions[after])] == _COLON:
-                    var kclose = Int(p.positions[si + 1])
-                    var klen = kclose - pos - 1
-                    var matched = klen == key.byte_length()
-                    if matched:
-                        var kb = key.as_bytes()
-                        for k in range(klen):
-                            if ip[pos + 1 + k] != kb[k]:
-                                matched = False
-                                break
-                    if matched:
-                        return ValueHandle[Self.o](p, after + 1, self._input_len)
-                si += 2  # advance past this string pair (key or value)
-            else:
+                break  # end of root object
+            # `si` is a top-level KEY (a string): value structural is at si+3.
+            var value_si = si + 3
+            var pos = Int(p.positions[si])
+            var kclose = Int(p.positions[si + 1])
+            var klen = kclose - pos - 1
+            var matched = klen == key.byte_length()
+            if matched:
+                var kb = key.as_bytes()
+                for k in range(klen):
+                    if ip[pos + 1 + k] != kb[k]:
+                        matched = False
+                        break
+            if matched:
+                if value_si >= n:
+                    raise Error("field has no value: " + key)
+                return ValueHandle[Self.o](p, value_si, self._input_len)
+            si = self._skip_value(value_si)  # depth-aware advance past the value
+            if si < n and ip[Int(p.positions[si])] == _COMMA:
                 si += 1
         raise Error("field not found: " + key)
