@@ -194,6 +194,42 @@ def test_container_as_leaf_raises() raises:
     assert_true(str_raised, "get_string on an object value must raise")
 
 
+def test_find_field_non_object_root_raises() raises:
+    """A non-object root must fail safe (raise), never read OOB.
+
+    M0 assumes an object root; a string/number/array root (`"x"`, `42`, `[1,2]`)
+    must raise from find_field rather than crash or read past the positions list.
+    Run under -D ASSERT=all: the key-close index (si+1) must stay in bounds.
+    """
+    for ref s in [String('"x"'), String("42"), String("[1,2]")]:
+        var data = _make_bytes(s)
+        var parser = Parser()
+        var root = parser.iter(data)
+        var raised = False
+        try:
+            _ = root.find_field(String("x"))
+        except:
+            raised = True
+        assert_true(raised, "find_field on a non-object root must raise: " + s)
+
+
+def test_find_field_unterminated_key_raises() raises:
+    """An unterminated final key (`{\"a`) raises, never reads OOB at si+1.
+
+    Run under -D ASSERT=all: the missing closing-quote structural must be detected
+    by the bounds guard, not by indexing past the positions list.
+    """
+    var data = _make_bytes(String('{"a'))
+    var parser = Parser()
+    var root = parser.iter(data)
+    var raised = False
+    try:
+        _ = root.find_field(String("a"))
+    except:
+        raised = True
+    assert_true(raised, "find_field on an unterminated key must raise, not crash")
+
+
 def main() raises:
     test_find_field_get_string()
     test_find_field_get_string_last_field()
@@ -209,4 +245,6 @@ def main() raises:
     test_get_int_on_string_raises()
     test_get_int_on_float_raises()
     test_container_as_leaf_raises()
+    test_find_field_non_object_root_raises()
+    test_find_field_unterminated_key_raises()
     print("test_flat_object: all passed")

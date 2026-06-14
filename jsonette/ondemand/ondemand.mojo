@@ -189,6 +189,13 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
             var b = ip[Int(p.positions[si])]
             if b == _RBRACE:
                 break  # end of root object
+            # A complete top-level key needs at least its closing-quote structural
+            # at si+1. If it is missing — a non-object root (e.g. `"x"`, `42`,
+            # `[1,2]`) or an unterminated key (`{"a`) — no further complete key
+            # exists, so the field is absent: break instead of reading positions
+            # out of bounds (the OOB an earlier pass left at this index).
+            if si + 1 >= n:
+                break
             # `si` is a top-level KEY (a string): value structural is at si+3.
             var value_si = si + 3
             var pos = Int(p.positions[si])
