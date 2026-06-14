@@ -26,7 +26,8 @@ from std.memory import bitcast
 from jsonette.parser import Parser
 from jsonette.stage2.strings import parse_string
 from jsonette.stage2.numbers import _parse_number
-from jsonette.tape import TAG_INT64, TAG_UINT64
+from jsonette.stage2.builder import _validate_true, _validate_false, _validate_null
+from jsonette.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 
 
 comptime _QUOTE = UInt8(0x22)  # '"'
@@ -36,6 +37,12 @@ comptime _RBRACE = UInt8(0x7D)  # '}'
 comptime _LBRACK = UInt8(0x5B)  # '['
 comptime _RBRACK = UInt8(0x5D)  # ']'
 comptime _COMMA = UInt8(0x2C)  # ','
+comptime _MINUS = UInt8(0x2D)  # '-'
+comptime _DIGIT0 = UInt8(0x30)  # '0'
+comptime _DIGIT9 = UInt8(0x39)  # '9'
+comptime _LOWER_T = UInt8(0x74)  # 't'
+comptime _LOWER_F = UInt8(0x66)  # 'f'
+comptime _LOWER_N = UInt8(0x6E)  # 'n'
 
 
 struct ValueHandle[o: Origin[mut=True]](Movable):
@@ -110,6 +117,121 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         if r.tag == TAG_UINT64 and r.value > UInt64(0x7FFF_FFFF_FFFF_FFFF):
             raise Error("get_int: integer out of Int64 range")
         return bitcast[DType.int64](r.value)
+
+    @no_inline
+    def get_uint(self) raises -> UInt64:
+        """Parse this value as a non-negative JSON integer and return it as UInt64.
+
+        Parses lazily via the shared `_parse_number` and raises if the value is
+        not an integer (e.g. a float or string). A negative integer (tagged
+        INT64 with a negative payload) cannot be represented as unsigned, so it
+        raises rather than wrapping. A UINT64-tagged value is returned directly;
+        a non-negative INT64 is reinterpreted from its signed bits.
+        """
+        ref p = self._parser[]
+        var pos = Int(p.positions[self._si])
+        var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
+        if r.tag == TAG_UINT64:
+            return r.value
+        if r.tag != TAG_INT64:
+            raise Error("get_uint: value is not an integer")
+        var signed = bitcast[DType.int64](r.value)
+        if signed < 0:
+            raise Error("get_uint: integer is negative")
+        return UInt64(signed)
+
+    @no_inline
+    def get_double(self) raises -> Float64:
+        """Parse this value as any JSON number and return it as Float64.
+
+        Parses lazily via the shared `_parse_number` and raises if the value is
+        not a number. A FLOAT64-tagged value is reinterpreted from its raw bits;
+        an INT64 or UINT64 integer is widened to Float64 (with the usual
+        round-to-nearest loss for magnitudes above 2^53).
+        """
+        ref p = self._parser[]
+        var pos = Int(p.positions[self._si])
+        var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
+        if r.tag == TAG_FLOAT64:
+            return bitcast[DType.float64](r.value)
+        if r.tag == TAG_INT64:
+            return Float64(bitcast[DType.int64](r.value))
+        if r.tag == TAG_UINT64:
+            return Float64(r.value)
+        raise Error("get_double: value is not a number")
+
+    @no_inline
+    def get_bool(self) raises -> Bool:
+        """Read this value as a JSON boolean and return it as Bool.
+
+        Inspects the value's first byte (through the parser pointer, like
+        `get_string`): `t` validates the `true` literal and returns True, `f`
+        validates `false` and returns False. Any other first byte raises, so a
+        non-bool never returns a silently wrong result.
+        """
+        ref p = self._parser[]
+        var pos = Int(p.positions[self._si])
+        var b = p.padded.unsafe_ptr()[pos]
+        if b == _LOWER_T:
+            _validate_true(p.padded.unsafe_ptr(), pos, self._input_len)
+            return True
+        if b == _LOWER_F:
+            _validate_false(p.padded.unsafe_ptr(), pos, self._input_len)
+            return False
+        raise Error("get_bool: value is not a bool")
+
+    @no_inline
+    def is_null(self) raises -> Bool:
+        """Return True iff this value is the JSON `null` literal.
+
+        Inspects the value's first byte: `n` followed by a successful `null`
+        validation yields True; any other first byte yields False. A predicate,
+        not an accessor — a non-null value returns False rather than raising; it
+        only raises if the value's byte cannot be read.
+        """
+        ref p = self._parser[]
+        var pos = Int(p.positions[self._si])
+        if p.padded.unsafe_ptr()[pos] != _LOWER_N:
+            return False
+        _validate_null(p.padded.unsafe_ptr(), pos, self._input_len)
+        return True
+
+    @always_inline("nodebug")
+    def _first_byte(self) -> UInt8:
+        """Return the value's first input byte (the type-discriminating char)."""
+        ref p = self._parser[]
+        return p.padded.unsafe_ptr()[Int(p.positions[self._si])]
+
+    @always_inline("nodebug")
+    def is_string(self) -> Bool:
+        """Return True iff the value's first byte opens a JSON string (`"`)."""
+        return self._first_byte() == _QUOTE
+
+    @always_inline("nodebug")
+    def is_number(self) -> Bool:
+        """Return True iff the value's first byte starts a JSON number.
+
+        A number begins with `-` or a digit `0`-`9`; this is a byte test only,
+        so it neither parses nor validates the number that follows.
+        """
+        var b = self._first_byte()
+        return b == _MINUS or (b >= _DIGIT0 and b <= _DIGIT9)
+
+    @always_inline("nodebug")
+    def is_bool(self) -> Bool:
+        """Return True iff the value's first byte starts `true` or `false`."""
+        var b = self._first_byte()
+        return b == _LOWER_T or b == _LOWER_F
+
+    @always_inline("nodebug")
+    def is_object(self) -> Bool:
+        """Return True iff the value's first byte opens a JSON object (`{`)."""
+        return self._first_byte() == _LBRACE
+
+    @always_inline("nodebug")
+    def is_array(self) -> Bool:
+        """Return True iff the value's first byte opens a JSON array (`[`)."""
+        return self._first_byte() == _LBRACK
 
 
 struct ObjectHandle[o: Origin[mut=True]](Movable):
