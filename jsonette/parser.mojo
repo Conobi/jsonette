@@ -115,4 +115,5 @@ struct Parser(Movable):
 
         # Stage 1 only — no tape is built on the On-Demand path.
         structural_index(self.padded, input_len, self.positions)
-        return ObjectHandle(self, input_len)
+        # Root object: its first key is positions[1] (positions[0] is the '{').
+        return ObjectHandle(self, input_len, 1)

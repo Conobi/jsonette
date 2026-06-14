@@ -234,6 +234,25 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         """Return True iff the value's first byte opens a JSON array (`[`)."""
         return self._first_byte() == _LBRACK
 
+    @no_inline
+    def get_object(self) raises -> ObjectHandle[Self.o]:
+        """Descend into this value as a JSON object; raise if it is not one.
+
+        If the value's first byte is `'{'`, returns an `ObjectHandle` borrowing
+        the SAME parser (sharing this value's origin `o`), positioned at the
+        nested object's first key — `_start_si = self._si + 1`. For an empty
+        object `{}` that index is its `'}'`, so the handle iterates zero fields
+        and `find_field` raises. Because `find_field`/`next_field` skip nested
+        values depth-aware, the returned handle stops at this object's OWN `'}'`.
+        Raises if the value is not an object, so a non-object never yields a
+        handle that would navigate unrelated structure.
+        """
+        if self._first_byte() != _LBRACE:
+            raise Error("get_object: value is not an object")
+        return ObjectHandle[Self.o](
+            self._parser[], self._input_len, self._si + 1
+        )
+
 
 @always_inline("nodebug")
 def _unescaped_key_into(
@@ -346,22 +365,29 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
 
     var _parser: Pointer[Parser, Self.o]
     var _input_len: Int
-    var _si: Int  # forward-iteration cursor: a top-level key, or the root '}'
+    var _start_si: Int  # this object's first key (or its '}' if empty)
+    var _si: Int  # forward-iteration cursor: a key in this object, or its '}'
 
-    def __init__(out self, ref [Self.o] parser: Parser, input_len: Int):
-        """Borrow `parser` as a cursor over the root object (positions[0] is '{').
+    def __init__(out self, ref [Self.o] parser: Parser, input_len: Int, start_si: Int):
+        """Borrow `parser` as a cursor over the object whose first key is `start_si`.
 
-        The forward-iteration cursor `_si` starts at 1 — the first top-level key
-        (positions[0] is the root `'{'`).
+        `start_si` is the structural index of this object's first key — for the
+        ROOT object that is 1 (positions[0] is the root `'{'`); for a nested
+        object it is the index just past its opening `'{'`. For an EMPTY object
+        `start_si` is the object's own `'}'`, so iteration yields zero fields and
+        `find_field` finds nothing. The forward-iteration cursor `_si` starts at
+        `start_si`.
         """
         self._parser = Pointer(to=parser)
         self._input_len = input_len
-        self._si = 1  # first top-level key (positions[0] is the root '{')
+        self._start_si = start_si
+        self._si = start_si
 
     def __init__(out self, *, deinit take: Self):
         """Move constructor: transfer the borrowed-parser pointer, length, cursor."""
         self._parser = take._parser
         self._input_len = take._input_len
+        self._start_si = take._start_si
         self._si = take._si
 
     @no_inline
@@ -453,13 +479,15 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
 
     @no_inline
     def find_field(self, key: String) raises -> ValueHandle[Self.o]:
-        """Find the value for `key` in the flat root object; raise if absent.
+        """Find the value for `key` in this object; raise if absent.
 
-        Walks the root object's KEY→VALUE pairs left to right, DEPTH-AWARE: each
-        top-level key is a string at `si` (close quote at `si+1`, `':'` at `si+2`,
-        value at `si+3`); after a non-matching pair the cursor jumps past the whole
-        value via `_skip_value`, so nested objects/arrays are skipped wholesale and
-        their interior keys never masquerade as top-level keys. On a key match,
+        Walks this object's KEY→VALUE pairs left to right from `_start_si`,
+        DEPTH-AWARE: each key is a string at `si` (close quote at `si+1`, `':'`
+        at `si+2`, value at `si+3`); after a non-matching pair the cursor jumps
+        past the whole value via `_skip_value`, so nested objects/arrays are
+        skipped wholesale and their interior keys never masquerade as this
+        object's keys (which also makes the scan stop at THIS object's own `'}'`,
+        a nested `'}'` always sitting inside a skipped value). On a key match,
         returns a `ValueHandle` at the value's structural index (`si+3`), raising
         if that value is missing (truncated input) rather than indexing past the
         positions list. Keys are matched ESCAPE-AWARE: a candidate key with no
@@ -470,7 +498,7 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
         ref p = self._parser[]
         var ip = p.padded.unsafe_ptr()
         var n = len(p.positions)
-        var si = 1  # skip the root '{' at positions[0]
+        var si = self._start_si  # this object's first key (root: 1, past '{')
         while si < n:
             var b = ip[Int(p.positions[si])]
             if b == _RBRACE:
