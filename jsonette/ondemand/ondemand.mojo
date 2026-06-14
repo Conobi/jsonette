@@ -46,6 +46,40 @@ comptime _LOWER_F = UInt8(0x66)  # 'f'
 comptime _LOWER_N = UInt8(0x6E)  # 'n'
 
 
+@always_inline("nodebug")
+def _number_token_ok(
+    ip: UnsafePointer[UInt8, _], pos: Int, bytes_consumed: Int, input_len: Int
+) -> Bool:
+    """Return True iff the number token at ip[pos] ending after bytes_consumed sits at a clean boundary.
+
+    A JSON number ends at a structural/whitespace terminator: space, tab, LF, CR,
+    `,`, `}`, `]`, or end of input. The shared `_parse_number` measures the
+    longest numeric prefix but does NOT check what follows, so glued junk like
+    `12.3.4` or `42x` is silently truncated to its prefix. This guard rejects such
+    tokens by inspecting the single byte just past the consumed run.
+
+    `bytes_consumed` is relative to `pos`; `end = pos + bytes_consumed`. Because
+    `_parse_number` is called with `max_len = input_len - pos`, `bytes_consumed`
+    never exceeds that, so `end <= input_len` always. The EOF case is checked
+    FIRST so padding is never read; otherwise `ip[end]` is in bounds (the input
+    buffer carries 128 NUL bytes of padding). `:` is deliberately NOT a
+    terminator — a number is never followed by a colon in valid JSON.
+    """
+    var end = pos + bytes_consumed  # always <= input_len (max_len = input_len - pos)
+    if end >= input_len:  # EOF terminator — check FIRST, never read padding
+        return True
+    var t = ip[end]  # in-bounds: input buffer has 128 NUL bytes of padding
+    return (
+        t == 0x20
+        or t == 0x09
+        or t == 0x0A
+        or t == 0x0D
+        or t == 0x2C
+        or t == 0x7D
+        or t == 0x5D
+    )
+
+
 struct ValueHandle[o: Origin[mut=True]](Movable):
     """A lazily-parsed JSON value, located by its structural index.
 
@@ -106,6 +140,9 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         Parses lazily via the shared `_parse_number` and raises if the value is
         not an integer (e.g. a float), so a non-integer never returns silently
         wrong bits. The raw 64-bit payload is reinterpreted as a signed Int64.
+        Also raises on trailing junk glued to the number (e.g. `0x1`, `42x`):
+        the token must end at a clean boundary (whitespace, `,`, `}`, `]`, EOF)
+        or the leading numeric prefix would be returned silently.
         """
         ref p = self._parser[]
         var pos = Int(p.positions[self._si])
@@ -117,6 +154,10 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         # valid-but-out-of-range integer never returns silently wrong bits.
         if r.tag == TAG_UINT64 and r.value > UInt64(0x7FFF_FFFF_FFFF_FFFF):
             raise Error("get_int: integer out of Int64 range")
+        if not _number_token_ok(
+            p.padded.unsafe_ptr(), pos, r.bytes_consumed, self._input_len
+        ):
+            raise Error("get_int: trailing characters after number")
         return bitcast[DType.int64](r.value)
 
     @no_inline
@@ -127,15 +168,22 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         not an integer (e.g. a float or string). A negative integer (tagged
         INT64 with a negative payload) cannot be represented as unsigned, so it
         raises rather than wrapping. A UINT64-tagged value is returned directly;
-        a non-negative INT64 is reinterpreted from its signed bits.
+        a non-negative INT64 is reinterpreted from its signed bits. Also raises on
+        trailing junk glued to the number (e.g. `0x1`, `42x`): the token must end
+        at a clean boundary (whitespace, `,`, `}`, `]`, EOF) or the leading
+        numeric prefix would be returned silently.
         """
         ref p = self._parser[]
         var pos = Int(p.positions[self._si])
         var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
+        if r.tag != TAG_UINT64 and r.tag != TAG_INT64:
+            raise Error("get_uint: value is not an integer")
+        if not _number_token_ok(
+            p.padded.unsafe_ptr(), pos, r.bytes_consumed, self._input_len
+        ):
+            raise Error("get_uint: trailing characters after number")
         if r.tag == TAG_UINT64:
             return r.value
-        if r.tag != TAG_INT64:
-            raise Error("get_uint: value is not an integer")
         var signed = bitcast[DType.int64](r.value)
         if signed < 0:
             raise Error("get_uint: integer is negative")
@@ -148,18 +196,25 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         Parses lazily via the shared `_parse_number` and raises if the value is
         not a number. A FLOAT64-tagged value is reinterpreted from its raw bits;
         an INT64 or UINT64 integer is widened to Float64 (with the usual
-        round-to-nearest loss for magnitudes above 2^53).
+        round-to-nearest loss for magnitudes above 2^53). Also raises on trailing
+        junk glued to the number (e.g. `12.3.4`, `1e1e1`): the token must end at a
+        clean boundary (whitespace, `,`, `}`, `]`, EOF) or the leading numeric
+        prefix would be returned silently.
         """
         ref p = self._parser[]
         var pos = Int(p.positions[self._si])
         var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
+        if r.tag != TAG_FLOAT64 and r.tag != TAG_INT64 and r.tag != TAG_UINT64:
+            raise Error("get_double: value is not a number")
+        if not _number_token_ok(
+            p.padded.unsafe_ptr(), pos, r.bytes_consumed, self._input_len
+        ):
+            raise Error("get_double: trailing characters after number")
         if r.tag == TAG_FLOAT64:
             return bitcast[DType.float64](r.value)
         if r.tag == TAG_INT64:
             return Float64(bitcast[DType.int64](r.value))
-        if r.tag == TAG_UINT64:
-            return Float64(r.value)
-        raise Error("get_double: value is not a number")
+        return Float64(r.value)
 
     @no_inline
     def get_bool(self) raises -> Bool:
