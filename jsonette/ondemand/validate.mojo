@@ -18,8 +18,9 @@ The walk is over the structural-position INDEX, not characters:
 
 Leaf validation reuses the shared stage-2 primitives unchanged: `parse_string`
 (escapes/surrogates/control chars/closing quote), `_parse_number` plus the
-On-Demand terminator guard `_number_token_ok` (rejects glued junk like `12.3.4`),
-and `_validate_true/false/null`. The nesting-depth bound matches the tape
+On-Demand terminator guard `_scalar_token_ok` (rejects glued junk like `12.3.4`
+after a number AND `truex`/`nullx` after a literal), and `_validate_true/false/
+null`. The nesting-depth bound matches the tape
 builder's `MAX_DEPTH` exactly, so the validator and the DOM reject deeply-nested
 input at the same depth; that bound also makes the recursion stack-safe (it
 raises before the cap is exceeded).
@@ -34,7 +35,7 @@ from jsonette.stage2.builder import (
     _validate_false,
     _validate_null,
 )
-from jsonette.ondemand.ondemand import _number_token_ok
+from jsonette.ondemand.ondemand import _scalar_token_ok
 
 
 comptime _QUOTE = UInt8(0x22)  # '"'
@@ -92,7 +93,8 @@ def _validate_value(
     - `"` validates the string via `parse_string` and advances by 2 structurals.
     - `-`/digit validates the number via `_parse_number` plus the terminator
       guard (rejecting glued junk), advancing by 1.
-    - `t`/`f`/`n` validate the literal, advancing by 1.
+    - `t`/`f`/`n` validate the literal, then the SAME terminator guard rejects a
+      literal glued to trailing junk (`truex`, `nullx`), advancing by 1.
     - anything else (a stray `,`/`:`/`}`/`]`, a BOM `0xEF`, `@`, a control byte)
       is UNEXPECTED_VALUE — there is no value at this position.
     """
@@ -108,17 +110,23 @@ def _validate_value(
         return si + 2
     if b == _MINUS or (b >= _DIGIT0 and b <= _DIGIT9):
         var r = _parse_number(ip + pos, input_len - pos)
-        if not _number_token_ok(ip, pos, r.bytes_consumed, input_len):
+        if not _scalar_token_ok(ip, pos, r.bytes_consumed, input_len):
             raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
         return si + 1
     if b == _LOWER_T:
         _validate_true(ip, pos, input_len)
+        if not _scalar_token_ok(ip, pos, 4, input_len):
+            raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
         return si + 1
     if b == _LOWER_F:
         _validate_false(ip, pos, input_len)
+        if not _scalar_token_ok(ip, pos, 5, input_len):
+            raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
         return si + 1
     if b == _LOWER_N:
         _validate_null(ip, pos, input_len)
+        if not _scalar_token_ok(ip, pos, 4, input_len):
+            raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
         return si + 1
     raise ParseError(code=ErrorCode.UNEXPECTED_VALUE.value, position=pos)
 

@@ -124,6 +124,53 @@ def test_reject_cases() raises:
         assert_true(not _accepts(c), "must REJECT: " + c)
 
 
+def test_reject_literal_glue() raises:
+    """A literal glued to trailing junk is rejected (no token-boundary slack).
+
+    Stage 1 folds a non-structural suffix glued to a `true`/`false`/`null`
+    literal into the same scalar, so the glued bytes are never seen as a
+    separate structural. Each of these is rejected by Python `json.loads`, so
+    `validate` must reject them too — at top level and nested inside arrays and
+    objects.
+    """
+    var cases = [
+        String("truex"),
+        String("trueX"),
+        String("true1"),
+        String("truefalse"),
+        String("nullnull"),
+        String("nulla"),
+        String("falsey"),
+        String("falsehood"),
+        String("[truex]"),
+        String('{"a":truex}'),
+        String('{"a":truex,"b":2}'),
+        String("[true,false,nullx]"),
+    ]
+    for c in cases:
+        assert_true(not _accepts(c), "must REJECT: " + c)
+
+
+def test_accept_literals_at_boundary() raises:
+    """A literal followed by a clean terminator (`,`/`}`/`]`/EOF) still accepts.
+
+    The token-boundary guard must not over-reject valid literals: bare literals
+    and literals followed by a comma or a closing bracket/brace are valid JSON
+    and must still validate.
+    """
+    var cases = [
+        String("true"),
+        String("false"),
+        String("null"),
+        String("[true,false,null]"),
+        String('{"a":true}'),
+        String('{"ok":true,"x":1}'),
+        String('{"a":true,"b":false,"c":null}'),
+    ]
+    for c in cases:
+        assert_true(_accepts(c), "must ACCEPT: " + c)
+
+
 def test_bad_escape_on_the_wire() raises:
     """The bad-escape reject case is a single backslash + x on the wire."""
     var data = _make_bytes(String('{"k":"\\x"}'))
@@ -174,6 +221,8 @@ def test_depth_boundary_matches_parse() raises:
 def main() raises:
     test_accept_cases()
     test_reject_cases()
+    test_reject_literal_glue()
+    test_accept_literals_at_boundary()
     test_bad_escape_on_the_wire()
     test_depth_boundary_matches_parse()
     print("test_validate: all passed")

@@ -47,16 +47,18 @@ comptime _LOWER_N = UInt8(0x6E)  # 'n'
 
 
 @always_inline("nodebug")
-def _number_token_ok(
+def _scalar_token_ok(
     ip: UnsafePointer[UInt8, _], pos: Int, bytes_consumed: Int, input_len: Int
 ) -> Bool:
-    """Return True iff the number token at ip[pos] ending after bytes_consumed sits at a clean boundary.
+    """Return True iff the scalar token at ip[pos] ending after bytes_consumed sits at a clean boundary.
 
-    A JSON number ends at a structural/whitespace terminator: space, tab, LF, CR,
-    `,`, `}`, `]`, or end of input. The shared `_parse_number` measures the
-    longest numeric prefix but does NOT check what follows, so glued junk like
-    `12.3.4` or `42x` is silently truncated to its prefix. This guard rejects such
-    tokens by inspecting the single byte just past the consumed run.
+    A JSON number or literal ends at a structural/whitespace terminator: space,
+    tab, LF, CR, `,`, `}`, `]`, or end of input. The shared `_parse_number`
+    measures the longest numeric prefix but does NOT check what follows, and the
+    literal validators (`_validate_true/false/null`) only check the fixed-length
+    keyword bytes, so glued junk like `12.3.4`, `42x`, or `truex` is silently
+    accepted on its prefix. This guard rejects such tokens by inspecting the
+    single byte just past the consumed run.
 
     `bytes_consumed` is relative to `pos`; `end = pos + bytes_consumed`. Because
     `_parse_number` is called with `max_len = input_len - pos`, `bytes_consumed`
@@ -154,7 +156,7 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         # valid-but-out-of-range integer never returns silently wrong bits.
         if r.tag == TAG_UINT64 and r.value > UInt64(0x7FFF_FFFF_FFFF_FFFF):
             raise Error("get_int: integer out of Int64 range")
-        if not _number_token_ok(
+        if not _scalar_token_ok(
             p.padded.unsafe_ptr(), pos, r.bytes_consumed, self._input_len
         ):
             raise Error("get_int: trailing characters after number")
@@ -178,7 +180,7 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
         if r.tag != TAG_UINT64 and r.tag != TAG_INT64:
             raise Error("get_uint: value is not an integer")
-        if not _number_token_ok(
+        if not _scalar_token_ok(
             p.padded.unsafe_ptr(), pos, r.bytes_consumed, self._input_len
         ):
             raise Error("get_uint: trailing characters after number")
@@ -206,7 +208,7 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
         var r = _parse_number(p.padded.unsafe_ptr() + pos, self._input_len - pos)
         if r.tag != TAG_FLOAT64 and r.tag != TAG_INT64 and r.tag != TAG_UINT64:
             raise Error("get_double: value is not a number")
-        if not _number_token_ok(
+        if not _scalar_token_ok(
             p.padded.unsafe_ptr(), pos, r.bytes_consumed, self._input_len
         ):
             raise Error("get_double: trailing characters after number")
