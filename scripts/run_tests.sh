@@ -25,6 +25,7 @@ TESTS=(
     tests/jsonette/ondemand/test_leaf_types.mojo
     tests/jsonette/ondemand/test_iteration.mojo
     tests/jsonette/ondemand/test_nested_object.mojo
+    tests/jsonette/ondemand/test_array.mojo
     tests/jsonette/serialize/test_writer.mojo
     tests/jsonette/serialize/test_roundtrip.mojo
     tests/jsonette/serialize/test_float_lock.mojo

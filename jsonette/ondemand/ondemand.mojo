@@ -253,6 +253,67 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
             self._parser[], self._input_len, self._si + 1
         )
 
+    @no_inline
+    def get_array(self) raises -> ArrayHandle[Self.o]:
+        """Descend into this value as a JSON array; raise if it is not one.
+
+        If the value's first byte is `'['`, returns an `ArrayHandle` borrowing
+        the SAME parser (sharing this value's origin `o`), positioned at the
+        array's first element — `start_si = self._si + 1`. For an empty array
+        `[]` that index is its `']'`, so the handle is immediately `at_end` and
+        iterates zero elements. Raises if the value is not an array, so a
+        non-array never yields a handle that would navigate unrelated structure.
+        """
+        if self._first_byte() != _LBRACK:
+            raise Error("get_array: value is not an array")
+        return ArrayHandle[Self.o](
+            self._parser[], self._input_len, self._si + 1
+        )
+
+
+@no_inline
+def _skip_value(
+    ip: UnsafePointer[UInt8, _],
+    positions: List[UInt32],
+    n: Int,
+    value_si: Int,
+) -> Int:
+    """Return the structural index just past the value starting at `value_si`.
+
+    The single depth-aware skip shared by `ObjectHandle` and `ArrayHandle`, so
+    both advance past a value (and never descend into its interior) identically.
+    `n` is `len(positions)` and `ip` is the padded-input pointer.
+
+    - Object/array (`'{'`/`'['`): scan forward counting nesting depth (+1 on
+      `'{'`/`'['`, -1 on `'}'`/`']'`); return the index AFTER the matching close.
+      If the scan runs off the end (truncated input), return `n`.
+    - String (`'"'`): two structurals (open + close), so `value_si + 2`.
+    - Number/literal: a single structural, so `value_si + 1`.
+
+    Bounds-safe: a `value_si >= n` (truncated: no value) returns `n` without
+    reading positions out of range.
+    """
+    if value_si >= n:
+        return n  # truncated: no value at this index
+    var vb = ip[Int(positions[value_si])]
+    if vb == _LBRACE or vb == _LBRACK:
+        var depth = 0
+        var si = value_si
+        while si < n:
+            var ch = ip[Int(positions[si])]
+            if ch == _LBRACE or ch == _LBRACK:
+                depth += 1
+            elif ch == _RBRACE or ch == _RBRACK:
+                depth -= 1
+                if depth == 0:
+                    return si + 1
+            si += 1
+        return n  # truncated: matching close never found
+    elif vb == _QUOTE:
+        return value_si + 2
+    else:
+        return value_si + 1
+
 
 @always_inline("nodebug")
 def _unescaped_key_into(
@@ -394,39 +455,14 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
     def _skip_value(self, value_si: Int) -> Int:
         """Return the structural index just past the value starting at `value_si`.
 
-        Depth-aware so the cursor never descends into a nested value's interior:
-
-        - Object/array (`'{'`/`'['`): scan forward counting nesting depth (+1 on
-          `'{'`/`'['`, -1 on `'}'`/`']'`); return the index AFTER the matching
-          close. If the scan runs off the end (truncated input), return `n`.
-        - String (`'"'`): two structurals (open + close), so `value_si + 2`.
-        - Number/literal: a single structural, so `value_si + 1`.
-
-        Modelled on the depth-aware skip used by the multi-hop on-demand PoC.
+        Thin wrapper over the shared module-level `_skip_value`, which is
+        depth-aware so the cursor never descends into a nested value's interior.
+        Behaviour is identical to the prior in-struct implementation.
         """
         ref p = self._parser[]
-        var ip = p.padded.unsafe_ptr()
-        var n = len(p.positions)
-        if value_si >= n:
-            return n  # truncated: key had no value
-        var vb = ip[Int(p.positions[value_si])]
-        if vb == _LBRACE or vb == _LBRACK:
-            var depth = 0
-            var si = value_si
-            while si < n:
-                var ch = ip[Int(p.positions[si])]
-                if ch == _LBRACE or ch == _LBRACK:
-                    depth += 1
-                elif ch == _RBRACE or ch == _RBRACK:
-                    depth -= 1
-                    if depth == 0:
-                        return si + 1
-                si += 1
-            return n  # truncated: matching close never found
-        elif vb == _QUOTE:
-            return value_si + 2
-        else:
-            return value_si + 1
+        return _skip_value(
+            p.padded.unsafe_ptr(), p.positions, len(p.positions), value_si
+        )
 
     @no_inline
     def at_end(self) -> Bool:
@@ -546,3 +582,84 @@ struct ObjectHandle[o: Origin[mut=True]](Movable):
             if si < n and ip[Int(p.positions[si])] == _COMMA:
                 si += 1
         raise Error("field not found: " + key)
+
+
+struct ArrayHandle[o: Origin[mut=True]](Movable):
+    """Forward navigator over a JSON array's elements.
+
+    Borrows the owning `Parser` through an origin-tracked pointer (mirroring
+    `ObjectHandle`). A mutable cursor `_si` walks the array's ELEMENT structural
+    positions in document order; it starts at the array's first element — or at
+    the array's `']'` if the array is empty. Each `next_element` advances the
+    cursor PAST one element (depth-aware via the shared `_skip_value`, so nested
+    objects/arrays are skipped wholesale, never descended) and a following comma,
+    then yields a `ValueHandle` at the captured element index.
+
+    Lifetime: a yielded `ValueHandle` borrows the same parser and shares this
+    handle's origin `o`; independent aliasing handles are OK (Mojo origins are
+    lifetime, not exclusivity), so a nested element can be navigated through its
+    own `get_object()` / `get_array()` while this handle is alive. Valid only
+    while the `Parser` is alive and is neither reparsed nor moved.
+    """
+
+    var _parser: Pointer[Parser, Self.o]
+    var _input_len: Int
+    var _si: Int  # cursor: this array's current element, or its ']' when at end
+
+    def __init__(out self, ref [Self.o] parser: Parser, input_len: Int, start_si: Int):
+        """Borrow `parser` as a cursor over the array whose first element is `start_si`.
+
+        `start_si` is the structural index of this array's first element — for an
+        array opened at value index `v`, that is `v + 1` (one past its `'['`).
+        For an EMPTY array `start_si` is the array's own `']'`, so `at_end` is
+        immediately True and iteration yields zero elements.
+        """
+        self._parser = Pointer(to=parser)
+        self._input_len = input_len
+        self._si = start_si
+
+    def __init__(out self, *, deinit take: Self):
+        """Move constructor: transfer the borrowed-parser pointer, length, cursor."""
+        self._parser = take._parser
+        self._input_len = take._input_len
+        self._si = take._si
+
+    @no_inline
+    def at_end(self) -> Bool:
+        """Return True when the cursor is past the last element of this array.
+
+        True when the cursor `_si` has reached the array's `']'` or run off the
+        end of the positions list (truncated input). In both cases
+        `next_element` would have nothing well-formed to yield, so callers never
+        read positions out of bounds.
+        """
+        ref p = self._parser[]
+        var n = len(p.positions)
+        if self._si >= n:
+            return True
+        return p.padded.unsafe_ptr()[Int(p.positions[self._si])] == _RBRACK
+
+    @no_inline
+    def next_element(mut self) raises -> ValueHandle[Self.o]:
+        """Advance the cursor past one element and yield it.
+
+        Precondition: `at_end()` is False (the cursor is at a real element).
+        Captures the current element's structural index, advances the cursor PAST
+        the whole element via the shared depth-aware `_skip_value` (so nested
+        containers are skipped wholesale, never descended), then past a following
+        comma, and returns a `ValueHandle` at the captured index. Bounds-safe: a
+        cursor already off the end of the positions list raises rather than
+        reading out of range on truncated input. Forward-only.
+        """
+        ref p = self._parser[]
+        var ip = p.padded.unsafe_ptr()
+        var n = len(p.positions)
+        var elem_si = self._si
+        if elem_si >= n:
+            raise Error("next_element: cursor past end of array")
+        # Advance the cursor past this element (depth-aware) and an optional comma.
+        var nxt = _skip_value(ip, p.positions, n, elem_si)
+        if nxt < n and ip[Int(p.positions[nxt])] == _COMMA:
+            nxt += 1
+        self._si = nxt
+        return ValueHandle[Self.o](p, elem_si, self._input_len)
