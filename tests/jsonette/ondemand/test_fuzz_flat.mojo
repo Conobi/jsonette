@@ -83,6 +83,24 @@ def _check_one(mut rng: _Rng) raises:
                 "int field mismatch in: " + json,
             )
 
+    # Forward iteration must yield exactly the same fields, in order, with the
+    # same values (find_field uses a local scan and leaves the cursor untouched,
+    # so the same root can then be iterated).
+    var idx = 0
+    while not root.at_end():
+        var f = root.next_field()
+        assert_equal(f.key(), keys[idx], "iter key mismatch in: " + json)
+        if is_str[idx]:
+            assert_equal(
+                f.value().get_string(), svals[idx], "iter str mismatch in: " + json
+            )
+        else:
+            assert_equal(
+                f.value().get_int(), ivals[idx], "iter int mismatch in: " + json
+            )
+        idx += 1
+    assert_equal(idx, nfields, "iter field count mismatch in: " + json)
+
 
 def main() raises:
     var rng = _Rng(0x9E3779B97F4A7C15)

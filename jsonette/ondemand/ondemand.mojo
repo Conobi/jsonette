@@ -185,10 +185,10 @@ struct ValueHandle[o: Origin[mut=True]](Movable):
     def is_null(self) raises -> Bool:
         """Return True iff this value is the JSON `null` literal.
 
-        Inspects the value's first byte: `n` followed by a successful `null`
-        validation yields True; any other first byte yields False. A predicate,
-        not an accessor — a non-null value returns False rather than raising; it
-        only raises if the value's byte cannot be read.
+        Inspects the value's first byte: a first byte other than `n` yields False
+        (a predicate — a non-null value does not raise). A first byte of `n` is
+        validated as the full `null` literal: it yields True, or RAISES if it is a
+        malformed `n...` token (e.g. `nul`), rather than silently accepting it.
         """
         ref p = self._parser[]
         var pos = Int(p.positions[self._si])
