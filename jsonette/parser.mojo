@@ -6,6 +6,7 @@ from jsonette.error import format_parse_error
 from jsonette._alloc_count import record_alloc
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
+from jsonette.ondemand.ondemand import ObjectHandle
 
 
 struct Parser(Movable):
@@ -21,6 +22,7 @@ struct Parser(Movable):
     var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)
     var positions: List[UInt32]       # reusable Stage 1 structural-offset buffer (grows only)
     var _tape: Tape                   # parser-owned tape, reused across parses (grows only)
+    var _od_scratch: List[UInt8]      # reusable On-Demand string-unescape scratch (grows only)
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
@@ -28,6 +30,7 @@ struct Parser(Movable):
         self.padded = List[UInt8]()
         self.positions = List[UInt32]()
         self._tape = Tape()  # empty Lists -> no allocation until first parse grows them
+        self._od_scratch = List[UInt8]()  # empty -> allocated on first On-Demand string read
 
     def __init__(out self, *, deinit take: Self):
         self.container_stack = take.container_stack^
@@ -35,6 +38,7 @@ struct Parser(Movable):
         self.padded = take.padded^
         self.positions = take.positions^
         self._tape = take._tape^
+        self._od_scratch = take._od_scratch^
 
     def parse(mut self, data: List[UInt8]) raises -> Document[origin_of(self._tape)]:
         """Parse JSON bytes into a Document view over this parser's tape.
@@ -83,3 +87,32 @@ struct Parser(Movable):
         caller names the return type with `type_of(parser.document())`.
         """
         return Document(self._tape)
+
+    def iter(mut self, data: List[UInt8]) raises -> ObjectHandle[origin_of(self)]:
+        """Run Stage 1 and return a lazy On-Demand handle over the root object.
+
+        Pads the input (input + 128 zero bytes, reusing the same grow-only buffer
+        as `parse`), runs `structural_index` into this parser's `positions`, and
+        builds NO tape. Returns an `ObjectHandle` borrowing this parser; a leaf is
+        parsed only when its value is read.
+
+        The returned handle (and any handle it yields) borrows this parser; it is
+        valid only while the parser is alive and is neither reparsed via `iter`/
+        `parse` nor moved. Callers use the handle by inference and never name its
+        type. M0 assumes the root JSON value is an object (`positions[0]` is `'{'`).
+        """
+        var input_len = len(data)
+
+        # Reusable padded buffer: input + 128 zero bytes (SIMD overread headroom).
+        # Same grow-only buffer the tape path uses; a warm parser reuses it.
+        var num_chunks = (input_len + 63) // 64
+        var padded_len = num_chunks * 64 + 128
+        if len(self.padded) < padded_len:
+            record_alloc()
+            self.padded = List[UInt8](unsafe_uninit_length=padded_len)
+        memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+
+        # Stage 1 only — no tape is built on the On-Demand path.
+        structural_index(self.padded, input_len, self.positions)
+        return ObjectHandle(self, input_len)

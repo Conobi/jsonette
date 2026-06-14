@@ -20,6 +20,7 @@ TESTS=(
     tests/jsonette/stage2/test_float_differential.mojo
     tests/jsonette/test_parser.mojo
     tests/jsonette/test_value.mojo
+    tests/jsonette/ondemand/test_flat_object.mojo
     tests/jsonette/serialize/test_writer.mojo
     tests/jsonette/serialize/test_roundtrip.mojo
     tests/jsonette/serialize/test_float_lock.mojo
