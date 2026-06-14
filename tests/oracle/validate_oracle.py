@@ -25,6 +25,10 @@ Oracle caveats (why certain inputs are deliberately absent):
   syntactically-valid out-of-range exponent, so `1e999` is a fair ACCEPT vector.
 - `json.loads` accepts surrounding ASCII whitespace; vectors here avoid leading/
   trailing whitespace except the explicit internal-whitespace ACCEPT cases.
+- `json.loads` LENIENTLY accepts lone/unpaired UTF-16 surrogate escapes (e.g.
+  `"\uD800"`, `"\uDFFF"`), but RFC 8259 and jsonette correctly REJECT them. Like
+  NaN/Infinity, this is a deliberate Python-vs-RFC divergence — do NOT add lone
+  surrogates as ACCEPT vectors (they would spuriously "disagree" with `validate`).
 """
 
 import json
