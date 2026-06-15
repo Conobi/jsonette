@@ -4,7 +4,7 @@ These tests exercise the M0 surface through inference ONLY: a caller obtains the
 root handle from `Parser.iter(...)`, navigates with `find_field(key)`, and reads
 a leaf with `get_string()` / `get_int()` — without ever naming any `[o]`-
 parametric type. That constraint is the contract: the public entry returns a
-type used by inference, like `Parser.document()`.
+type used by inference, like `Parser.iter(...)` itself.
 """
 
 from std.testing import assert_equal, assert_true

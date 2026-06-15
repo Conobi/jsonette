@@ -1,5 +1,5 @@
 from std.testing import assert_equal, assert_true
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.serialize.tape_writer import to_string
 from jsonette.serialize.roundtrip import tapes_equal
 
@@ -12,8 +12,7 @@ def _bytes(s: String) -> List[UInt8]:
 
 
 def _emit(s: String) raises -> String:
-    var p = Parser()
-    var doc = p.parse(_bytes(s))
+    var doc = parse(_bytes(s))
     return to_string(doc)
 
 
@@ -60,11 +59,9 @@ def test_deep_nesting_stack_safety() raises:
     s += "1"
     for _ in range(depth):
         s += "]"
-    var p1 = Parser()
-    var d1 = p1.parse(_bytes(s))
+    var d1 = parse(_bytes(s))
     var emitted = to_string(d1)
-    var p2 = Parser()
-    var d2 = p2.parse(_bytes(emitted))
+    var d2 = parse(_bytes(emitted))
     assert_true(tapes_equal(d1, d2), msg=String("deep-nesting round-trip mismatch"))
 
 

@@ -19,7 +19,7 @@ from std.random import seed, random_ui64
 from std.math import isfinite
 from std.memory import bitcast
 from std.testing import assert_true
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.serialize.tape_writer import to_string
 from jsonette.serialize.roundtrip import tapes_equal
 
@@ -176,14 +176,12 @@ def _fuzz_one(s: String) raises:
     var b = List[UInt8]()
     for x in s.as_bytes():
         b.append(x)
-    var p1 = Parser()
-    var d1 = p1.parse(b)
+    var d1 = parse(b)
     var emitted = to_string(d1)
     var eb = List[UInt8]()
     for x in emitted.as_bytes():
         eb.append(x)
-    var p2 = Parser()
-    var d2 = p2.parse(eb)
+    var d2 = parse(eb)
     assert_true(
         tapes_equal(d1, d2),
         msg=String("fuzz round-trip mismatch on input: ") + s

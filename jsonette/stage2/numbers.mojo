@@ -31,7 +31,7 @@ def _load_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
     Shared by `_are_8_digits` and `_parse_8_digits` so detect-true guarantees
     parse-exact by construction. PRECONDITION: >=8 readable bytes from ptr+pos.
     Production callers gate the SWAR loops with `pos + 8 <= max_len`, so the load
-    stays within the logical input; `Parser.parse`'s 128 NUL pad bytes are a
+    stays within the logical input; the parser's 128 NUL pad bytes are a
     defense-in-depth backstop, not a license for an unbounded over-read.
     """
     comptime assert is_little_endian(), "SWAR number parsing requires a little-endian target"
@@ -47,7 +47,7 @@ def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
 
     PRECONDITION: >=8 readable bytes from `ptr + pos`. Production callers gate
     the SWAR loop with `pos + 8 <= max_len`, so the load stays within the logical
-    input. `Parser.parse`'s 128 NUL pad bytes past the input are defense-in-depth
+    input. the parser's 128 NUL pad bytes past the input are defense-in-depth
     (a NUL is not a digit, so the check fails cleanly), NOT a substitute for the
     caller's gate.
     """
@@ -87,7 +87,7 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     PRECONDITION: the buffer at `ptr` must hold at least 8 NUL padding bytes
     past `max_len`. The SWAR digit fast path (`_are_8_digits` / `_parse_8_digits`)
     issues unconditional 8-byte loads and may over-read up to 8 bytes beyond
-    the last digit. `Parser.parse` guarantees 128 bytes of NUL padding, so the
+    the last digit. the parser guarantees 128 bytes of NUL padding, so the
     over-read always lands in zeroed memory (NUL terminates the digit run).
     The `debug_assert` below documents this invariant in the callgraph; it
     compiles to nothing under `-D ASSERT=none`.

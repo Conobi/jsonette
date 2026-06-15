@@ -20,6 +20,8 @@ TESTS=(
     tests/jsonette/stage2/test_float_differential.mojo
     tests/jsonette/test_parser.mojo
     tests/jsonette/test_value.mojo
+    tests/jsonette/test_gen_token.mojo
+    tests/jsonette/test_dom_differential.mojo
     tests/jsonette/ondemand/test_flat_object.mojo
     tests/jsonette/ondemand/test_fuzz_flat.mojo
     tests/jsonette/ondemand/test_leaf_types.mojo
@@ -72,6 +74,43 @@ for test in "${TESTS[@]}"; do
         FAILED=$((FAILED + 1))
     fi
 done
+
+# Alloc-count gate: the registered run above compiles its real assertions OUT
+# (no -D BENCH_ALLOC_COUNT), so re-run it WITH the define to actually exercise
+# cold=4 / warm=0. A failure here fails the suite.
+ALLOC_TEST=tests/jsonette/test_alloc_count.mojo
+echo -n "RUN  $ALLOC_TEST (-D BENCH_ALLOC_COUNT) ... "
+if mojo run -I . -D ASSERT=all -D BENCH_ALLOC_COUNT "$ALLOC_TEST" > /tmp/mojo_test_out.txt 2>&1; then
+    if grep -qi "warning" /tmp/mojo_test_out.txt; then
+        echo "PASS (with warnings)"
+        grep -i "warning" /tmp/mojo_test_out.txt
+        WARNED=$((WARNED + 1))
+    else
+        echo "PASS"
+    fi
+    PASSED=$((PASSED + 1))
+else
+    echo "FAIL"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+fi
+
+# Stale-iterator negative gate: this program MUST abort (exit non-zero) with the
+# gen-token message under -D ASSERT=all. A clean exit (no abort) fails the suite.
+STALE_TEST=tests/jsonette/_stale_iter_aborts.mojo
+echo -n "RUN  $STALE_TEST (negative: must abort) ... "
+if mojo run -I . -D ASSERT=all "$STALE_TEST" > /tmp/mojo_test_out.txt 2>&1; then
+    echo "FAIL (expected abort, exited 0)"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+elif grep -qi "stale" /tmp/mojo_test_out.txt; then
+    echo "PASS (aborted with gen message)"
+    PASSED=$((PASSED + 1))
+else
+    echo "FAIL (non-zero exit but no 'stale' message)"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+fi
 
 echo ""
 echo "Results: $PASSED passed, $FAILED failed, $WARNED with warnings"

@@ -23,6 +23,7 @@ Tests go through the public surface only: build `List[UInt8]` from a String,
 
 from std.testing import assert_true
 from jsonette.parser import Parser
+from jsonette.document import parse
 
 
 def _make_bytes(s: String) -> List[UInt8]:
@@ -46,9 +47,8 @@ def _accepts(s: String) raises -> Bool:
 def _parse_accepts(s: String) raises -> Bool:
     """Return True iff the DOM `parse` returns normally on the bytes of `s`."""
     var data = _make_bytes(s)
-    var p = Parser()
     try:
-        _ = p.parse(data)
+        _ = parse(data)
     except:
         return False
     return True

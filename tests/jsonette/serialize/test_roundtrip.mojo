@@ -1,5 +1,5 @@
 from std.testing import assert_equal, assert_true, assert_false
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.serialize.tape_writer import to_string, to_json
 from jsonette.serialize.roundtrip import tapes_equal
 
@@ -22,8 +22,7 @@ def read_file(path: String) raises -> List[UInt8]:
 
 
 def _emit(s: String) raises -> String:
-    var p = Parser()
-    var doc = p.parse(_bytes(s))
+    var doc = parse(_bytes(s))
     return to_string(doc)
 
 
@@ -41,30 +40,24 @@ def test_scalars_and_containers() raises:
 
 
 def test_pretty() raises:
-    var p = Parser()
-    var doc = p.parse(_bytes(String('{"a":[1,2]}')))
+    var doc = parse(_bytes(String('{"a":[1,2]}')))
     var expected = String('{') + chr(10) + '  "a": [' + chr(10) + '    1,' + chr(10) + '    2' + chr(10) + '  ]' + chr(10) + '}'
     assert_equal(to_json[pretty=True](doc), expected)
 
 
 def test_tapes_equal_smoke() raises:
-    var p1 = Parser()
-    var d1 = p1.parse(_bytes(String('{"a":1}')))
-    var p2 = Parser()
-    var d2 = p2.parse(_bytes(String('{"a":1}')))
-    var p3 = Parser()
-    var d3 = p3.parse(_bytes(String('{"a":2}')))
+    var d1 = parse(_bytes(String('{"a":1}')))
+    var d2 = parse(_bytes(String('{"a":1}')))
+    var d3 = parse(_bytes(String('{"a":2}')))
     assert_true(tapes_equal(d1, d2))
     assert_false(tapes_equal(d1, d3))
 
 
 def _assert_roundtrips(path: String) raises:
     var data = read_file(path)
-    var p1 = Parser()
-    var d1 = p1.parse(data)
+    var d1 = parse(data)
     var emitted = to_string(d1)
-    var p2 = Parser()
-    var d2 = p2.parse(_bytes(emitted))
+    var d2 = parse(_bytes(emitted))
     assert_true(tapes_equal(d1, d2), msg=String("round-trip tape mismatch: ") + path)
 
 
@@ -105,11 +98,9 @@ def _assert_roundtrips_pretty(path: String) raises:
     that the parser can re-ingest without loss or corruption.
     """
     var data = read_file(path)
-    var p1 = Parser()
-    var d1 = p1.parse(data)
+    var d1 = parse(data)
     var emitted = to_json[pretty=True](d1)
-    var p2 = Parser()
-    var d2 = p2.parse(_bytes(emitted))
+    var d2 = parse(_bytes(emitted))
     assert_true(tapes_equal(d1, d2), msg=String("pretty round-trip tape mismatch: ") + path)
 
 

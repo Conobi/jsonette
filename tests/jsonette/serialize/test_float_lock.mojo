@@ -6,7 +6,7 @@ shortest-round-trip, this test fails loudly (the escape-hatch trigger).
 """
 from std.testing import assert_equal
 from std.memory import bitcast
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.serialize.tape_writer import to_string
 
 
@@ -20,9 +20,8 @@ def _bytes(s: String) -> List[UInt8]:
 
 def _bits(s: String) raises -> UInt64:
     """Parse `s` as a JSON float and return its raw IEEE-754 bit pattern."""
-    var p = Parser()
-    var doc = p.parse(_bytes(s))
-    var f = doc.root().get_float(doc)
+    var doc = parse(_bytes(s))
+    var f = doc.root().get_float()
     return bitcast[DType.uint64](SIMD[DType.float64, 1](f))
 
 
@@ -33,8 +32,7 @@ def _assert_float_roundtrips(s: String) raises:
     value. Do NOT relax this assertion — escalate to the architect to evaluate
     a native Ryu/Grisu3 formatter instead.
     """
-    var p = Parser()
-    var doc = p.parse(_bytes(s))
+    var doc = parse(_bytes(s))
     var emitted = to_string(doc)
     assert_equal(_bits(s), _bits(emitted))
 

@@ -1,5 +1,4 @@
-from jsonette.parser import Parser
-from jsonette.document import Document
+from jsonette.document import parse
 
 
 def test_n_incomplete_false() -> Bool:
@@ -12,8 +11,7 @@ def test_n_incomplete_false() -> Bool:
     data.append(UInt8(115))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_incomplete_false.json")
         return False
     except:
@@ -29,8 +27,7 @@ def test_n_incomplete_null() -> Bool:
     data.append(UInt8(108))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_incomplete_null.json")
         return False
     except:
@@ -46,8 +43,7 @@ def test_n_incomplete_true() -> Bool:
     data.append(UInt8(117))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_incomplete_true.json")
         return False
     except:
@@ -66,8 +62,7 @@ def test_n_number() -> Bool:
     data.append(UInt8(52))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_number_++.json")
         return False
     except:
@@ -85,8 +80,7 @@ def test_n_string_invalid_utf_8_in_escape() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_string_invalid-utf-8-in-escape.json")
         return False
     except:
@@ -110,8 +104,7 @@ def test_n_string_leading_uescaped_thinspace() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_string_leading_uescaped_thinspace.json")
         return False
     except:
@@ -127,8 +120,7 @@ def test_n_structure_U_2060_word_joined() -> Bool:
     data.append(UInt8(160))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_structure_U+2060_word_joined.json")
         return False
     except:
@@ -143,8 +135,7 @@ def test_n_structure_array_trailing_garbage() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(120))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_structure_array_trailing_garbage.json")
         return False
     except:
@@ -159,8 +150,7 @@ def test_n_structure_array_with_extra_array_close() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_structure_array_with_extra_array_close.json")
         return False
     except:
@@ -177,8 +167,7 @@ def test_n_structure_array_with_unclosed_string() -> Bool:
     data.append(UInt8(100))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         print("FAIL (unexpected accept): n_structure_array_with_unclosed_string.json")
         return False
     except:

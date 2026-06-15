@@ -1,5 +1,4 @@
-from jsonette.parser import Parser
-from jsonette.document import Document
+from jsonette.document import parse
 
 
 def test_y_array_arraysWithSpaces() -> Bool:
@@ -13,8 +12,7 @@ def test_y_array_arraysWithSpaces() -> Bool:
     data.append(UInt8(32))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_arraysWithSpaces.json")
@@ -29,8 +27,7 @@ def test_y_array_empty_string() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_empty-string.json")
@@ -43,8 +40,7 @@ def test_y_array_empty() -> Bool:
     data.append(UInt8(91))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_empty.json")
@@ -60,8 +56,7 @@ def test_y_array_ending_with_newline() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_ending_with_newline.json")
@@ -79,8 +74,7 @@ def test_y_array_false() -> Bool:
     data.append(UInt8(101))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_false.json")
@@ -109,8 +103,7 @@ def test_y_array_heterogeneous() -> Bool:
     data.append(UInt8(125))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_heterogeneous.json")
@@ -127,8 +120,7 @@ def test_y_array_null() -> Bool:
     data.append(UInt8(108))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_null.json")
@@ -143,8 +135,7 @@ def test_y_array_with_1_and_newline() -> Bool:
     data.append(UInt8(10))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_with_1_and_newline.json")
@@ -159,8 +150,7 @@ def test_y_array_with_leading_space() -> Bool:
     data.append(UInt8(49))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_with_leading_space.json")
@@ -191,8 +181,7 @@ def test_y_array_with_several_null() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_with_several_null.json")
@@ -207,8 +196,7 @@ def test_y_array_with_trailing_space() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(32))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_array_with_trailing_space.json")
@@ -227,8 +215,7 @@ def test_y_number() -> Bool:
     data.append(UInt8(53))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number.json")
@@ -245,8 +232,7 @@ def test_y_number_0e_1() -> Bool:
     data.append(UInt8(49))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_0e+1.json")
@@ -262,8 +248,7 @@ def test_y_number_0e1() -> Bool:
     data.append(UInt8(49))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_0e1.json")
@@ -278,8 +263,7 @@ def test_y_number_after_space() -> Bool:
     data.append(UInt8(52))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_after_space.json")
@@ -374,8 +358,7 @@ def test_y_number_double_close_to_zero() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(10))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_double_close_to_zero.json")
@@ -392,8 +375,7 @@ def test_y_number_int_with_exp() -> Bool:
     data.append(UInt8(49))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_int_with_exp.json")
@@ -408,8 +390,7 @@ def test_y_number_minus_zero() -> Bool:
     data.append(UInt8(48))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_minus_zero.json")
@@ -426,8 +407,7 @@ def test_y_number_negative_int() -> Bool:
     data.append(UInt8(51))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_negative_int.json")
@@ -442,8 +422,7 @@ def test_y_number_negative_one() -> Bool:
     data.append(UInt8(49))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_negative_one.json")
@@ -458,8 +437,7 @@ def test_y_number_negative_zero() -> Bool:
     data.append(UInt8(48))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_negative_zero.json")
@@ -476,8 +454,7 @@ def test_y_number_real_capital_e() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_capital_e.json")
@@ -494,8 +471,7 @@ def test_y_number_real_capital_e_neg_exp() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_capital_e_neg_exp.json")
@@ -512,8 +488,7 @@ def test_y_number_real_capital_e_pos_exp() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_capital_e_pos_exp.json")
@@ -532,8 +507,7 @@ def test_y_number_real_exponent() -> Bool:
     data.append(UInt8(53))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_exponent.json")
@@ -556,8 +530,7 @@ def test_y_number_real_fraction_exponent() -> Bool:
     data.append(UInt8(56))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_fraction_exponent.json")
@@ -574,8 +547,7 @@ def test_y_number_real_neg_exp() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_neg_exp.json")
@@ -592,8 +564,7 @@ def test_y_number_real_pos_exponent() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_real_pos_exponent.json")
@@ -609,8 +580,7 @@ def test_y_number_simple_int() -> Bool:
     data.append(UInt8(51))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_simple_int.json")
@@ -633,8 +603,7 @@ def test_y_number_simple_real() -> Bool:
     data.append(UInt8(57))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_number_simple_real.json")
@@ -671,8 +640,7 @@ def test_y_object() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object.json")
@@ -696,8 +664,7 @@ def test_y_object_basic() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_basic.json")
@@ -725,8 +692,7 @@ def test_y_object_duplicated_key() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_duplicated_key.json")
@@ -754,8 +720,7 @@ def test_y_object_duplicated_key_and_value() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_duplicated_key_and_value.json")
@@ -768,8 +733,7 @@ def test_y_object_empty() -> Bool:
     data.append(UInt8(123))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_empty.json")
@@ -786,8 +750,7 @@ def test_y_object_empty_key() -> Bool:
     data.append(UInt8(48))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_empty_key.json")
@@ -818,8 +781,7 @@ def test_y_object_escaped_null_in_key() -> Bool:
     data.append(UInt8(50))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_escaped_null_in_key.json")
@@ -865,8 +827,7 @@ def test_y_object_extreme_numbers() -> Bool:
     data.append(UInt8(32))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_extreme_numbers.json")
@@ -985,8 +946,7 @@ def test_y_object_long_strings() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_long_strings.json")
@@ -1005,8 +965,7 @@ def test_y_object_simple() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_simple.json")
@@ -1127,8 +1086,7 @@ def test_y_object_string_unicode() -> Bool:
     data.append(UInt8(32))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_string_unicode.json")
@@ -1151,8 +1109,7 @@ def test_y_object_with_newlines() -> Bool:
     data.append(UInt8(10))
     data.append(UInt8(125))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_object_with_newlines.json")
@@ -1185,8 +1142,7 @@ def test_y_string_1_2_3_bytes_UTF_8_sequences() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_1_2_3_bytes_UTF-8_sequences.json")
@@ -1213,8 +1169,7 @@ def test_y_string_accepted_surrogate_pair() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_accepted_surrogate_pair.json")
@@ -1253,8 +1208,7 @@ def test_y_string_accepted_surrogate_pairs() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_accepted_surrogate_pairs.json")
@@ -1285,8 +1239,7 @@ def test_y_string_allowed_escapes() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_allowed_escapes.json")
@@ -1308,8 +1261,7 @@ def test_y_string_backslash_and_u_escaped_zero() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_backslash_and_u_escaped_zero.json")
@@ -1326,8 +1278,7 @@ def test_y_string_backslash_doublequotes() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_backslash_doublequotes.json")
@@ -1355,8 +1306,7 @@ def test_y_string_comments() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_comments.json")
@@ -1374,8 +1324,7 @@ def test_y_string_double_escape_a() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_double_escape_a.json")
@@ -1393,8 +1342,7 @@ def test_y_string_double_escape_n() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_double_escape_n.json")
@@ -1415,8 +1363,7 @@ def test_y_string_escaped_control_character() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_escaped_control_character.json")
@@ -1437,8 +1384,7 @@ def test_y_string_escaped_noncharacter() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_escaped_noncharacter.json")
@@ -1456,8 +1402,7 @@ def test_y_string_in_array() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_in_array.json")
@@ -1476,8 +1421,7 @@ def test_y_string_in_array_with_leading_space() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_in_array_with_leading_space.json")
@@ -1504,8 +1448,7 @@ def test_y_string_last_surrogates_1_and_2() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_last_surrogates_1_and_2.json")
@@ -1533,8 +1476,7 @@ def test_y_string_nbsp_uescaped() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_nbsp_uescaped.json")
@@ -1553,8 +1495,7 @@ def test_y_string_nonCharacterInUTF_8_U_10FFFF() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_nonCharacterInUTF-8_U+10FFFF.json")
@@ -1572,8 +1513,7 @@ def test_y_string_nonCharacterInUTF_8_U_FFFF() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_nonCharacterInUTF-8_U+FFFF.json")
@@ -1594,8 +1534,7 @@ def test_y_string_null_escape() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_null_escape.json")
@@ -1616,8 +1555,7 @@ def test_y_string_one_byte_utf_8() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_one-byte-utf-8.json")
@@ -1634,8 +1572,7 @@ def test_y_string_pi() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_pi.json")
@@ -1654,8 +1591,7 @@ def test_y_string_reservedCharacterInUTF_8_U_1BFFF() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_reservedCharacterInUTF-8_U+1BFFF.json")
@@ -1674,8 +1610,7 @@ def test_y_string_simple_ascii() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_simple_ascii.json")
@@ -1689,8 +1624,7 @@ def test_y_string_space() -> Bool:
     data.append(UInt8(32))
     data.append(UInt8(34))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_space.json")
@@ -1717,8 +1651,7 @@ def test_y_string_surrogates_U_1D11E_MUSICAL_SYMBOL_G_CLEF() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_surrogates_U+1D11E_MUSICAL_SYMBOL_G_CLEF.json")
@@ -1739,8 +1672,7 @@ def test_y_string_three_byte_utf_8() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_three-byte-utf-8.json")
@@ -1761,8 +1693,7 @@ def test_y_string_two_byte_utf_8() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_two-byte-utf-8.json")
@@ -1780,8 +1711,7 @@ def test_y_string_u_2028_line_sep() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_u+2028_line_sep.json")
@@ -1799,8 +1729,7 @@ def test_y_string_u_2029_par_sep() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_u+2029_par_sep.json")
@@ -1839,8 +1768,7 @@ def test_y_string_uEscape() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_uEscape.json")
@@ -1868,8 +1796,7 @@ def test_y_string_uescaped_newline() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_uescaped_newline.json")
@@ -1885,8 +1812,7 @@ def test_y_string_unescaped_char_delete() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unescaped_char_delete.json")
@@ -1907,8 +1833,7 @@ def test_y_string_unicode() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode.json")
@@ -1929,8 +1854,7 @@ def test_y_string_unicodeEscapedBackslash() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicodeEscapedBackslash.json")
@@ -1954,8 +1878,7 @@ def test_y_string_unicode_2() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_2.json")
@@ -1982,8 +1905,7 @@ def test_y_string_unicode_U_10FFFE_nonchar() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_U+10FFFE_nonchar.json")
@@ -2010,8 +1932,7 @@ def test_y_string_unicode_U_1FFFE_nonchar() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_U+1FFFE_nonchar.json")
@@ -2032,8 +1953,7 @@ def test_y_string_unicode_U_200B_ZERO_WIDTH_SPACE() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_U+200B_ZERO_WIDTH_SPACE.json")
@@ -2054,8 +1974,7 @@ def test_y_string_unicode_U_2064_invisible_plus() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_U+2064_invisible_plus.json")
@@ -2076,8 +1995,7 @@ def test_y_string_unicode_U_FDD0_nonchar() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_U+FDD0_nonchar.json")
@@ -2098,8 +2016,7 @@ def test_y_string_unicode_U_FFFE_nonchar() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_U+FFFE_nonchar.json")
@@ -2120,8 +2037,7 @@ def test_y_string_unicode_escaped_double_quote() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_unicode_escaped_double_quote.json")
@@ -2143,8 +2059,7 @@ def test_y_string_utf8() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_utf8.json")
@@ -2162,8 +2077,7 @@ def test_y_string_with_del_character() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_string_with_del_character.json")
@@ -2179,8 +2093,7 @@ def test_y_structure_lonely_false() -> Bool:
     data.append(UInt8(115))
     data.append(UInt8(101))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_lonely_false.json")
@@ -2193,8 +2106,7 @@ def test_y_structure_lonely_int() -> Bool:
     data.append(UInt8(52))
     data.append(UInt8(50))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_lonely_int.json")
@@ -2209,8 +2121,7 @@ def test_y_structure_lonely_negative_real() -> Bool:
     data.append(UInt8(46))
     data.append(UInt8(49))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_lonely_negative_real.json")
@@ -2225,8 +2136,7 @@ def test_y_structure_lonely_null() -> Bool:
     data.append(UInt8(108))
     data.append(UInt8(108))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_lonely_null.json")
@@ -2242,8 +2152,7 @@ def test_y_structure_lonely_string() -> Bool:
     data.append(UInt8(100))
     data.append(UInt8(34))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_lonely_string.json")
@@ -2258,8 +2167,7 @@ def test_y_structure_lonely_true() -> Bool:
     data.append(UInt8(117))
     data.append(UInt8(101))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_lonely_true.json")
@@ -2272,8 +2180,7 @@ def test_y_structure_string_empty() -> Bool:
     data.append(UInt8(34))
     data.append(UInt8(34))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_string_empty.json")
@@ -2290,8 +2197,7 @@ def test_y_structure_trailing_newline() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(10))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_trailing_newline.json")
@@ -2308,8 +2214,7 @@ def test_y_structure_true_in_array() -> Bool:
     data.append(UInt8(101))
     data.append(UInt8(93))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_true_in_array.json")
@@ -2324,8 +2229,7 @@ def test_y_structure_whitespace_array() -> Bool:
     data.append(UInt8(93))
     data.append(UInt8(32))
     try:
-        var parser = Parser()
-        _ = parser.parse(data)
+        _ = parse(data)
         return True
     except:
         print("FAIL (unexpected reject): y_structure_whitespace_array.json")

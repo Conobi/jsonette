@@ -1,7 +1,6 @@
 from std.memory import memcpy, memset
 
 from jsonette.tape import Tape
-from jsonette.document import Document
 from jsonette.error import format_parse_error
 from jsonette._alloc_count import record_alloc
 from jsonette.stage1.indexer import structural_index
@@ -41,11 +40,12 @@ struct Parser(Movable):
         self._tape = take._tape^
         self._od_scratch = take._od_scratch^
 
-    def parse(mut self, data: List[UInt8]) raises -> Document[origin_of(self._tape)]:
-        """Parse JSON bytes into a Document view over this parser's tape.
+    def _build(mut self, data: Span[UInt8, _]) raises:
+        """Build this parser's tape from `data` (Stage 1 + Stage 2). No Document returned.
 
-        The returned Document borrows this parser's tape; it is valid only while
-        this parser is alive and is neither reparsed nor moved.
+        Reuses the grow-only `padded`/`positions`/`_tape` buffers; a warm same-size
+        rebuild allocates nothing (the zero-alloc contract). Raises a formatted
+        ParseError on malformed input.
         """
         var input_len = len(data)
 
@@ -70,24 +70,6 @@ struct Parser(Movable):
             build_tape(self.padded, input_len, self.positions, self.container_stack, self.count_stack, self._tape)
         except e:
             raise format_parse_error(e.code, e.position)
-        return Document(self._tape)
-
-    def document(mut self) -> Document[origin_of(self._tape)]:
-        """Return a Document viewing this parser's most recent parse.
-
-        Must be called only after at least one successful `parse(...)`. The
-        returned Document borrows this parser's tape; it is valid only while the
-        parser is alive and is neither reparsed nor moved. A subsequent
-        `parse(...)` reuses the tape, so any earlier Document then reflects the
-        new data (reparse invalidation) — obtain a fresh Document after each
-        parse.
-
-        Takes `mut self` to bind the borrow's origin as mutable, which the
-        Document's origin parameter requires; it does not modify the parser.
-        Lets embedders avoid reaching into the parser's internal tape field: a
-        caller names the return type with `type_of(parser.document())`.
-        """
-        return Document(self._tape)
 
     def iter(mut self, data: List[UInt8]) raises -> ObjectHandle[origin_of(self)]:
         """Run Stage 1 and return a lazy On-Demand handle over the root object.

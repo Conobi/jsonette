@@ -1,183 +1,301 @@
 from std.memory import bitcast
-from jsonette.tape import TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
+from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from jsonette.document import Document
 
 
-struct Value:
-    """Lightweight tape index view into a Document."""
+struct Value[o: Origin[mut=True]](Copyable, Movable):
+    """A self-bound zero-copy view into a Document's tape (no doc-threading)."""
+
+    var _doc: Pointer[Document, Self.o]
     var _idx: Int
+    var _gen: Int
 
-    def __init__(out self, idx: Int):
+    def __init__(out self, ref [Self.o] doc: Document, idx: Int, gen: Int):
+        self._doc = Pointer(to=doc)
         self._idx = idx
+        self._gen = gen
 
-    # --- Internal helpers ---
+    def __init__(out self, *, deinit take: Self):
+        self._doc = take._doc
+        self._idx = take._idx
+        self._gen = take._gen
+
     @always_inline("nodebug")
-    def _tag[o: Origin[mut=True]](self, ref doc: Document[o]) -> UInt8:
-        # Safety: idx comes from tape structure written by builder
-        return UInt8(doc._tape[].elements.unsafe_get(self._idx) >> 56)
+    def _check(self):
+        debug_assert(self._gen == self._doc[]._gen, "stale Value used after reparse")
 
     @always_inline("nodebug")
-    def _payload[o: Origin[mut=True]](self, ref doc: Document[o]) -> UInt64:
-        # Safety: idx comes from tape structure written by builder
-        return doc._tape[].elements.unsafe_get(self._idx) & 0x00FFFFFFFFFFFFFF
+    def _elem(self, i: Int) -> UInt64:
+        return self._doc[]._parser._tape.elements.unsafe_get(i)
 
-    # --- Type checks ---
-    def is_object[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_OBJECT_OPEN
+    @always_inline("nodebug")
+    def _sbuf(self, i: Int) -> UInt8:
+        return self._doc[]._parser._tape.string_buf.unsafe_get(i)
 
-    def is_array[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_ARRAY_OPEN
+    @always_inline("nodebug")
+    def _tag(self) -> UInt8:
+        self._check()
+        return UInt8(self._elem(self._idx) >> 56)
 
-    def is_string[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_STRING
+    @always_inline("nodebug")
+    def _payload(self) -> UInt64:
+        return self._elem(self._idx) & 0x00FFFFFFFFFFFFFF
 
-    def is_int[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_INT64
+    @always_inline("nodebug")
+    def _strlen_at(self, offset: Int) -> Int:
+        return Int(
+            UInt32(self._sbuf(offset))
+            | (UInt32(self._sbuf(offset + 1)) << 8)
+            | (UInt32(self._sbuf(offset + 2)) << 16)
+            | (UInt32(self._sbuf(offset + 3)) << 24)
+        )
 
-    def is_uint[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_UINT64
-
-    def is_float[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_FLOAT64
-
-    def is_bool[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        var t = self._tag(doc)
+    def is_object(self) -> Bool: return self._tag() == TAG_OBJECT_OPEN
+    def is_array(self) -> Bool: return self._tag() == TAG_ARRAY_OPEN
+    def is_string(self) -> Bool: return self._tag() == TAG_STRING
+    def is_int(self) -> Bool: return self._tag() == TAG_INT64
+    def is_uint(self) -> Bool: return self._tag() == TAG_UINT64
+    def is_float(self) -> Bool: return self._tag() == TAG_FLOAT64
+    def is_number(self) -> Bool:
+        var t = self._tag()
+        return t == TAG_INT64 or t == TAG_UINT64 or t == TAG_FLOAT64
+    def is_bool(self) -> Bool:
+        var t = self._tag()
         return t == TAG_TRUE or t == TAG_FALSE
+    def is_null(self) -> Bool: return self._tag() == TAG_NULL
 
-    def is_null[o: Origin[mut=True]](self, ref doc: Document[o]) -> Bool:
-        return self._tag(doc) == TAG_NULL
-
-    # --- Scalar getters ---
-    def get_bool[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> Bool:
-        var t = self._tag(doc)
-        if t == TAG_TRUE:
-            return True
-        if t == TAG_FALSE:
-            return False
+    def get_bool(self) raises -> Bool:
+        var t = self._tag()
+        if t == TAG_TRUE: return True
+        if t == TAG_FALSE: return False
         raise "TAPE_ERROR: expected bool"
 
-    def get_uint[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> UInt64:
-        if self._tag(doc) != TAG_UINT64:
-            raise "TAPE_ERROR: expected uint64"
-        # Safety: idx comes from tape structure written by builder
-        return doc._tape[].elements.unsafe_get(self._idx + 1)
+    def get_uint(self) raises -> UInt64:
+        if self._tag() != TAG_UINT64: raise "TAPE_ERROR: expected uint64"
+        return self._elem(self._idx + 1)
 
-    def get_int[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> Int64:
-        if self._tag(doc) != TAG_INT64:
-            raise "TAPE_ERROR: expected int64"
-        # Safety: idx comes from tape structure written by builder
-        return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](doc._tape[].elements.unsafe_get(self._idx + 1))))
+    def get_int(self) raises -> Int64:
+        if self._tag() != TAG_INT64: raise "TAPE_ERROR: expected int64"
+        return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](self._elem(self._idx + 1))))
 
-    def get_float[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> Float64:
-        if self._tag(doc) != TAG_FLOAT64:
-            raise "TAPE_ERROR: expected float64"
-        # Safety: idx comes from tape structure written by builder
-        return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](doc._tape[].elements.unsafe_get(self._idx + 1))))
+    def get_float(self) raises -> Float64:
+        if self._tag() != TAG_FLOAT64: raise "TAPE_ERROR: expected float64"
+        return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](self._elem(self._idx + 1))))
 
-    def get_string_length[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> Int:
-        if self._tag(doc) != TAG_STRING:
-            raise "TAPE_ERROR: expected string"
-        var offset = Int(self._payload(doc))
-        return Int(
-            UInt32(doc._tape[].string_buf.unsafe_get(offset))
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 1)) << 8)
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 2)) << 16)
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 3)) << 24)
-        )
+    def get_string_length(self) raises -> Int:
+        if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
+        return self._strlen_at(Int(self._payload()))
 
-    def get_string[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> String:
-        """Get string as an owned Mojo String. Raises if not a string."""
-        if self._tag(doc) != TAG_STRING:
-            raise "TAPE_ERROR: expected string"
-        var offset = Int(self._payload(doc))
-        var str_len = Int(
-            UInt32(doc._tape[].string_buf.unsafe_get(offset))
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 1)) << 8)
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 2)) << 16)
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 3)) << 24)
-        )
+    def get_string(self) raises -> String:
+        if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
+        var offset = Int(self._payload())
+        var str_len = self._strlen_at(offset)
         var buf = List[UInt8](capacity=str_len)
         for i in range(str_len):
-            buf.append(doc._tape[].string_buf.unsafe_get(offset + 4 + i))
+            buf.append(self._sbuf(offset + 4 + i))
         return String(from_utf8=buf^)
 
-    def string_eq[o: Origin[mut=True]](self, ref doc: Document[o], expected: String) raises -> Bool:
-        if self._tag(doc) != TAG_STRING:
-            raise "TAPE_ERROR: expected string"
-        var offset = Int(self._payload(doc))
-        var str_len = Int(
-            UInt32(doc._tape[].string_buf.unsafe_get(offset))
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 1)) << 8)
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 2)) << 16)
-            | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 3)) << 24)
-        )
-        var expected_bytes = expected.as_bytes()
-        if str_len != len(expected_bytes):
-            return False
+    def string_eq(self, expected: String) raises -> Bool:
+        if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
+        var offset = Int(self._payload())
+        var str_len = self._strlen_at(offset)
+        var eb = expected.as_bytes()
+        if str_len != len(eb): return False
         for i in range(str_len):
-            if doc._tape[].string_buf.unsafe_get(offset + 4 + i) != expected_bytes[i]:
-                return False
+            if self._sbuf(offset + 4 + i) != eb[i]: return False
         return True
 
-    # --- Container access ---
-    def get[o: Origin[mut=True]](self, ref doc: Document[o], key: String) raises -> Value:
-        """Object key lookup. O(n) linear scan."""
-        if self._tag(doc) != TAG_OBJECT_OPEN:
-            raise "TAPE_ERROR: expected object for key lookup"
+    def field(self, key: String) raises -> Value[Self.o]:
+        """Object key lookup (O(n) scan). Was `get(doc, key)`."""
+        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object for key lookup"
         var i = self._idx + 1
-        var close_plus_one = Int(self._payload(doc) & 0xFFFFFFFF)
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
         while i < close_plus_one - 1:
-            # Safety: idx comes from tape structure written by builder
-            var key_tag = UInt8(doc._tape[].elements.unsafe_get(i) >> 56)
-            if key_tag != TAG_STRING:
-                raise "TAPE_ERROR: expected string key in object"
-            # Safety: idx comes from tape structure written by builder
-            var offset = Int(doc._tape[].elements.unsafe_get(i) & 0x00FFFFFFFFFFFFFF)
-            var key_len = Int(
-                UInt32(doc._tape[].string_buf.unsafe_get(offset))
-                | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 1)) << 8)
-                | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 2)) << 16)
-                | (UInt32(doc._tape[].string_buf.unsafe_get(offset + 3)) << 24)
-            )
-            var expected_bytes = key.as_bytes()
-            var is_match = key_len == len(expected_bytes)
+            var key_tag = UInt8(self._elem(i) >> 56)
+            if key_tag != TAG_STRING: raise "TAPE_ERROR: expected string key in object"
+            var offset = Int(self._elem(i) & 0x00FFFFFFFFFFFFFF)
+            var key_len = self._strlen_at(offset)
+            var eb = key.as_bytes()
+            var is_match = key_len == len(eb)
             if is_match:
                 for j in range(key_len):
-                    if doc._tape[].string_buf.unsafe_get(offset + 4 + j) != expected_bytes[j]:
+                    if self._sbuf(offset + 4 + j) != eb[j]:
                         is_match = False
                         break
             var val_idx = i + 1
             if is_match:
-                return Value(val_idx)
-            i = skip_value(doc, val_idx)
+                return Value[Self.o](self._doc[], val_idx, self._gen)
+            i = _skip_value(self._doc[], val_idx)
         raise "KEY_NOT_FOUND: '" + key + "'"
 
-    def at[o: Origin[mut=True]](self, ref doc: Document[o], idx: Int) raises -> Value:
-        """Array element access by index. O(n) skip."""
-        if self._tag(doc) != TAG_ARRAY_OPEN:
-            raise "TAPE_ERROR: expected array for index access"
+    def has_field(self, key: String) raises -> Bool:
+        """True iff `key` exists (no raise on absence)."""
+        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object"
         var i = self._idx + 1
-        var close_plus_one = Int(self._payload(doc) & 0xFFFFFFFF)
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        while i < close_plus_one - 1:
+            var key_tag = UInt8(self._elem(i) >> 56)
+            if key_tag != TAG_STRING: raise "TAPE_ERROR: expected string key in object"
+            var offset = Int(self._elem(i) & 0x00FFFFFFFFFFFFFF)
+            var key_len = self._strlen_at(offset)
+            var eb = key.as_bytes()
+            var is_match = key_len == len(eb)
+            if is_match:
+                for j in range(key_len):
+                    if self._sbuf(offset + 4 + j) != eb[j]:
+                        is_match = False
+                        break
+            if is_match: return True
+            i = _skip_value(self._doc[], i + 1)
+        return False
+
+    def elem(self, idx: Int) raises -> Value[Self.o]:
+        """Array element by index (O(n) skip). Was `at(doc, idx)`."""
+        if self._tag() != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected array for index access"
+        var i = self._idx + 1
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
         var current = 0
         while i < close_plus_one - 1:
             if current == idx:
-                return Value(i)
-            i = skip_value(doc, i)
+                return Value[Self.o](self._doc[], i, self._gen)
+            i = _skip_value(self._doc[], i)
             current += 1
         raise "INDEX_ERROR: index " + String(idx) + " out of range"
 
-    def count[o: Origin[mut=True]](self, ref doc: Document[o]) raises -> Int:
-        """Return element count from container open entry."""
-        var t = self._tag(doc)
-        if t != TAG_OBJECT_OPEN and t != TAG_ARRAY_OPEN:
-            raise "TAPE_ERROR: expected container for count"
-        return Int((self._payload(doc) >> 32) & 0xFFFFFF)
+    def len(self) raises -> Int:
+        """Element count of this container. Was `count(doc)`."""
+        var t = self._tag()
+        if t != TAG_OBJECT_OPEN and t != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected container for len"
+        return Int((self._payload() >> 32) & 0xFFFFFF)
+
+    def __getitem__(self, key: String) raises -> Value[Self.o]:
+        """Sugar for object key lookup: `value["key"]`."""
+        return self.field(key)
+
+    def __getitem__(self, idx: Int) raises -> Value[Self.o]:
+        """Sugar for array element access: `value[idx]`."""
+        return self.elem(idx)
+
+    def fields(self) raises -> _FieldIter[Self.o]:
+        """Iterate object (key, value) entries in document order."""
+        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object to iterate fields"
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        return _FieldIter[Self.o](self._doc, self._idx + 1, close_plus_one, self._gen)
+
+    def elems(self) raises -> _ElemIter[Self.o]:
+        """Iterate array elements in document order."""
+        if self._tag() != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected array to iterate elements"
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        return _ElemIter[Self.o](self._doc, self._idx + 1, close_plus_one, self._gen)
 
 
-def skip_value[o: Origin[mut=True]](ref doc: Document[o], idx: Int) -> Int:
-    """Return the tape index past the element at idx."""
-    # Safety: idx comes from tape structure written by builder
-    var entry = doc._tape[].elements.unsafe_get(idx)
+struct _Entry[o: Origin[mut=True]](Copyable, Movable):
+    """A single object entry: tape indices for a key and its value."""
+
+    var _doc: Pointer[Document, Self.o]
+    var _key_idx: Int
+    var _val_idx: Int
+    var _gen: Int
+
+    def __init__(out self, doc: Pointer[Document, Self.o], key_idx: Int, val_idx: Int, gen: Int):
+        self._doc = doc
+        self._key_idx = key_idx
+        self._val_idx = val_idx
+        self._gen = gen
+
+    def __init__(out self, *, deinit take: Self):
+        self._doc = take._doc
+        self._key_idx = take._key_idx
+        self._val_idx = take._val_idx
+        self._gen = take._gen
+
+    def key(self) raises -> String:
+        return Value[Self.o](self._doc[], self._key_idx, self._gen).get_string()
+
+    def value(self) -> Value[Self.o]:
+        return Value[Self.o](self._doc[], self._val_idx, self._gen)
+
+
+struct _FieldIter[o: Origin[mut=True]](Copyable, Movable):
+    """Forward iterator over an object's (key, value) entries."""
+
+    var _doc: Pointer[Document, Self.o]
+    var _i: Int
+    var _end: Int
+    var _gen: Int
+
+    def __init__(out self, doc: Pointer[Document, Self.o], i: Int, end: Int, gen: Int):
+        self._doc = doc
+        self._i = i
+        self._end = end
+        self._gen = gen
+
+    def __init__(out self, *, deinit take: Self):
+        self._doc = take._doc
+        self._i = take._i
+        self._end = take._end
+        self._gen = take._gen
+
+    @always_inline("nodebug")
+    def _check(self):
+        debug_assert(self._gen == self._doc[]._gen, "stale iterator used after reparse")
+
+    def __iter__(self) -> Self:
+        return self.copy()
+
+    def __has_next__(self) -> Bool:
+        self._check()
+        return self._i < self._end - 1
+
+    def __next__(mut self) -> _Entry[Self.o]:
+        self._check()
+        var key_idx = self._i
+        var val_idx = self._i + 1
+        self._i = _skip_value(self._doc[], val_idx)
+        return _Entry[Self.o](self._doc, key_idx, val_idx, self._gen)
+
+
+struct _ElemIter[o: Origin[mut=True]](Copyable, Movable):
+    """Forward iterator over an array's elements."""
+
+    var _doc: Pointer[Document, Self.o]
+    var _i: Int
+    var _end: Int
+    var _gen: Int
+
+    def __init__(out self, doc: Pointer[Document, Self.o], i: Int, end: Int, gen: Int):
+        self._doc = doc
+        self._i = i
+        self._end = end
+        self._gen = gen
+
+    def __init__(out self, *, deinit take: Self):
+        self._doc = take._doc
+        self._i = take._i
+        self._end = take._end
+        self._gen = take._gen
+
+    @always_inline("nodebug")
+    def _check(self):
+        debug_assert(self._gen == self._doc[]._gen, "stale iterator used after reparse")
+
+    def __iter__(self) -> Self:
+        return self.copy()
+
+    def __has_next__(self) -> Bool:
+        self._check()
+        return self._i < self._end - 1
+
+    def __next__(mut self) -> Value[Self.o]:
+        self._check()
+        var idx = self._i
+        self._i = _skip_value(self._doc[], idx)
+        return Value[Self.o](self._doc[], idx, self._gen)
+
+
+def _skip_value[o2: Origin[mut=True]](ref [o2] doc: Document, idx: Int) -> Int:
+    """Tape index past the element at idx (preserves the prior skip_value)."""
+    var entry = doc._parser._tape.elements.unsafe_get(idx)
     var tag = UInt8(entry >> 56)
     if tag == TAG_TRUE or tag == TAG_FALSE or tag == TAG_NULL or tag == TAG_STRING:
         return idx + 1

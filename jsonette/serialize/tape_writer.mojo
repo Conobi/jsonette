@@ -15,27 +15,27 @@ from jsonette.tape import (
 from jsonette.serialize.writer import JsonWriter
 
 
-def _write_string_at[o: Origin[mut=True]](ref doc: Document[o], idx: Int, mut w: JsonWriter):
+def _write_string_at[o: Origin[mut=True]](ref [o] doc: Document, idx: Int, mut w: JsonWriter):
     """Emit the STRING entry at `idx` (payload = offset into string_buf)."""
-    var entry = doc._tape[].elements[idx]
+    var entry = doc._parser._tape.elements[idx]
     var offset = Int(entry & 0x00FFFFFFFFFFFFFF)
     var slen = Int(
-        UInt32(doc._tape[].string_buf[offset])
-        | (UInt32(doc._tape[].string_buf[offset + 1]) << 8)
-        | (UInt32(doc._tape[].string_buf[offset + 2]) << 16)
-        | (UInt32(doc._tape[].string_buf[offset + 3]) << 24)
+        UInt32(doc._parser._tape.string_buf[offset])
+        | (UInt32(doc._parser._tape.string_buf[offset + 1]) << 8)
+        | (UInt32(doc._parser._tape.string_buf[offset + 2]) << 16)
+        | (UInt32(doc._parser._tape.string_buf[offset + 3]) << 24)
     )
-    w.write_escaped_buf(doc._tape[].string_buf, offset + 4, slen)
+    w.write_escaped_buf(doc._parser._tape.string_buf, offset + 4, slen)
 
 
-def _write_value[o: Origin[mut=True]](ref doc: Document[o], idx: Int, mut w: JsonWriter) raises -> Int:
+def _write_value[o: Origin[mut=True]](ref [o] doc: Document, idx: Int, mut w: JsonWriter) raises -> Int:
     """Emit the value at tape index `idx`; return the index just past it.
 
     Pretty-print is driven by the writer's indent state: `newline_indent()` and
     `colon()` are minimal in compact mode, so one walk serves both modes. Empty
     containers emit `{}`/`[]` with no interior newline.
     """
-    var entry = doc._tape[].elements[idx]
+    var entry = doc._parser._tape.elements[idx]
     var tag = UInt8(entry >> 56)
     if tag == TAG_OBJECT_OPEN:
         var close_p1 = Int(entry & 0xFFFFFFFF)
@@ -81,13 +81,13 @@ def _write_value[o: Origin[mut=True]](ref doc: Document[o], idx: Int, mut w: Jso
         _write_string_at(doc, idx, w)
         return idx + 1
     elif tag == TAG_INT64:
-        w.write_int(Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](doc._tape[].elements[idx + 1]))))
+        w.write_int(Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](doc._parser._tape.elements[idx + 1]))))
         return idx + 2
     elif tag == TAG_UINT64:
-        w.write_uint(doc._tape[].elements[idx + 1])
+        w.write_uint(doc._parser._tape.elements[idx + 1])
         return idx + 2
     elif tag == TAG_FLOAT64:
-        w.write_float(Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](doc._tape[].elements[idx + 1]))))
+        w.write_float(Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](doc._parser._tape.elements[idx + 1]))))
         return idx + 2
     elif tag == TAG_TRUE:
         w.write_bool(True)
@@ -102,14 +102,14 @@ def _write_value[o: Origin[mut=True]](ref doc: Document[o], idx: Int, mut w: Jso
         raise "TAPE_ERROR: unknown tag in serializer"
 
 
-def to_string[o: Origin[mut=True]](ref doc: Document[o]) raises -> String:
+def to_string[o: Origin[mut=True]](ref [o] doc: Document) raises -> String:
     """Serialize `doc` to compact JSON text."""
     var w = JsonWriter()
     _ = _write_value(doc, 1, w)
     return w^.finish()
 
 
-def to_json[o: Origin[mut=True], pretty: Bool = False](ref doc: Document[o]) raises -> String:
+def to_json[o: Origin[mut=True], pretty: Bool = False](ref [o] doc: Document) raises -> String:
     """Serialize `doc` to JSON text; `pretty=True` indents with two spaces."""
     comptime if pretty:
         var w = JsonWriter(String("  "))

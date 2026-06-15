@@ -29,6 +29,7 @@ is given as an explicit byte list (`_raw`).
 
 from std.testing import assert_true
 from jsonette.parser import Parser
+from jsonette.document import parse
 
 
 def _b(s: String) -> List[UInt8]:
@@ -60,9 +61,8 @@ def _validate_accepts(data: List[UInt8]) raises -> Bool:
 def _parse_rejects(data: List[UInt8]) raises -> Bool:
     """Return True iff the permissive DOM `parse` raises on `data`."""
     var rejected = False
-    var p = Parser()
     try:
-        _ = p.parse(data)
+        _ = parse(data)
     except:
         rejected = True
     return rejected
