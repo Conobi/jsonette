@@ -49,6 +49,7 @@ TESTS=(
     tests/conformance/test_reject.mojo
     tests/conformance/test_reject_corpus.mojo
     tests/conformance/test_parse_validate_differential.mojo
+    tests/conformance/test_utf8.mojo
 )
 
 cd "$PROJECT_DIR"

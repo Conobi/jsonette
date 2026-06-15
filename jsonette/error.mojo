@@ -14,6 +14,7 @@ struct ErrorCode(Movable, Copyable):
     comptime EMPTY_DOCUMENT = ErrorCode(8)
     comptime UNCLOSED_CONTAINER = ErrorCode(9)
     comptime INVALID_LITERAL = ErrorCode(10)
+    comptime INVALID_UTF8 = ErrorCode(11)
 
 
 @fieldwise_init
@@ -63,6 +64,8 @@ def format_parse_error(code: UInt8, position: Int) -> String:
         name = "UNCLOSED_CONTAINER"
     elif code == ErrorCode.INVALID_LITERAL.value:
         name = "INVALID_LITERAL"
+    elif code == ErrorCode.INVALID_UTF8.value:
+        name = "INVALID_UTF8"
     else:
         name = "UNKNOWN_ERROR"
     return name + " at position " + String(position)

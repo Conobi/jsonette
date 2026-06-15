@@ -1,11 +1,28 @@
 from std.memory import memcpy, memset
 
+from std.collections.string.string_slice import _is_valid_utf8
+
 from jsonette.tape import Tape
-from jsonette.error import format_parse_error
+from jsonette.error import format_parse_error, ErrorCode
 from jsonette._alloc_count import record_alloc
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
 from jsonette.ondemand.validate import _validate_document
+
+
+def _check_utf8(data: Span[UInt8, _]) raises:
+    """Reject input that is not well-formed UTF-8 (RFC 8259 mandates UTF-8 JSON text).
+
+    Wraps the stdlib SIMD validator in ONE place so the private `_is_valid_utf8`
+    dependency is isolated: if a future Mojo release renames or moves it, only this
+    line changes. A whole-buffer check (~3-6% of parse time on the standard
+    corpora); raises INVALID_UTF8. The structural walk assumes nothing about UTF-8
+    well-formedness — all structural/number/literal bytes are ASCII, and raw
+    non-ASCII appears only inside strings where Stage 2 does not validate the byte
+    encoding — so this guard is what closes the invalid-UTF-8-in-strings gap.
+    """
+    if not _is_valid_utf8(data):
+        raise format_parse_error(ErrorCode.INVALID_UTF8.value, 0)
 
 
 struct Parser(Movable):
@@ -46,9 +63,10 @@ struct Parser(Movable):
         strict RFC-8259 grammar state machine, rejecting malformed input as it
         materialises the tape (single pass, each leaf parsed once). Reuses the
         grow-only `padded`/`positions`/`_tape` buffers; a warm same-size rebuild
-        allocates nothing (the zero-alloc contract). Raises a formatted ParseError
-        on malformed input.
+        allocates nothing (the zero-alloc contract). Rejects non-UTF-8 input first,
+        then raises a formatted ParseError on any malformed input.
         """
+        _check_utf8(data)
         var input_len = len(data)
 
         # Reusable padded buffer: input + 128 zero bytes (enough for SIMD overread).
@@ -106,7 +124,11 @@ struct Parser(Movable):
         Unlike `iter`, this is a whole-document validator, not lazy navigation:
         every structural is grammar-checked and every leaf is parsed for
         validity. It allocates no `Document` and exposes no handle.
+
+        Rejects input that is not well-formed UTF-8 first (same guard as `parse`),
+        so `validate` and `parse` agree on every input.
         """
+        _check_utf8(Span(data))
         var input_len = len(data)
 
         # Reusable padded buffer: input + 128 zero bytes (SIMD overread headroom).
