@@ -2,19 +2,19 @@
 
 Generates many random flat top-level objects (random field counts, key spellings,
 and string/integer values), serialises each to JSON, parses it lazily via
-`Parser.iter`, and asserts every field reads back exactly the value that was
-generated. This exercises `find_field` + `get_string`/`get_int` across far more
+`iter`, and asserts every field reads back exactly the value that was
+generated. This exercises `field` + `get_string`/`get_int` across far more
 shapes than the hand-written cases — the "fuzzers find nothing new" convergence
 signal. Fully deterministic (seeded LCG) so failures reproduce.
 
-Keys are made unique within each object (`k<i>_<letters>`) so `find_field`'s
+Keys are made unique within each object (`k<i>_<letters>`) so `field`'s
 first-match has a single correct target. Integer values span the full Int64 range
 (including INT64_MIN), so the round-trip stresses the number path's hard cases.
 """
 
 from std.memory import bitcast
 from std.testing import assert_equal
-from jsonette.parser import Parser
+from jsonette.ondemand.reader import iter
 
 
 comptime ITERS: Int = 1500
@@ -69,22 +69,22 @@ def _check_one(mut rng: _Rng) raises:
     var data = List[UInt8]()
     for b in json.as_bytes():
         data.append(b)
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
+    var root = rdr.root().get_object()
     for i in range(nfields):
         if is_str[i]:
             assert_equal(
-                root.find_field(keys[i]).get_string(), svals[i],
+                root.field(keys[i]).get_string(), svals[i],
                 "string field mismatch in: " + json,
             )
         else:
             assert_equal(
-                root.find_field(keys[i]).get_int(), ivals[i],
+                root.field(keys[i]).get_int(), ivals[i],
                 "int field mismatch in: " + json,
             )
 
     # Forward iteration must yield exactly the same fields, in order, with the
-    # same values (find_field uses a local scan and leaves the cursor untouched,
+    # same values (field uses a local scan and leaves the cursor untouched,
     # so the same root can then be iterated).
     var idx = 0
     while not root.at_end():

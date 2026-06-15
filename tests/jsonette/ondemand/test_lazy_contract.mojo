@@ -15,18 +15,18 @@ Groups:
   navigation, so a following good field stays reachable.
 - D: key<->value adjacency is unchecked — `value_si = key_si + 3` is positional,
   not grammar-checked, so a comma standing in for a colon is tolerated.
-- E: a `ValueHandle` landing on a structural close byte is SAFE (no OOB, no
+- E: a `Value` landing on a structural close byte is SAFE (no OOB, no
   silent wrong value) — predicates are False and a numeric read raises cleanly.
 - F: the accept subset still parses through On-Demand (cross-check M0-M2), plus
   the M3.1 space-before-close terminator case.
 
 Like the other on-demand tests they go through inference ONLY: a caller obtains
-the root handle from `Parser.iter(...)` and navigates without ever naming any
+the root handle from `iter(...).root()` and navigates without ever naming any
 `[o]`-parametric type.
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from jsonette.parser import Parser
+from jsonette.ondemand.reader import iter
 
 
 def _make_bytes(s: String) -> List[UInt8]:
@@ -40,16 +40,15 @@ def _make_bytes(s: String) -> List[UInt8]:
 
 
 def test_accessed_number_trailing_junk_raises() raises:
-    """An accessed number with glued trailing junk (12.3.4) makes get_double raise."""
+    """An accessed number with glued trailing junk (12.3.4) makes get_float raise."""
     var data = _make_bytes(String('{"b":12.3.4}'))
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
     var raised = False
     try:
-        _ = root.find_field(String("b")).get_double()
+        _ = rdr.root().field(String("b")).get_float()
     except:
         raised = True
-    assert_true(raised, "get_double on 12.3.4 must raise (trailing junk)")
+    assert_true(raised, "get_float on 12.3.4 must raise (trailing junk)")
 
 
 def test_accessed_bad_string_escape_raises() raises:
@@ -62,11 +61,10 @@ def test_accessed_bad_string_escape_raises() raises:
     # Confirm the on-the-wire bytes are a single backslash then x (0x5C, 0x78).
     assert_equal(data[6], UInt8(0x5C))
     assert_equal(data[7], UInt8(0x78))
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
     var raised = False
     try:
-        _ = root.find_field(String("s")).get_string()
+        _ = rdr.root().field(String("s")).get_string()
     except:
         raised = True
     assert_true(raised, "get_string on a bad escape must raise (STRING_ERROR)")
@@ -75,11 +73,10 @@ def test_accessed_bad_string_escape_raises() raises:
 def test_accessed_unclosed_string_raises() raises:
     """An accessed unclosed string value makes get_string raise (UNCLOSED_STRING)."""
     var data = _make_bytes(String('{"s":"abc}'))
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
     var raised = False
     try:
-        _ = root.find_field(String("s")).get_string()
+        _ = rdr.root().field(String("s")).get_string()
     except:
         raised = True
     assert_true(raised, "get_string on an unclosed string must raise")
@@ -88,11 +85,10 @@ def test_accessed_unclosed_string_raises() raises:
 def test_accessed_invalid_literal_raises() raises:
     """An accessed truncated literal (tru) makes get_bool raise (INVALID_LITERAL)."""
     var data = _make_bytes(String('{"t":tru}'))
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
     var raised = False
     try:
-        _ = root.find_field(String("t")).get_bool()
+        _ = rdr.root().field(String("t")).get_bool()
     except:
         raised = True
     assert_true(raised, "get_bool on tru must raise (INVALID_LITERAL)")
@@ -108,9 +104,8 @@ def test_unread_bad_leaf_does_not_raise() raises:
     returns normally; the malformed "bad" value is never parsed.
     """
     var data = _make_bytes(String('{"good":1,"bad":12.3.4}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    assert_equal(root.find_field(String("good")).get_int(), Int64(1))
+    var rdr = iter(data)
+    assert_equal(rdr.root().field(String("good")).get_int(), Int64(1))
 
 
 # --- C. Laziness preserved — a SKIPPED malformed sibling does NOT raise -------
@@ -119,25 +114,23 @@ def test_unread_bad_leaf_does_not_raise() raises:
 def test_skipped_double_comma_array_invisible() raises:
     """A double-comma in a skipped array is invisible to lazy navigation.
 
-    `{"a":[1,2,,],"b":7}` — find_field("b") skips the malformed array under "a"
+    `{"a":[1,2,,],"b":7}` — field("b") skips the malformed array under "a"
     depth-aware and reaches "b" == 7 without ever inspecting the array's commas.
     """
     var data = _make_bytes(String('{"a":[1,2,,],"b":7}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    assert_equal(root.find_field(String("b")).get_int(), Int64(7))
+    var rdr = iter(data)
+    assert_equal(rdr.root().field(String("b")).get_int(), Int64(7))
 
 
 def test_skipped_missing_colon_object_invisible() raises:
     """A missing colon in a skipped nested object is invisible to lazy navigation.
 
-    `{"a":{"x" 1},"b":7}` — find_field("b") skips the nested object under "a"
+    `{"a":{"x" 1},"b":7}` — field("b") skips the nested object under "a"
     depth-aware (its missing colon is never examined) and reaches "b" == 7.
     """
     var data = _make_bytes(String('{"a":{"x" 1},"b":7}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    assert_equal(root.find_field(String("b")).get_int(), Int64(7))
+    var rdr = iter(data)
+    assert_equal(rdr.root().field(String("b")).get_int(), Int64(7))
 
 
 # --- D. Laziness preserved — key<->value adjacency is unchecked ---------------
@@ -150,9 +143,8 @@ def test_comma_for_colon_adjacency_unchecked() raises:
     grammar-checking the separator, so the byte at that slot (`1`) is returned.
     """
     var data = _make_bytes(String('{"a",1}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    assert_equal(root.find_field(String("a")).get_int(), Int64(1))
+    var rdr = iter(data)
+    assert_equal(rdr.root().field(String("a")).get_int(), Int64(1))
 
 
 # --- E. A value-handle on a structural close is SAFE -------------------------
@@ -166,9 +158,8 @@ def test_value_on_structural_close_is_safe() raises:
     cleanly (the `}` byte is not a number) with no OOB read under -D ASSERT=all.
     """
     var data = _make_bytes(String('{"a":}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var v = root.find_field(String("a"))
+    var rdr = iter(data)
+    var v = rdr.root().field(String("a"))
     assert_false(v.is_object())
     assert_false(v.is_array())
     var raised = False
@@ -190,33 +181,32 @@ def test_accept_subset_full_object() raises:
             + '"tags":["a","b"],"nested":{"k":7}}'
         )
     )
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
 
     assert_equal(
-        root.find_field(String("name")).get_string(), String("jsonette")
+        rdr.root().field(String("name")).get_string(), String("jsonette")
     )
-    assert_equal(root.find_field(String("count")).get_int(), Int64(42))
-    var ratio = root.find_field(String("ratio")).get_double()
+    assert_equal(rdr.root().field(String("count")).get_int(), Int64(42))
+    var ratio = rdr.root().field(String("ratio")).get_float()
     assert_true(
         (ratio - Float64(1.5)) < Float64(1e-9)
         and (Float64(1.5) - ratio) < Float64(1e-9),
         "ratio must be within 1e-9 of 1.5",
     )
-    assert_equal(root.find_field(String("ok")).get_bool(), True)
-    assert_true(root.find_field(String("empty")).is_null())
+    assert_equal(rdr.root().field(String("ok")).get_bool(), True)
+    assert_true(rdr.root().field(String("empty")).is_null())
 
-    var tags = root.find_field(String("tags")).get_array()
+    var tags = rdr.root().field(String("tags")).get_array()
     assert_equal(tags.next_element().get_string(), String("a"))
     assert_equal(tags.next_element().get_string(), String("b"))
 
     assert_equal(
-        root.find_field(String("nested")).get_object().find_field(String("k")).get_int(),
+        rdr.root().field(String("nested")).get_object().field(String("k")).get_int(),
         Int64(7),
     )
 
     # Forward iteration of the root still works: count the top-level fields.
-    var iter_root = parser.iter(data)
+    var iter_root = rdr.root().get_object()
     var count = 0
     while not iter_root.at_end():
         var f = iter_root.next_field()
@@ -232,9 +222,8 @@ def test_accept_space_before_close_terminator() raises:
     review's minor suggestion, pinned here).
     """
     var data = _make_bytes(String('{"n":1 }'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    assert_equal(root.find_field(String("n")).get_int(), Int64(1))
+    var rdr = iter(data)
+    assert_equal(rdr.root().field(String("n")).get_int(), Int64(1))
 
 
 def main() raises:

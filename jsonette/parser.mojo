@@ -5,7 +5,6 @@ from jsonette.error import format_parse_error
 from jsonette._alloc_count import record_alloc
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
-from jsonette.ondemand.ondemand import ObjectHandle
 from jsonette.ondemand.validate import _validate_document
 
 
@@ -71,23 +70,13 @@ struct Parser(Movable):
         except e:
             raise format_parse_error(e.code, e.position)
 
-    def iter(mut self, data: List[UInt8]) raises -> ObjectHandle[origin_of(self)]:
-        """Run Stage 1 and return a lazy On-Demand handle over the root object.
+    def _build_index(mut self, data: Span[UInt8, _]) raises:
+        """Run Stage 1 only (pad + structural_index) into this parser's buffers; no tape.
 
-        Pads the input (input + 128 zero bytes, reusing the same grow-only buffer
-        as `parse`), runs `structural_index` into this parser's `positions`, and
-        builds NO tape. Returns an `ObjectHandle` borrowing this parser; a leaf is
-        parsed only when its value is read.
-
-        The returned handle (and any handle it yields) borrows this parser; it is
-        valid only while the parser is alive and is neither reparsed via `iter`/
-        `parse` nor moved. Callers use the handle by inference and never name its
-        type. M0 assumes the root JSON value is an object (`positions[0]` is `'{'`).
+        Reuses the grow-only `padded`/`positions` buffers (zero warm allocs). The
+        On-Demand owning `Reader` is built on top of this.
         """
         var input_len = len(data)
-
-        # Reusable padded buffer: input + 128 zero bytes (SIMD overread headroom).
-        # Same grow-only buffer the tape path uses; a warm parser reuses it.
         var num_chunks = (input_len + 63) // 64
         var padded_len = num_chunks * 64 + 128
         if len(self.padded) < padded_len:
@@ -95,11 +84,7 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-
-        # Stage 1 only — no tape is built on the On-Demand path.
         structural_index(self.padded, input_len, self.positions)
-        # Root object: its first key is positions[1] (positions[0] is the '{').
-        return ObjectHandle(self, input_len, 1)
 
     def validate(mut self, data: List[UInt8]) raises -> None:
         """Validate JSON bytes strictly (RFC 8259); build NO tape, return no value.

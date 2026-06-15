@@ -23,6 +23,7 @@ TESTS=(
     tests/jsonette/test_gen_token.mojo
     tests/jsonette/test_dom_differential.mojo
     tests/jsonette/ondemand/test_flat_object.mojo
+    tests/jsonette/ondemand/test_any_root.mojo
     tests/jsonette/ondemand/test_fuzz_flat.mojo
     tests/jsonette/ondemand/test_leaf_types.mojo
     tests/jsonette/ondemand/test_leaf_errors.mojo
@@ -100,6 +101,24 @@ fi
 STALE_TEST=tests/jsonette/_stale_iter_aborts.mojo
 echo -n "RUN  $STALE_TEST (negative: must abort) ... "
 if mojo run -I . -D ASSERT=all "$STALE_TEST" > /tmp/mojo_test_out.txt 2>&1; then
+    echo "FAIL (expected abort, exited 0)"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+elif grep -qi "stale" /tmp/mojo_test_out.txt; then
+    echo "PASS (aborted with gen message)"
+    PASSED=$((PASSED + 1))
+else
+    echo "FAIL (non-zero exit but no 'stale' message)"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+fi
+
+# Stale On-Demand-handle negative gate: iterating an On-Demand array while
+# reparsing MUST abort (exit non-zero) with the gen-token message under
+# -D ASSERT=all. A clean exit (no abort) fails the suite.
+STALE_OD_TEST=tests/jsonette/ondemand/_stale_od_aborts.mojo
+echo -n "RUN  $STALE_OD_TEST (negative: must abort) ... "
+if mojo run -I . -D ASSERT=all "$STALE_OD_TEST" > /tmp/mojo_test_out.txt 2>&1; then
     echo "FAIL (expected abort, exited 0)"
     cat /tmp/mojo_test_out.txt
     FAILED=$((FAILED + 1))

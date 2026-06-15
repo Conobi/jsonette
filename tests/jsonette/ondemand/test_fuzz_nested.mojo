@@ -3,14 +3,14 @@
 Builds a random nesting chain (object and array levels, each with a sibling that
 is skipped — sometimes itself a container, to exercise the depth-aware
 `_skip_value` over container siblings) down to a target integer, then navigates
-root -> target via `get_object`/`find_field` and `get_array`/`next_element` and
+root -> target via `get_object`/`field` and `get_array`/`next_element` and
 checks the leaf. Random depths/shapes across many iterations — the "fuzzers find
 nothing new" signal for nested navigation. Deterministic (seeded LCG).
 """
 
 from std.memory import bitcast
 from std.testing import assert_equal
-from jsonette.parser import Parser
+from jsonette.ondemand.reader import iter
 
 
 comptime ITERS: Int = 1200
@@ -59,15 +59,14 @@ def _check_one(mut rng: _Rng) raises:
     var data = List[UInt8]()
     for b in json.as_bytes():
         data.append(b)
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
 
     # Navigate root -> target: levels are recorded innermost-first, so walk them
     # in reverse (outermost first) starting from the "root" field.
-    var v = root.find_field(String("root"))
+    var v = rdr.root().field(String("root"))
     for i in range(depth - 1, -1, -1):
         if is_obj[i]:
-            v = v.get_object().find_field(String("p"))
+            v = v.get_object().field(String("p"))
         else:
             var arr = v.get_array()
             _ = arr.next_element()  # skip the index-0 noise sibling

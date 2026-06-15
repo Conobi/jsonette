@@ -1,16 +1,16 @@
-"""On-Demand (lazy) parser — array navigation via `get_array()` + ArrayHandle.
+"""On-Demand (lazy) parser — array navigation via `get_array()` + Array.
 
 These tests exercise array navigation through inference ONLY: a caller obtains
-the root handle from `Parser.iter(...)`, descends into an array value with
-`find_field(key).get_array()`, and walks its elements with `at_end()` /
+the root handle from `iter(...).root()`, descends into an array value with
+`field(key).get_array()`, and walks its elements with `at_end()` /
 `next_element()` — without ever naming any `[o]`-parametric type. Each element
-is a `ValueHandle`, so leaves, nested objects, and nested arrays are reachable
+is a `Value`, so leaves, nested objects, and nested arrays are reachable
 the same way as anywhere else. Elements are skipped depth-aware, so the handle
 stops at its own `]`.
 """
 
 from std.testing import assert_equal, assert_true
-from jsonette.parser import Parser
+from jsonette.ondemand.reader import iter
 
 
 def _make_bytes(s: String) -> List[UInt8]:
@@ -23,9 +23,8 @@ def _make_bytes(s: String) -> List[UInt8]:
 def test_array_of_ints_in_order() raises:
     """An int array iterates exactly 1,2,3 in order, then is at_end."""
     var data = _make_bytes(String('{"xs":[1,2,3]}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var xs = root.find_field(String("xs")).get_array()
+    var rdr = iter(data)
+    var xs = rdr.root().field(String("xs")).get_array()
 
     var got = List[Int64]()
     while not xs.at_end():
@@ -40,9 +39,8 @@ def test_array_of_ints_in_order() raises:
 def test_array_mixed_leaf_types() raises:
     """A mixed array yields int, string, bool, null at indices 0..3."""
     var data = _make_bytes(String('{"xs":[1,"a",true,null]}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var xs = root.find_field(String("xs")).get_array()
+    var rdr = iter(data)
+    var xs = rdr.root().field(String("xs")).get_array()
 
     var e0 = xs.next_element()
     assert_equal(e0.get_int(), Int64(1))
@@ -61,14 +59,13 @@ def test_array_of_objects() raises:
     `{"xs":[{"k":1},{"k":2}]}` — element 0's k == 1, element 1's k == 2.
     """
     var data = _make_bytes(String('{"xs":[{"k":1},{"k":2}]}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var xs = root.find_field(String("xs")).get_array()
+    var rdr = iter(data)
+    var xs = rdr.root().field(String("xs")).get_array()
 
     var got = List[Int64]()
     while not xs.at_end():
         var elem = xs.next_element()
-        got.append(elem.get_object().find_field(String("k")).get_int())
+        got.append(elem.get_object().field(String("k")).get_int())
     assert_equal(len(got), 2)
     assert_equal(got[0], Int64(1))
     assert_equal(got[1], Int64(2))
@@ -78,12 +75,11 @@ def test_array_of_arrays() raises:
     """Nested arrays iterate independently: [[1,2],[3]] → 1,2 then 3.
 
     `{"xs":[[1,2],[3]]}` — the outer array yields two inner arrays; each is
-    iterated via its own ArrayHandle (independent aliasing handles are OK).
+    iterated via its own Array (independent aliasing handles are OK).
     """
     var data = _make_bytes(String('{"xs":[[1,2],[3]]}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var xs = root.find_field(String("xs")).get_array()
+    var rdr = iter(data)
+    var xs = rdr.root().field(String("xs")).get_array()
 
     var flat = List[Int64]()
     while not xs.at_end():
@@ -99,9 +95,8 @@ def test_array_of_arrays() raises:
 def test_array_empty() raises:
     """An empty array is at_end immediately and yields zero elements."""
     var data = _make_bytes(String('{"xs":[]}'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var xs = root.find_field(String("xs")).get_array()
+    var rdr = iter(data)
+    var xs = rdr.root().field(String("xs")).get_array()
     assert_true(xs.at_end(), "empty array must be at_end immediately")
 
     var count = 0
@@ -114,15 +109,14 @@ def test_array_empty() raises:
 def test_get_array_on_non_array_raises() raises:
     """Calling get_array on a non-array value raises (type guard).
 
-    `{"a":1}` — find_field("a") points at an integer; get_array must raise
+    `{"a":1}` — field("a") points at an integer; get_array must raise
     rather than navigate garbage.
     """
     var data = _make_bytes(String('{"a":1}'))
-    var parser = Parser()
-    var root = parser.iter(data)
+    var rdr = iter(data)
     var raised = False
     try:
-        _ = root.find_field(String("a")).get_array()
+        _ = rdr.root().field(String("a")).get_array()
     except:
         raised = True
     assert_true(raised, "get_array on a non-array value must raise")
@@ -136,9 +130,8 @@ def test_array_truncated_terminates_cleanly() raises:
     but never crashes.
     """
     var data = _make_bytes(String('{"xs":[1,2'))
-    var parser = Parser()
-    var root = parser.iter(data)
-    var xs = root.find_field(String("xs")).get_array()
+    var rdr = iter(data)
+    var xs = rdr.root().field(String("xs")).get_array()
 
     var count = 0
     var raised = False
