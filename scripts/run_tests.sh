@@ -22,6 +22,7 @@ TESTS=(
     tests/jsonette/test_value.mojo
     tests/jsonette/test_gen_token.mojo
     tests/jsonette/test_dom_differential.mojo
+    tests/jsonette/test_leaf_parity.mojo
     tests/jsonette/ondemand/test_flat_object.mojo
     tests/jsonette/ondemand/test_any_root.mojo
     tests/jsonette/ondemand/test_fuzz_flat.mojo
@@ -31,6 +32,7 @@ TESTS=(
     tests/jsonette/ondemand/test_iteration.mojo
     tests/jsonette/ondemand/test_nested_object.mojo
     tests/jsonette/ondemand/test_array.mojo
+    tests/jsonette/ondemand/test_error_model.mojo
     tests/jsonette/ondemand/test_fuzz_nested.mojo
     tests/jsonette/ondemand/test_validate.mojo
     tests/jsonette/ondemand/test_validate_conformance.mojo

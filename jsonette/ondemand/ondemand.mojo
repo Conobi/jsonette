@@ -34,6 +34,7 @@ name these `[o]`-parametric types: the public entries (`Reader.root`, the
 accessors) return handles by inference.
 """
 
+from std.collections import Optional
 from std.memory import bitcast
 
 from jsonette.parser import Parser
@@ -253,7 +254,11 @@ struct Value[o: Origin[mut=True]](Movable):
         Inspects the value's first byte (through the parser pointer, like
         `get_string`): `t` validates the `true` literal and returns True, `f`
         validates `false` and returns False. Any other first byte raises, so a
-        non-bool never returns a silently wrong result.
+        non-bool never returns a silently wrong result. Also raises on trailing
+        junk glued to the literal (e.g. `truex`, `falsey`): `_validate_true/false`
+        only check the fixed keyword bytes, so the token must additionally end at a
+        clean boundary (whitespace, `,`, `}`, `]`, EOF) — mirroring the number
+        path's `_scalar_token_ok` guard and the whole-document validator.
         """
         self._check()
         ref p = self._reader[]._parser
@@ -262,9 +267,13 @@ struct Value[o: Origin[mut=True]](Movable):
         var b = p.padded.unsafe_ptr()[pos]
         if b == _LOWER_T:
             _validate_true(p.padded.unsafe_ptr(), pos, input_len)
+            if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, 4, input_len):
+                raise Error("get_bool: trailing characters after literal")
             return True
         if b == _LOWER_F:
             _validate_false(p.padded.unsafe_ptr(), pos, input_len)
+            if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, 5, input_len):
+                raise Error("get_bool: trailing characters after literal")
             return False
         raise Error("get_bool: value is not a bool")
 
@@ -275,7 +284,10 @@ struct Value[o: Origin[mut=True]](Movable):
         Inspects the value's first byte: a first byte other than `n` yields False
         (a predicate — a non-null value does not raise). A first byte of `n` is
         validated as the full `null` literal: it yields True, or RAISES if it is a
-        malformed `n...` token (e.g. `nul`), rather than silently accepting it.
+        malformed `n...` token (e.g. `nul`, or trailing junk like `nullx`), rather
+        than silently accepting it — the token must also end at a clean boundary
+        (the `_scalar_token_ok` guard), since `_validate_null` only checks the four
+        keyword bytes.
         """
         self._check()
         ref p = self._reader[]._parser
@@ -284,6 +296,8 @@ struct Value[o: Origin[mut=True]](Movable):
         if p.padded.unsafe_ptr()[pos] != _LOWER_N:
             return False
         _validate_null(p.padded.unsafe_ptr(), pos, input_len)
+        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, 4, input_len):
+            raise Error("is_null: trailing characters after literal")
         return True
 
     @always_inline("nodebug")
@@ -366,6 +380,85 @@ struct Value[o: Origin[mut=True]](Movable):
             self._reader[], self._si + 1, self._gen
         )
 
+    @no_inline
+    def as_int(self) raises -> Optional[Int64]:
+        """Some(Int64) for an in-range integer; None for a non-number or a clean
+        float (wrong kind); raises on a parse-step-malformed number (Gate 0),
+        trailing junk (Gate 1), or a UINT64 above Int64.MAX. Does NOT delegate to
+        get_int (which checks the tag before _scalar_token_ok)."""
+        self._check()
+        if not self.is_number():
+            return None
+        ref p = self._reader[]._parser
+        var input_len = self._reader[]._input_len
+        var pos = Int(p.positions[self._si])
+        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
+        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len):
+            raise Error("as_int: trailing characters after number")
+        if r.tag == TAG_FLOAT64:
+            return None
+        if r.tag == TAG_UINT64 and r.value > UInt64(0x7FFF_FFFF_FFFF_FFFF):
+            raise Error("as_int: integer out of Int64 range")
+        return Optional(bitcast[DType.int64](r.value))
+
+    @no_inline
+    def as_uint(self) raises -> Optional[UInt64]:
+        """Some(UInt64) for a non-negative integer; None for a non-number, a clean
+        float, or a negative integer (wrong kind); raises on parse-step-malformed
+        (Gate 0) or trailing junk (Gate 1)."""
+        self._check()
+        if not self.is_number():
+            return None
+        ref p = self._reader[]._parser
+        var input_len = self._reader[]._input_len
+        var pos = Int(p.positions[self._si])
+        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
+        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len):
+            raise Error("as_uint: trailing characters after number")
+        if r.tag == TAG_FLOAT64:
+            return None
+        if r.tag == TAG_INT64:
+            var signed = bitcast[DType.int64](r.value)
+            if signed < 0:
+                return None
+            return Optional(UInt64(signed))
+        return Optional(r.value)
+
+    @no_inline
+    def as_float(self) raises -> Optional[Float64]:
+        """Some(Float64) for any number; None for a non-number; raises on
+        parse-step-malformed (Gate 0) or trailing junk (Gate 1)."""
+        self._check()
+        if not self.is_number():
+            return None
+        ref p = self._reader[]._parser
+        var input_len = self._reader[]._input_len
+        var pos = Int(p.positions[self._si])
+        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
+        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len):
+            raise Error("as_float: trailing characters after number")
+        if r.tag == TAG_FLOAT64:
+            return Optional(bitcast[DType.float64](r.value))
+        if r.tag == TAG_INT64:
+            return Optional(Float64(bitcast[DType.int64](r.value)))
+        return Optional(Float64(r.value))
+
+    def as_string(self) raises -> Optional[String]:
+        """Some(String) if a string; None otherwise. A malformed string (bad escape
+        / invalid UTF-8) raises via get_string — never masked as None."""
+        self._check()
+        if not self.is_string():
+            return None
+        return Optional(self.get_string())
+
+    def as_bool(self) raises -> Optional[Bool]:
+        """Some(Bool) if a bool; None otherwise. A malformed literal raises via
+        get_bool — never masked as None."""
+        self._check()
+        if not self.is_bool():
+            return None
+        return Optional(self.get_bool())
+
     def field(self, key: String) raises -> Value[Self.o]:
         """Object field by key (forward scan). Convenience for get_object().field(key).
 
@@ -397,6 +490,32 @@ struct Value[o: Origin[mut=True]](Movable):
         if arr.at_end():
             raise "INDEX_ERROR: array index out of range"
         return arr.next_element()
+
+    def has_field(self, key: String) raises -> Bool:
+        """True iff this object value has `key`. Delegates to get_object() (raises
+        on a non-object — DOM parity; safe because get_object raises only on a type
+        mismatch and has no not-found string-signal to match)."""
+        return self.get_object().has_field(key)
+
+    def try_field(self, key: String) raises -> Optional[Value[Self.o]]:
+        """Some(value) if present, None if absent; raises if not an object."""
+        return self.get_object().try_field(key)
+
+    def try_elem(self, idx: Int) raises -> Optional[Value[Self.o]]:
+        """Some(element) if `idx` is in range, None if out of range; raises if not
+        an array. Reimplements the forward scan (like elem) and returns None at the
+        at-end boundary — no try/except, no INDEX_ERROR string match. A malformed
+        element surfaces later at the get_* call, not here."""
+        var arr = self.get_array()
+        var i = 0
+        while i < idx:
+            if arr.at_end():
+                return None
+            _ = arr.next_element()
+            i += 1
+        if arr.at_end():
+            return None
+        return Optional(arr.next_element())
 
     def __getitem__(self, key: String) raises -> Value[Self.o]:
         """Object field by key — `value["k"]` is sugar for `value.field("k")`."""
@@ -666,8 +785,12 @@ struct Object[o: Origin[mut=True]](Movable):
         return Field[Self.o](self._reader[], key_si, value_si, self._gen)
 
     @no_inline
-    def field(self, key: String) raises -> Value[Self.o]:
-        """Find the value for `key` in this object; raise if absent.
+    def _find_value_si(self, key: String) raises -> Int:
+        """Forward depth-aware, escape-aware scan for `key` from `_start_si`; return
+        its value's structural index, or -1 if absent. Shared by field/has_field/
+        try_field. Propagates a malformed candidate-key raise (bad escape via
+        parse_string) — never masks it as 'absent'. Raises if a matched key has no
+        value (truncated input).
 
         Walks this object's KEY→VALUE pairs left to right from `_start_si`,
         DEPTH-AWARE: each key is a string at `si` (close quote at `si+1`, `':'`
@@ -676,12 +799,12 @@ struct Object[o: Origin[mut=True]](Movable):
         skipped wholesale and their interior keys never masquerade as this
         object's keys (which also makes the scan stop at THIS object's own `'}'`,
         a nested `'}'` always sitting inside a skipped value). On a key match,
-        returns a `Value` at the value's structural index (`si+3`), raising
-        if that value is missing (truncated input) rather than indexing past the
-        positions list. Keys are matched ESCAPE-AWARE: a candidate key with no
-        backslash is byte-compared on the fast path; a candidate with an escape is
-        unescaped (via `parse_string`) and compared to the search key (which is a
-        normal, already-unescaped Mojo String).
+        returns the value's structural index (`si+3`), raising if that value is
+        missing (truncated input) rather than indexing past the positions list.
+        Keys are matched ESCAPE-AWARE: a candidate key with no backslash is
+        byte-compared on the fast path; a candidate with an escape is unescaped
+        (via `parse_string`) and compared to the search key (which is a normal,
+        already-unescaped Mojo String).
         """
         self._check()
         ref p = self._reader[]._parser
@@ -731,11 +854,36 @@ struct Object[o: Origin[mut=True]](Movable):
             if matched:
                 if value_si >= n:
                     raise Error("field has no value: " + key)
-                return Value[Self.o](self._reader[], value_si, self._gen)
+                return value_si
             si = self._skip_value(value_si)  # depth-aware advance past the value
             if si < n and ip[Int(p.positions[si])] == _COMMA:
                 si += 1
-        raise Error("field not found: " + key)
+        return -1
+
+    @no_inline
+    def field(self, key: String) raises -> Value[Self.o]:
+        """Find the value for `key` in this object; raise if absent. Scan logic in
+        `_find_value_si` (escape-aware, depth-aware, left to right from start)."""
+        var vsi = self._find_value_si(key)
+        if vsi < 0:
+            raise Error("field not found: " + key)
+        return Value[Self.o](self._reader[], vsi, self._gen)
+
+    @no_inline
+    def has_field(self, key: String) raises -> Bool:
+        """True iff `key` is present (forward re-scan, cursor-independent). False
+        ONLY on a clean absence; a malformed candidate key propagates its raise."""
+        return self._find_value_si(key) >= 0
+
+    @no_inline
+    def try_field(self, key: String) raises -> Optional[Value[Self.o]]:
+        """Some(value) if present, None if absent (clean). Reimplements via
+        _find_value_si — no try/except, no message-string match; a malformed
+        candidate key propagates."""
+        var vsi = self._find_value_si(key)
+        if vsi < 0:
+            return None
+        return Optional(Value[Self.o](self._reader[], vsi, self._gen))
 
 
 struct Array[o: Origin[mut=True]](Movable):

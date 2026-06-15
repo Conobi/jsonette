@@ -1,3 +1,4 @@
+from std.collections import Optional
 from std.memory import bitcast
 from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from jsonette.document import Document
@@ -75,12 +76,37 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         return self._elem(self._idx + 1)
 
     def get_int(self) raises -> Int64:
-        if self._tag() != TAG_INT64: raise "TAPE_ERROR: expected int64"
-        return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](self._elem(self._idx + 1))))
+        """Read any in-range integer as Int64.
+
+        Accepts both `TAG_INT64` (negatives) and `TAG_UINT64` (non-negatives,
+        including 0). Raises if the value is not an integer, or if a `TAG_UINT64`
+        magnitude exceeds `Int64.MAX` (cannot be represented as Int64).
+        """
+        var t = self._tag()
+        if t == TAG_INT64:
+            return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](self._elem(self._idx + 1))))
+        if t == TAG_UINT64:
+            var u = self._elem(self._idx + 1)
+            if u > UInt64(0x7FFF_FFFF_FFFF_FFFF):
+                raise "TAPE_ERROR: integer out of Int64 range"
+            return Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](u)))
+        raise "TAPE_ERROR: expected integer"
 
     def get_float(self) raises -> Float64:
-        if self._tag() != TAG_FLOAT64: raise "TAPE_ERROR: expected float64"
-        return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](self._elem(self._idx + 1))))
+        """Read any JSON number as Float64.
+
+        Widens across all numeric tags: `TAG_FLOAT64` is returned as-is, while
+        `TAG_INT64` and `TAG_UINT64` are converted to Float64. Raises if the
+        value is not a number.
+        """
+        var t = self._tag()
+        if t == TAG_FLOAT64:
+            return Float64(bitcast[DType.float64](SIMD[DType.uint64, 1](self._elem(self._idx + 1))))
+        if t == TAG_INT64:
+            return Float64(Int64(bitcast[DType.int64](SIMD[DType.uint64, 1](self._elem(self._idx + 1)))))
+        if t == TAG_UINT64:
+            return Float64(self._elem(self._idx + 1))
+        raise "TAPE_ERROR: expected number"
 
     def get_string_length(self) raises -> Int:
         if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
@@ -187,6 +213,59 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         if self._tag() != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected array to iterate elements"
         var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
         return _ElemIter[Self.o](self._doc, self._idx + 1, close_plus_one, self._gen)
+
+    def try_field(self, key: String) raises -> Optional[Value[Self.o]]:
+        """Some(value) if `key` is present (even a JSON null), None if absent;
+        raises if the receiver is not an object (via has_field)."""
+        if self.has_field(key):
+            return Optional(self.field(key))
+        return None
+
+    def try_elem(self, idx: Int) raises -> Optional[Value[Self.o]]:
+        """Some(element) if `idx` is in range, None if out of range; raises if the
+        receiver is not an array."""
+        if self._tag() != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected array for index access"
+        var i = self._idx + 1
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        var current = 0
+        while i < close_plus_one - 1:
+            if current == idx:
+                return Optional(Value[Self.o](self._doc[], i, self._gen))
+            i = _skip_value(self._doc[], i)
+            current += 1
+        return None
+
+    def as_int(self) raises -> Optional[Int64]:
+        """Some(Int64) if this is an integer; None for any non-integer kind; raises
+        only on a UINT64 above Int64.MAX. The is_int()-or-is_uint() guard spans BOTH
+        integer tags to match the widened get_int acceptance set."""
+        if self.is_int() or self.is_uint():
+            return Optional(self.get_int())
+        return None
+
+    def as_uint(self) raises -> Optional[UInt64]:
+        """Some(UInt64) if non-negative integer; None otherwise (negative -> None)."""
+        if self.is_uint():
+            return Optional(self.get_uint())
+        return None
+
+    def as_float(self) raises -> Optional[Float64]:
+        """Some(Float64) if any number (get_float widens); None otherwise."""
+        if self.is_number():
+            return Optional(self.get_float())
+        return None
+
+    def as_string(self) raises -> Optional[String]:
+        """Some(String) if a string; None otherwise."""
+        if self.is_string():
+            return Optional(self.get_string())
+        return None
+
+    def as_bool(self) raises -> Optional[Bool]:
+        """Some(Bool) if a bool; None otherwise."""
+        if self.is_bool():
+            return Optional(self.get_bool())
+        return None
 
 
 struct _Entry[o: Origin[mut=True]](Copyable, Movable):
