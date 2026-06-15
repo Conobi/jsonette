@@ -41,6 +41,8 @@ TESTS=(
     tests/jsonette/serialize/test_float_lock.mojo
     tests/jsonette/serialize/test_adversarial.mojo
     tests/jsonette/serialize/test_reflect.mojo
+    tests/jsonette/serialize/test_load.mojo
+    tests/jsonette/serialize/test_load_roundtrip.mojo
     tests/jsonette/serialize/test_fuzz_roundtrip.mojo
     tests/jsonette/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
