@@ -28,14 +28,13 @@ raises before the cap is exceeded).
 
 from jsonette.error import ParseError, ErrorCode
 from jsonette.stage2.strings import parse_string
-from jsonette.stage2.numbers import _parse_number
+from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
 from jsonette.stage2.builder import (
     MAX_DEPTH,
     _validate_true,
     _validate_false,
     _validate_null,
 )
-from jsonette.ondemand.ondemand import _scalar_token_ok
 
 
 comptime _QUOTE = UInt8(0x22)  # '"'

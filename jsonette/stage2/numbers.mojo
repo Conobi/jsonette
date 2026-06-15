@@ -263,3 +263,42 @@ def _parse_float(
     # The token spans ptr[0:pos]; `negative` was stripped at the front.
     var bits = parse_float_slow(ptr, 0, pos, negative)
     return NumberResult(tag=TAG_FLOAT64, value=bits, bytes_consumed=pos)
+
+
+@always_inline("nodebug")
+def _scalar_token_ok(
+    ip: UnsafePointer[UInt8, _], pos: Int, bytes_consumed: Int, input_len: Int
+) -> Bool:
+    """Return True iff the scalar token at ip[pos] ending after bytes_consumed sits at a clean boundary.
+
+    A JSON number or literal ends at a structural/whitespace terminator: space,
+    tab, LF, CR, `,`, `}`, `]`, or end of input. The shared `_parse_number`
+    measures the longest numeric prefix but does NOT check what follows, and the
+    literal validators (`_validate_true/false/null`) only check the fixed-length
+    keyword bytes, so glued junk like `12.3.4`, `42x`, or `truex` is silently
+    accepted on its prefix. This guard rejects such tokens by inspecting the
+    single byte just past the consumed run.
+
+    `bytes_consumed` is relative to `pos`; `end = pos + bytes_consumed`. Because
+    `_parse_number` is called with `max_len = input_len - pos`, `bytes_consumed`
+    never exceeds that, so `end <= input_len` always. The EOF case is checked
+    FIRST so padding is never read; otherwise `ip[end]` is in bounds (the input
+    buffer carries 128 NUL bytes of padding). `:` is deliberately NOT a
+    terminator — a number is never followed by a colon in valid JSON.
+
+    Lives in core Stage 2 (shared by the tape builder, the On-Demand leaf getters,
+    and the strict validator) so none of those paths has to depend on another.
+    """
+    var end = pos + bytes_consumed  # always <= input_len (max_len = input_len - pos)
+    if end >= input_len:  # EOF terminator — check FIRST, never read padding
+        return True
+    var t = ip[end]  # in-bounds: input buffer has 128 NUL bytes of padding
+    return (
+        t == 0x20
+        or t == 0x09
+        or t == 0x0A
+        or t == 0x0D
+        or t == 0x2C
+        or t == 0x7D
+        or t == 0x5D
+    )

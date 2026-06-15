@@ -47,6 +47,8 @@ TESTS=(
     tests/jsonette/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
     tests/conformance/test_reject.mojo
+    tests/conformance/test_reject_corpus.mojo
+    tests/conformance/test_parse_validate_differential.mojo
 )
 
 cd "$PROJECT_DIR"

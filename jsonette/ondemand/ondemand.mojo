@@ -40,7 +40,7 @@ from std.memory import bitcast
 from jsonette.parser import Parser
 from jsonette.ondemand.reader import Reader
 from jsonette.stage2.strings import parse_string
-from jsonette.stage2.numbers import _parse_number
+from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
 from jsonette.stage2.builder import _validate_true, _validate_false, _validate_null
 from jsonette.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 
@@ -61,40 +61,9 @@ comptime _LOWER_F = UInt8(0x66)  # 'f'
 comptime _LOWER_N = UInt8(0x6E)  # 'n'
 
 
-@always_inline("nodebug")
-def _scalar_token_ok(
-    ip: UnsafePointer[UInt8, _], pos: Int, bytes_consumed: Int, input_len: Int
-) -> Bool:
-    """Return True iff the scalar token at ip[pos] ending after bytes_consumed sits at a clean boundary.
-
-    A JSON number or literal ends at a structural/whitespace terminator: space,
-    tab, LF, CR, `,`, `}`, `]`, or end of input. The shared `_parse_number`
-    measures the longest numeric prefix but does NOT check what follows, and the
-    literal validators (`_validate_true/false/null`) only check the fixed-length
-    keyword bytes, so glued junk like `12.3.4`, `42x`, or `truex` is silently
-    accepted on its prefix. This guard rejects such tokens by inspecting the
-    single byte just past the consumed run.
-
-    `bytes_consumed` is relative to `pos`; `end = pos + bytes_consumed`. Because
-    `_parse_number` is called with `max_len = input_len - pos`, `bytes_consumed`
-    never exceeds that, so `end <= input_len` always. The EOF case is checked
-    FIRST so padding is never read; otherwise `ip[end]` is in bounds (the input
-    buffer carries 128 NUL bytes of padding). `:` is deliberately NOT a
-    terminator — a number is never followed by a colon in valid JSON.
-    """
-    var end = pos + bytes_consumed  # always <= input_len (max_len = input_len - pos)
-    if end >= input_len:  # EOF terminator — check FIRST, never read padding
-        return True
-    var t = ip[end]  # in-bounds: input buffer has 128 NUL bytes of padding
-    return (
-        t == 0x20
-        or t == 0x09
-        or t == 0x0A
-        or t == 0x0D
-        or t == 0x2C
-        or t == 0x7D
-        or t == 0x5D
-    )
+# `_scalar_token_ok` moved to jsonette.stage2.numbers (core Stage 2) and is
+# imported above, so this On-Demand module no longer owns the shared guard and
+# the DOM parse path can reach it without depending on On-Demand.
 
 
 struct Value[o: Origin[mut=True]](Movable):

@@ -42,9 +42,12 @@ struct Parser(Movable):
     def _build(mut self, data: Span[UInt8, _]) raises:
         """Build this parser's tape from `data` (Stage 1 + Stage 2). No Document returned.
 
-        Reuses the grow-only `padded`/`positions`/`_tape` buffers; a warm same-size
-        rebuild allocates nothing (the zero-alloc contract). Raises a formatted
-        ParseError on malformed input.
+        Stage 1 produces the structural index; Stage 2 (`build_tape`) walks it as a
+        strict RFC-8259 grammar state machine, rejecting malformed input as it
+        materialises the tape (single pass, each leaf parsed once). Reuses the
+        grow-only `padded`/`positions`/`_tape` buffers; a warm same-size rebuild
+        allocates nothing (the zero-alloc contract). Raises a formatted ParseError
+        on malformed input.
         """
         var input_len = len(data)
 

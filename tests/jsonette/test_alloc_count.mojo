@@ -8,8 +8,9 @@ heap allocation on the per-parse-call path:
     tape.elements (parser-owned tape)  -> 1 on a COLD parse (must grow), 0 when warm
     tape.string_buf (parser-owned tape)-> 1 on a COLD parse (must grow), 0 when warm
 
-So a cold parse records 4 and a warm parse on same-size input records 0. The
-tape is now owned by the Parser and reused across parses (Document is a
+So a cold parse records 4 and a warm parse on same-size input records 0. Stage 2
+validates and builds in a single pass (no separate validation buffer on the parse
+path). The tape is owned by the Parser and reused across parses (Document is a
 non-owning view over it), so a warm steady-state loop performs ZERO heap
 allocations per parse — every one of the four grow-only buffers contributes 0.
 
