@@ -1,10 +1,24 @@
 """Bench-only hardware performance counters and peak-memory readers.
 
 This module is for the benchmark harness only; it is never imported by the
-parser. It exposes Linux `perf_event_open` hardware counters (CPU cycles and
-retired instructions) grouped so both counters cover the exact same measured
-region, plus two independent peak-resident-memory readers (`getrusage` and
-`/proc/self/status`).
+parser. It exposes Linux `perf_event_open` hardware counters grouped so every
+counter covers the exact same measured region, plus two independent
+peak-resident-memory readers (`getrusage` and `/proc/self/status`).
+
+The group always reads CPU cycles + retired instructions (the must-haves that
+gate `available`). It additionally tries to read **branch instructions** and
+**branch misses** as best-effort group followers. Those two are the cheap,
+robust triage for the IPC question: a high branch-miss rate (and a large
+`branch_misses * ~16cyc` share of total cycles) means the gap is bad-speculation
+(a mispredicting dispatch tree); a low rate means it is backend-bound
+(dependency-chain latency, port pressure, or codegen) and must be chased with
+external `perf stat -M tma_*` instead — the generic frontend/backend stall
+events are `<not supported>` on most Intel (Skylake/Cascade Lake) parts, so we
+deliberately do NOT bake them in here.
+
+All counters live in one group (cycles is the leader): 2 fixed counters
+(cycles, instructions) + 2 general-purpose (branches, branch-misses) always
+schedule together on any modern Intel PMU, so the group never multiplexes.
 
 Because this is an FFI boundary, raw `UnsafePointer` use is expected and the
 validator's M9 rule does not apply.
@@ -17,10 +31,14 @@ Usage (per-iteration measurement):
     g.disable()
     var cyc = g.cycles()
     var ins = g.instructions()
+    var br = g.branches()          # 0 if the branch counters did not open
+    var brm = g.branch_misses()    # 0 if the branch counters did not open
     g.close()
 
 If `perf_event_open` is unavailable (e.g. `perf_event_paranoid` too high), the
 group degrades gracefully: `available` stays `False` and all reads return 0.
+The branch counters are best-effort: if only they fail to open, `available`
+stays `True` and just `branches()`/`branch_misses()` return 0.
 """
 
 from std.ffi import external_call
@@ -34,6 +52,8 @@ comptime ATTR_SIZE = 128
 comptime PERF_TYPE_HARDWARE = 0
 comptime PERF_COUNT_HW_CPU_CYCLES = 0
 comptime PERF_COUNT_HW_INSTRUCTIONS = 1
+comptime PERF_COUNT_HW_BRANCH_INSTRUCTIONS = 4
+comptime PERF_COUNT_HW_BRANCH_MISSES = 5
 comptime PERF_EVENT_IOC_ENABLE = 0x2400
 comptime PERF_EVENT_IOC_DISABLE = 0x2401
 comptime PERF_EVENT_IOC_RESET = 0x2403
@@ -154,30 +174,41 @@ def _read_counter(fd: Int64) -> UInt64:
 
 
 struct PerfGroup:
-    """A grouped pair of hardware perf counters: CPU cycles + instructions.
+    """A group of hardware perf counters sharing one measured region.
 
-    Cycles is the group leader; instructions joins the group so a single
-    enable/disable/reset on the leader fd covers both counters over the same
-    region. If the kernel rejects `perf_event_open`, `available` is `False` and
-    all reads return 0, allowing a harness to run on machines without perf
-    access.
+    Cycles is the group leader; instructions, branch-instructions, and
+    branch-misses join the group so a single enable/disable/reset on the leader
+    fd covers every counter over the same region. Cycles + instructions are the
+    must-haves and gate `available`; the two branch counters are best-effort
+    (`available` stays `True` if only they fail, and their reads return 0). If
+    the kernel rejects `perf_event_open` for the leader or instructions,
+    `available` is `False` and all reads return 0, allowing a harness to run on
+    machines without perf access.
     """
 
     var available: Bool
     var cycles_fd: Int64
     var instructions_fd: Int64
+    var branches_fd: Int64
+    var branch_misses_fd: Int64
 
     def __init__(out self):
         """Construct an unopened group; call `open` before measuring."""
         self.available = False
         self.cycles_fd = Int64(-1)
         self.instructions_fd = Int64(-1)
+        self.branches_fd = Int64(-1)
+        self.branch_misses_fd = Int64(-1)
 
     def open(mut self):
-        """Open the cycles+instructions counter group.
+        """Open the cycles+instructions+branches+branch-misses counter group.
 
-        Cycles is opened as the disabled group leader; instructions joins it.
-        On any failure the counters are closed and `available` stays `False`.
+        Cycles is opened as the disabled group leader; the others join it.
+        Cycles and instructions are required: on their failure the group is
+        closed and `available` stays `False`. The two branch counters are
+        best-effort — if either fails to open it is left at fd -1 (its read
+        returns 0) and `available` is unaffected, so a kernel/PMU that refuses
+        the branch events still yields cycles + instructions.
         """
         self.cycles_fd = _open_counter(
             UInt64(PERF_COUNT_HW_CPU_CYCLES), Int64(-1)
@@ -193,6 +224,14 @@ struct PerfGroup:
             self.cycles_fd = Int64(-1)
             self.available = False
             return
+        # Best-effort branch counters — join the cycles group; leave at -1 on
+        # failure (read returns 0) without disturbing `available`.
+        self.branches_fd = _open_counter(
+            UInt64(PERF_COUNT_HW_BRANCH_INSTRUCTIONS), self.cycles_fd
+        )
+        self.branch_misses_fd = _open_counter(
+            UInt64(PERF_COUNT_HW_BRANCH_MISSES), self.cycles_fd
+        )
         self.available = True
 
     def reset(self):
@@ -222,8 +261,35 @@ struct PerfGroup:
             return UInt64(0)
         return _read_counter(self.instructions_fd)
 
+    def branches(self) -> UInt64:
+        """Return accumulated retired branch instructions.
+
+        Returns 0 if the group is unavailable or the branch counter did not
+        open (best-effort follower).
+        """
+        if not self.available or self.branches_fd < 0:
+            return UInt64(0)
+        return _read_counter(self.branches_fd)
+
+    def branch_misses(self) -> UInt64:
+        """Return accumulated branch mispredictions.
+
+        Returns 0 if the group is unavailable or the branch-miss counter did
+        not open (best-effort follower). Pair with `branches()` for the miss
+        rate and with `cycles()` for the misprediction cycle share.
+        """
+        if not self.available or self.branch_misses_fd < 0:
+            return UInt64(0)
+        return _read_counter(self.branch_misses_fd)
+
     def close(mut self):
-        """Close both counter fds and mark the group unavailable."""
+        """Close every counter fd and mark the group unavailable."""
+        if self.branch_misses_fd >= 0:
+            _ = external_call["close", Int32](Int32(self.branch_misses_fd))
+            self.branch_misses_fd = Int64(-1)
+        if self.branches_fd >= 0:
+            _ = external_call["close", Int32](Int32(self.branches_fd))
+            self.branches_fd = Int64(-1)
         if self.instructions_fd >= 0:
             _ = external_call["close", Int32](Int32(self.instructions_fd))
             self.instructions_fd = Int64(-1)
@@ -315,7 +381,10 @@ def main() raises:
     g.disable()
     var large_cyc = g.cycles()
     var large_ins = g.instructions()
-    print("large: cycles =", large_cyc, " instructions =", large_ins, " (acc", l_acc, ")")
+    var large_br = g.branches()
+    var large_brm = g.branch_misses()
+    print("large: cycles =", large_cyc, " instructions =", large_ins,
+          " branches =", large_br, " branch_misses =", large_brm, " (acc", l_acc, ")")
 
     if g.available:
         if large_cyc <= small_cyc:
@@ -323,6 +392,12 @@ def main() raises:
         if large_ins <= small_ins:
             raise Error("counter did not track work: large instructions <= small instructions")
         print("OK: large > small for both counters")
+        if large_br > 0:
+            # _spin is a tight predictable loop: branches present, misses tiny.
+            print("branch counters live: branches > 0 (miss rate",
+                  String(Float64(large_brm) / Float64(large_br) * 100.0), "%)")
+        else:
+            print("branch counters did not open (best-effort); cycles+ins still live")
     else:
         print("perf unavailable; cycle assertions skipped (rss still reported)")
 
