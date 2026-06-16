@@ -38,6 +38,7 @@ TESTS=(
     tests/jsonette/ondemand/test_validate_conformance.mojo
     tests/jsonette/serialize/test_writer.mojo
     tests/jsonette/serialize/test_roundtrip.mojo
+    tests/jsonette/serialize/test_nonfinite_roundtrip.mojo
     tests/jsonette/serialize/test_float_lock.mojo
     tests/jsonette/serialize/test_adversarial.mojo
     tests/jsonette/serialize/test_reflect.mojo

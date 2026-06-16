@@ -93,11 +93,16 @@ struct JsonWriter:
     def write_float(mut self, v: Float64) raises:
         """Append a float via the stdlib shortest-round-trip formatter.
 
-        Raises on NaN/±Infinity (no JSON representation). Parsed JSON can never
-        reach here; only user structs (reflection path) can trigger it.
+        Raises on NaN/±Infinity, which JSON has no literal for. A non-finite `v`
+        reaches here from two sources: a user struct field on the reflection
+        path, AND a parsed JSON number whose magnitude overflowed Float64 and
+        saturated to ±inf during parsing (e.g. `1e999`, which RFC 8259 permits
+        and the parser accepts). Round-tripping such a document therefore raises
+        by design — emitting `null` or a bogus token instead would be silent
+        data loss or invalid output.
         """
         if not isfinite(v):
-            raise "JSON_ENCODE_ERROR: non-finite float (NaN/Infinity) is not valid JSON"
+            raise "JSON_ENCODE_ERROR: non-finite float (NaN/Infinity) has no JSON representation"
         self.raw(String(v))
 
     def write_bool(mut self, v: Bool):
