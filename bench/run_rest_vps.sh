@@ -15,7 +15,7 @@
 #   nix run --impure nixpkgs#steam-run -- bash bench/run_rest_vps.sh
 set -euo pipefail
 
-OURS_DIR="$HOME/json-simd-mojo"
+OURS_DIR="$HOME/jsonette"
 CORE="${BENCH_CORE:-4}"
 ROUNDS="${BENCH_ROUNDS:-3}"
 
