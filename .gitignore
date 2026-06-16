@@ -9,3 +9,8 @@ docs/superpowers/
 
 # Compiled C++ benchmark executable (rebuild with scripts/cpp_bench/build.sh)
 scripts/cpp_bench/bench
+
+# Local-only working documents and scratch (never pushed)
+specs/
+__pycache__/
+bench/poc_*
