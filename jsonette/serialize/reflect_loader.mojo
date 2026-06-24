@@ -56,7 +56,7 @@ def _decode[T: _Base, o: Origin[mut=True]](val: Value[o], out s: T) raises:
     comptime if conforms_to(T, JsonDeserializable):
         s = downcast[T, JsonDeserializable].from_json(val)
     else:
-        comptime tn = reflect[T]().name()
+        comptime tn = reflect[T].name()
         comptime if tn == "String":
             s = rebind_var[T](val.get_string())
         elif tn == "Bool":
@@ -83,7 +83,7 @@ def _decode[T: _Base, o: Origin[mut=True]](val: Value[o], out s: T) raises:
             s = rebind_var[T](UInt16(_checked_uint(val.get_uint(), 65535, tn)))
         elif tn == "SIMD[DType.uint8, 1]":
             s = rebind_var[T](UInt8(_checked_uint(val.get_uint(), 255, tn)))
-        elif reflect[T]().is_struct():
+        elif reflect[T].is_struct():
             s = _default_decode[downcast[T, _Struct]](val)
         else:
             comptime assert False, "load[T]: unsupported field type '" + tn + "'"
@@ -94,7 +94,7 @@ def _default_decode[T: _Struct, o: Origin[mut=True]](val: Value[o], out s: T) ra
     EXCEPT an Optional field (kept as default None). Optional detected by name prefix."""
     comptime assert conforms_to(T, Defaultable), "load[T]: T must be Defaultable (add a no-arg __init__)"
     s = type_of(s)()
-    comptime r = reflect[T]()
+    comptime r = reflect[T]
     comptime names = r.field_names()
     comptime for i in range(r.field_count()):
         comptime key = String(names[i])
@@ -103,7 +103,7 @@ def _default_decode[T: _Struct, o: Origin[mut=True]](val: Value[o], out s: T) ra
         if maybe:
             field = _decode[type_of(field)](maybe.value())
         else:
-            comptime is_opt = reflect[type_of(field)]().name().startswith(
+            comptime is_opt = reflect[type_of(field)].name().startswith(
                 "std.collections.optional.Optional["
             )
             comptime if not is_opt:
@@ -129,9 +129,17 @@ __extension List(JsonDeserializable):
     @staticmethod
     def from_json[o: Origin[mut=True]](val: Value[o], out s: Self) raises:
         """Build a JSON array into List[T]; element type recovered from Self.T."""
-        s = Self()
+        # Build into a list whose element type is STATICALLY `_Base` (Movable &
+        # ImplicitlyDestructible), so a mid-decode raise unwinds over a list the
+        # compiler can implicitly destroy. `List[Self.T]` alone is only
+        # *conditionally* destructible (b2), so building straight into `s` leaves
+        # a partially-filled list "abandoned" on the throw path. Rebind into `s`
+        # once fully built (same element layout, zero-copy move).
+        comptime ET = downcast[Self.T, _Base]
+        var built = List[ET]()
         for elem in val.elems():
-            s.append(_decode[downcast[Self.T, _Base]](elem))
+            built.append(_decode[ET](elem))
+        s = rebind_var[Self](built^)
 
 
 __extension Optional(JsonDeserializable):
@@ -150,7 +158,7 @@ __extension Dict(JsonDeserializable):
     def from_json[o: Origin[mut=True]](val: Value[o], out s: Self) raises:
         """Build a JSON object into Dict[String, V]; V recovered from Self.V. Keys
         must be String (compile-time enforced)."""
-        comptime assert reflect[Self.K]().name() == "String", "JSON object keys must be String"
+        comptime assert reflect[Self.K].name() == "String", "JSON object keys must be String"
         s = Self()
         for entry in val.fields():
             s[rebind_var[Self.K](entry.key())] = _decode[downcast[Self.V, _Base]](entry.value())

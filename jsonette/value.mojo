@@ -16,10 +16,10 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         self._idx = idx
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
-        self._doc = take._doc
-        self._idx = take._idx
-        self._gen = take._gen
+    def __init__(out self, *, deinit move: Self):
+        self._doc = move._doc
+        self._idx = move._idx
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):
@@ -282,11 +282,11 @@ struct _Entry[o: Origin[mut=True]](Copyable, Movable):
         self._val_idx = val_idx
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
-        self._doc = take._doc
-        self._key_idx = take._key_idx
-        self._val_idx = take._val_idx
-        self._gen = take._gen
+    def __init__(out self, *, deinit move: Self):
+        self._doc = move._doc
+        self._key_idx = move._key_idx
+        self._val_idx = move._val_idx
+        self._gen = move._gen
 
     def key(self) raises -> String:
         return Value[Self.o](self._doc[], self._key_idx, self._gen).get_string()
@@ -309,11 +309,11 @@ struct _FieldIter[o: Origin[mut=True]](Copyable, Movable):
         self._end = end
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
-        self._doc = take._doc
-        self._i = take._i
-        self._end = take._end
-        self._gen = take._gen
+    def __init__(out self, *, deinit move: Self):
+        self._doc = move._doc
+        self._i = move._i
+        self._end = move._end
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):
@@ -348,11 +348,11 @@ struct _ElemIter[o: Origin[mut=True]](Copyable, Movable):
         self._end = end
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
-        self._doc = take._doc
-        self._i = take._i
-        self._end = take._end
-        self._gen = take._gen
+    def __init__(out self, *, deinit move: Self):
+        self._doc = move._doc
+        self._i = move._i
+        self._end = move._end
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):

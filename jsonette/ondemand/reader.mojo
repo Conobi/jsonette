@@ -19,10 +19,10 @@ struct Reader(Movable):
         self._gen = 0
         self._input_len = input_len
 
-    def __init__(out self, *, deinit take: Self):
-        self._parser = take._parser^
-        self._gen = take._gen
-        self._input_len = take._input_len
+    def __init__(out self, *, deinit move: Self):
+        self._parser = move._parser^
+        self._gen = move._gen
+        self._input_len = move._input_len
 
     def root(mut self) raises -> Value[origin_of(self)]:
         """Self-bound root Value at the first structural; raises EMPTY_DOCUMENT on

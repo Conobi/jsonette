@@ -32,9 +32,9 @@ struct Tape(Movable):
         record_alloc()
         self.string_buf = List[UInt8](unsafe_uninit_length=string_capacity)
 
-    def __init__(out self, *, deinit take: Self):
-        self.elements = take.elements^
-        self.string_buf = take.string_buf^
+    def __init__(out self, *, deinit move: Self):
+        self.elements = move.elements^
+        self.string_buf = move.string_buf^
 
     @always_inline("nodebug")
     def tag_at(self, idx: Int) -> UInt8:

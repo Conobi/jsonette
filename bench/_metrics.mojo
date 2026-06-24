@@ -102,7 +102,7 @@ def _open_counter(config: UInt64, group_fd: Int64) -> Int64:
     Returns:
         The counter file descriptor, or a negative value on failure.
     """
-    var attr = alloc[UInt8](ATTR_SIZE).as_any_origin()
+    var attr = alloc[UInt8](ATTR_SIZE).as_unsafe_any_origin()
     memset_zero(attr, ATTR_SIZE)
     (attr + 0).bitcast[UInt32]()[] = UInt32(PERF_TYPE_HARDWARE)
     (attr + 4).bitcast[UInt32]()[] = UInt32(ATTR_SIZE)
@@ -151,7 +151,7 @@ def _read_counter(fd: Int64) -> UInt64:
     Returns:
         The accumulated counter value, or 0 if the read failed.
     """
-    var buf = alloc[UInt64](1).as_any_origin()
+    var buf = alloc[UInt64](1).as_unsafe_any_origin()
     buf[] = UInt64(0)
     # Read via the raw syscall (read == syscall 0 on x86-64). The stdlib binds
     # external_call["read", ...] with a different signature for file I/O, and
@@ -309,7 +309,7 @@ def peak_rss_kb() -> Int:
     Returns:
         Peak RSS in KB, or 0 if the call failed.
     """
-    var buf = alloc[Int64](18).as_any_origin()
+    var buf = alloc[Int64](18).as_unsafe_any_origin()
     memset_zero(buf, 18)
     var rc = external_call["getrusage", Int32](Int32(RUSAGE_SELF), buf)
     var maxrss = Int(0)

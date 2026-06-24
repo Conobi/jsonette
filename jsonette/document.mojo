@@ -19,9 +19,9 @@ struct Document(Movable):
         self._parser = parser^
         self._gen = 0
 
-    def __init__(out self, *, deinit take: Self):
-        self._parser = take._parser^
-        self._gen = take._gen
+    def __init__(out self, *, deinit move: Self):
+        self._parser = move._parser^
+        self._gen = move._gen
 
     def root(mut self) -> Value[origin_of(self)]:
         """Return the root Value (tape index 1). No re-parse; call repeatedly."""

@@ -85,11 +85,11 @@ struct Value[o: Origin[mut=True]](Movable):
         self._si = si
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
+    def __init__(out self, *, deinit move: Self):
         """Move constructor: transfer the borrowed-reader pointer and fields."""
-        self._reader = take._reader
-        self._si = take._si
-        self._gen = take._gen
+        self._reader = move._reader
+        self._si = move._si
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):
@@ -125,7 +125,7 @@ struct Value[o: Origin[mut=True]](Movable):
             | (UInt32(sp[2]) << 16)
             | (UInt32(sp[3]) << 24)
         )
-        return String(StringSlice(ptr=sp + 4, length=ln))
+        return String(StringSlice(unsafe_from_utf8=Span[UInt8](ptr=sp + 4, length=ln)))
 
     @no_inline
     def get_int(self) raises -> Int64:
@@ -564,7 +564,7 @@ def _unescaped_key_into(
         | (UInt32(sp[2]) << 16)
         | (UInt32(sp[3]) << 24)
     )
-    return String(StringSlice(ptr=sp + 4, length=ln))
+    return String(StringSlice(unsafe_from_utf8=Span[UInt8](ptr=sp + 4, length=ln)))
 
 
 struct Field[o: Origin[mut=True]](Movable):
@@ -600,12 +600,12 @@ struct Field[o: Origin[mut=True]](Movable):
         self._value_si = value_si
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
+    def __init__(out self, *, deinit move: Self):
         """Move constructor: transfer the borrowed-reader pointer and fields."""
-        self._reader = take._reader
-        self._key_si = take._key_si
-        self._value_si = take._value_si
-        self._gen = take._gen
+        self._reader = move._reader
+        self._key_si = move._key_si
+        self._value_si = move._value_si
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):
@@ -676,12 +676,12 @@ struct Object[o: Origin[mut=True]](Movable):
         self._si = start_si
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
+    def __init__(out self, *, deinit move: Self):
         """Move constructor: transfer the borrowed-reader pointer, cursor, generation."""
-        self._reader = take._reader
-        self._start_si = take._start_si
-        self._si = take._si
-        self._gen = take._gen
+        self._reader = move._reader
+        self._start_si = move._start_si
+        self._si = move._si
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):
@@ -890,11 +890,11 @@ struct Array[o: Origin[mut=True]](Movable):
         self._si = start_si
         self._gen = gen
 
-    def __init__(out self, *, deinit take: Self):
+    def __init__(out self, *, deinit move: Self):
         """Move constructor: transfer the borrowed-reader pointer, cursor, generation."""
-        self._reader = take._reader
-        self._si = take._si
-        self._gen = take._gen
+        self._reader = move._reader
+        self._si = move._si
+        self._gen = move._gen
 
     @always_inline("nodebug")
     def _check(self):

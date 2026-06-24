@@ -33,9 +33,9 @@ struct ParseError(Movable, Writable):
     var code: UInt8
     var position: Int
 
-    def __init__(out self, *, deinit take: Self):
-        self.code = take.code
-        self.position = take.position
+    def __init__(out self, *, deinit move: Self):
+        self.code = move.code
+        self.position = move.position
 
     def write_to[W: Writer](self, mut writer: W):
         writer.write(format_parse_error(self.code, self.position))

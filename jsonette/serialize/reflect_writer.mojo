@@ -4,7 +4,7 @@ Dispatch is conformance-driven (no overloads): `emit[T]` routes types that
 conform to `JsonSerializable` (user overrides, plus `List`/`Dict`/`Optional`
 via retroactive `__extension` conformance) to `write_json`, and everything
 else to `_default_emit` — a reflection field-walk that discriminates leaf types
-by `reflect[T]().name()` and bridges via `rebind`. The trait's default
+by `reflect[T].name()` and bridges via `rebind`. The trait's default
 `write_json` body calls `_default_emit`, so a plain struct conforms with zero
 methods.
 
@@ -30,7 +30,7 @@ def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
     reached. Use `UInt64` or `Int` instead. Supported sized unsigned types are
     `UInt8`, `UInt16`, `UInt32`, and `UInt64`.
     """
-    comptime tn = reflect[T]().name()
+    comptime tn = reflect[T].name()
     comptime if tn == "Int":
         w.write_int(Int64(rebind[Int](value)))
     elif tn == "Bool":
@@ -57,8 +57,8 @@ def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
         w.write_uint(UInt64(rebind[UInt16](value)))
     elif tn == "SIMD[DType.uint8, 1]":
         w.write_uint(UInt64(rebind[UInt8](value)))
-    elif reflect[T]().is_struct():
-        comptime r = reflect[T]()
+    elif reflect[T].is_struct():
+        comptime r = reflect[T]
         comptime names = r.field_names()
         w.raw("{")
         w.depth += 1
@@ -122,7 +122,7 @@ __extension Optional(JsonSerializable):
 __extension Dict(JsonSerializable):
     def write_json(self, mut w: JsonWriter) raises:
         """Emit a JSON object. Keys must be `String` (compile-time enforced)."""
-        comptime assert reflect[Self.K]().name() == "String", "JSON object keys must be String"
+        comptime assert reflect[Self.K].name() == "String", "JSON object keys must be String"
         if len(self) == 0:
             w.raw("{}")
             return

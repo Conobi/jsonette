@@ -24,7 +24,7 @@ from std.sys.defines import is_defined
 comptime ALLOC_COUNT_ENABLED = is_defined["BENCH_ALLOC_COUNT"]()
 """True when built with `-D BENCH_ALLOC_COUNT`; gates all counter code out otherwise."""
 
-comptime _CounterPtr = UnsafePointer[Int, MutExternalOrigin]
+comptime _CounterPtr = UnsafePointer[Int, MutUntrackedOrigin]
 
 
 @no_inline
@@ -41,13 +41,7 @@ def _counter_ptr() -> _CounterPtr:
         count = __mlir_attr.`1:index`,
         _type = __mlir_type[`!kgen.pointer<`, Int, `>`],
     ]()
-    var idx = __mlir_op.`pop.pointer_to_index`(raw)
-    var addr = Int(
-        value=__mlir_op.`pop.cast_from_builtin`[
-            _type = __mlir_type.`!pop.scalar<index>`
-        ](idx)
-    )
-    return _CounterPtr(unsafe_from_address=addr)
+    return _CounterPtr(raw)
 
 
 @always_inline("nodebug")

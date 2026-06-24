@@ -31,7 +31,7 @@ struct RAll(Copyable, Movable, Defaultable, JsonSerializable, JsonDeserializable
 
 def test_optional_prefix_selftest() raises:
     assert_true(
-        reflect[Optional[Int64]]().name().startswith("std.collections.optional.Optional["),
+        reflect[Optional[Int64]].name().startswith("std.collections.optional.Optional["),
         "Optional reflected-name prefix changed — load[T]'s missing-key policy must be updated",
     )
 

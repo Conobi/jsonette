@@ -29,7 +29,7 @@ struct Parser(Movable):
     """JSON parser. Orchestrates Stage 1 + Stage 2.
 
     Movable: the parser owns its reusable buffers and tape; moving it transfers
-    that ownership (the existing `deinit take` constructor is the move). Any
+    that ownership (the existing `deinit move` constructor is the move). Any
     `Document` borrowing the old location is invalidated by the move, enforced by
     the Document's origin parameter."""
 
@@ -48,13 +48,13 @@ struct Parser(Movable):
         self._tape = Tape()  # empty Lists -> no allocation until first parse grows them
         self._od_scratch = List[UInt8]()  # empty -> allocated on first On-Demand string read
 
-    def __init__(out self, *, deinit take: Self):
-        self.container_stack = take.container_stack^
-        self.count_stack = take.count_stack^
-        self.padded = take.padded^
-        self.positions = take.positions^
-        self._tape = take._tape^
-        self._od_scratch = take._od_scratch^
+    def __init__(out self, *, deinit move: Self):
+        self.container_stack = move.container_stack^
+        self.count_stack = move.count_stack^
+        self.padded = move.padded^
+        self.positions = move.positions^
+        self._tape = move._tape^
+        self._od_scratch = move._od_scratch^
 
     def _build(mut self, data: Span[UInt8, _]) raises:
         """Build this parser's tape from `data` (Stage 1 + Stage 2). No Document returned.
