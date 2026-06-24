@@ -34,7 +34,7 @@ Builds and runs:
 """
 
 from std.time import perf_counter_ns
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette._alloc_count import (
     reset_alloc_count,
     get_alloc_count,
@@ -127,21 +127,24 @@ def bench(name: String, data: List[UInt8], mut perf: PerfGroup) raises -> UInt64
         An accumulated sink value to keep the parses from being optimised away.
     """
     var size = len(data)
-    var parser = Parser()
+    # Cold parse once (allocates the Document's buffers); every subsequent
+    # `reparse` reuses them (the warm, zero-alloc server path). `parse`/`reparse`
+    # replaced the removed `Parser.parse()` method.
+    var doc = parse(data)
     var sink: UInt64 = 0
 
     # Warmup: amortise the padded buffer and warm caches/branch predictors.
     for _ in range(WARMUP):
-        var doc = parser.parse(data)
-        sink += doc._tape[].elements[0]
+        doc.reparse(data)
+        sink += doc._parser._tape.elements[0]
 
     # Pass 1 — min-time wall clock (no counter syscalls in the region).
     var best_ns = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var doc = parser.parse(data)
+        doc.reparse(data)
         var t1 = perf_counter_ns()
-        sink += doc._tape[].elements[0]
+        sink += doc._parser._tape.elements[0]
         var dt = Int(t1 - t0)
         if dt < best_ns:
             best_ns = dt
@@ -153,9 +156,9 @@ def bench(name: String, data: List[UInt8], mut perf: PerfGroup) raises -> UInt64
         for _ in range(ITERS):
             perf.reset()
             perf.enable()
-            var doc = parser.parse(data)
+            doc.reparse(data)
             perf.disable()
-            sink += doc._tape[].elements[0]
+            sink += doc._parser._tape.elements[0]
             var c = perf.cycles()
             var i = perf.instructions()
             if c < best_cyc:
@@ -165,8 +168,8 @@ def bench(name: String, data: List[UInt8], mut perf: PerfGroup) raises -> UInt64
 
     # Pass 3 — allocs/op from a single warm parse (deterministic per call).
     reset_alloc_count()
-    var doc = parser.parse(data)
-    sink += doc._tape[].elements[0]
+    doc.reparse(data)
+    sink += doc._parser._tape.elements[0]
     var allocs = get_alloc_count()
 
     # Derived metrics.
