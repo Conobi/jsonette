@@ -9,6 +9,7 @@ from jsonette.error import ParseError, ErrorCode
 from jsonette._alloc_count import record_alloc
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
 from jsonette.stage2.strings import parse_string
+from std.sys.intrinsics import unlikely
 
 comptime MAX_DEPTH: Int = 1024
 
@@ -180,7 +181,7 @@ def build_tape(
                 depth += 1
                 si += 1
                 state = ST_ARR_BEGIN
-            elif state == ST_ARR_BEGIN and byte == TAG_ARRAY_CLOSE:  # empty array ']'
+            elif state == ST_ARR_BEGIN and unlikely(byte == TAG_ARRAY_CLOSE):  # empty array ']'
                 _close_container(tape_ptr, tape_pos, stk, depth, TAG_ARRAY_CLOSE)
                 tape_pos += 1
                 depth -= 1
@@ -203,7 +204,7 @@ def build_tape(
                 while Int(si_ptr[si]) <= string_end:
                     si += 1
                 state = ST_OBJ_COLON
-            elif state == ST_OBJ_BEGIN and byte == TAG_OBJECT_CLOSE:  # empty object '}'
+            elif state == ST_OBJ_BEGIN and unlikely(byte == TAG_OBJECT_CLOSE):  # empty object '}'
                 _close_container(tape_ptr, tape_pos, stk, depth, TAG_OBJECT_CLOSE)
                 tape_pos += 1
                 depth -= 1
@@ -223,7 +224,7 @@ def build_tape(
                 stk[depth * 2 - 1] += 1
                 si += 1
                 state = ST_OBJ_KEY
-            elif byte == TAG_OBJECT_CLOSE:  # '}'
+            elif unlikely(byte == TAG_OBJECT_CLOSE):  # '}'
                 _close_container(tape_ptr, tape_pos, stk, depth, TAG_OBJECT_CLOSE)
                 tape_pos += 1
                 depth -= 1
@@ -236,7 +237,7 @@ def build_tape(
                 stk[depth * 2 - 1] += 1
                 si += 1
                 state = ST_ARR_VALUE
-            elif byte == TAG_ARRAY_CLOSE:  # ']'
+            elif unlikely(byte == TAG_ARRAY_CLOSE):  # ']'
                 _close_container(tape_ptr, tape_pos, stk, depth, TAG_ARRAY_CLOSE)
                 tape_pos += 1
                 depth -= 1
