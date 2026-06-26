@@ -65,7 +65,20 @@ def build_tape(
     # writes fill before read). record_alloc() fires only on the grow branches, so a
     # warm tape with enough capacity contributes 0 allocations.
     var need_elem = input_len * 2 + 2
-    var need_str = input_len + 64
+    # Size string_buf for the true worst case. Each parsed string is stored as
+    # [4-byte LE length][content][1-byte NUL], so the cumulative used bytes are
+    # sbuf_pos = Sum(content) + 5*n_strings. Sum(content) <= input_len because
+    # unescaping never expands (\n is 2 input bytes -> 1, \uXXXX is 6 -> <=4).
+    # For the per-string overhead, Stage 1 emits BOTH the opening and the closing
+    # quote of every string as structural positions (real_quotes in the indexer)
+    # and nothing else emits a paired quote, so the document holds at most
+    # num_structurals // 2 strings — a closed-form upper bound on n_strings taken
+    # straight from the structural index, no extra pass. The trailing +64
+    # preserves the SIMD copy slack parse_string's unconditional 32-byte memcpy
+    # overrun relies on. need_str is therefore >= sbuf_pos for ANY input, so the
+    # buffer never overruns and the terminal resize only truncates.
+    var n_strings_max = num_structurals // 2
+    var need_str = input_len + 5 * n_strings_max + 64
     if tape.elements.capacity < need_elem:
         record_alloc()
         tape.elements.reserve(need_elem)
