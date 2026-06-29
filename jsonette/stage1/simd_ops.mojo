@@ -1,42 +1,68 @@
 from std.sys.intrinsics import llvm_intrinsic
+from std.sys.info import CompilationTarget
+from std.memory import pack_bits
 
 
 @always_inline("nodebug")
-def movemask_epi8(v: SIMD[DType.uint8, 32]) -> Int32:
-    """Extract high bit of each byte into a 32-bit integer mask (AVX2 PMOVMSKB)."""
-    return llvm_intrinsic["llvm.x86.avx2.pmovmskb", Int32](v)
-
-
-@always_inline("nodebug")
-def shuffle_epi8(
-    table: SIMD[DType.uint8, 32], indices: SIMD[DType.uint8, 32]
+def shuffle_bytes(
+    table: SIMD[DType.uint8, 16], indices: SIMD[DType.uint8, 32]
 ) -> SIMD[DType.uint8, 32]:
-    """SIMD byte shuffle (AVX2 VPSHUFB). Each lane (128-bit) is independent.
-    If high bit of index byte is set, output byte is 0.
-    Only the low 4 bits of each index select from the 16-byte lane table."""
-    return llvm_intrinsic["llvm.x86.avx2.pshuf.b", SIMD[DType.uint8, 32]](
-        table, indices
+    """Full-width byte table lookup: r[i] = table[indices[i]] over 32 bytes.
+
+    `table` is the 16-byte lookup table; `indices` are 32 per-byte selectors that
+    must be in 0..15 (the classifier feeds nibbles, so this always holds).
+
+    On AVX2 this is a single `ymm` VPSHUFB. VPSHUFB indexes within each 128-bit
+    lane independently, so the 16-byte table is replicated into both lanes; the
+    replication folds away at compile time since the table is constant. On every
+    other target it falls back to two portable 16-byte `SIMD._dynamic_shuffle`
+    lookups (NEON `tbl`), one per lane, then joins them. Both paths are
+    bit-identical here because the indices never set the high bit that would make
+    VPSHUFB (but not `_dynamic_shuffle`) zero the output.
+    """
+    comptime if CompilationTarget.has_avx2():
+        return llvm_intrinsic[
+            "llvm.x86.avx2.pshuf.b", SIMD[DType.uint8, 32]
+        ](table.join(table), indices)
+
+    return table._dynamic_shuffle(indices.slice[16, offset=0]()).join(
+        table._dynamic_shuffle(indices.slice[16, offset=16]())
     )
 
 
 @always_inline("nodebug")
 def prefix_xor(bitmask: UInt64) -> UInt64:
-    """Compute prefix XOR via carry-less multiply (PCLMULQDQ).
-    Each 1-bit flips the polarity of all subsequent bits.
-    Equivalent to: out[i] = bitmask[0] ^ bitmask[1] ^ ... ^ bitmask[i].
+    """Compute the prefix XOR (inclusive XOR-scan) of a 64-bit mask.
+
+    Returns out where out[i] = bitmask[0] ^ bitmask[1] ^ ... ^ bitmask[i]; each
+    1-bit flips the polarity of all subsequent bits, which propagates in-string
+    state across a 64-bit quote mask.
+
+    On x86 (AVX2) this is a single PCLMULQDQ, since multiplying by all-ones in
+    GF(2) is exactly a prefix XOR. On every other target it falls back to the
+    portable Hillis-Steele doubling scan (six shift-XOR steps), which is
+    verified bit-identical to the CLMUL result.
     """
-    # CLMUL: multiplying by all-ones in GF(2) = prefix XOR
-    # Software fallback (non-x86):
-    #   x ^= x << 1; x ^= x << 2; x ^= x << 4;
-    #   x ^= x << 8; x ^= x << 16; x ^= x << 32; return x
-    var input = SIMD[DType.uint64, 2](bitmask, 0)
-    var multiplier = SIMD[DType.uint64, 2](0xFFFFFFFFFFFFFFFF, 0)
-    var result = llvm_intrinsic[
-        "llvm.x86.pclmulqdq",
-        SIMD[DType.uint64, 2],
-        has_side_effect=False,
-    ](input, multiplier, Int8(0))
-    return result[0]
+    comptime if CompilationTarget.has_avx2():
+        # CLMUL: multiplying by all-ones in GF(2) = prefix XOR.
+        var input = SIMD[DType.uint64, 2](bitmask, 0)
+        var multiplier = SIMD[DType.uint64, 2](0xFFFFFFFFFFFFFFFF, 0)
+        var result = llvm_intrinsic[
+            "llvm.x86.pclmulqdq",
+            SIMD[DType.uint64, 2],
+            has_side_effect=False,
+        ](input, multiplier, Int8(0))
+        return result[0]
+
+    # Portable fallback (non-AVX2 targets, e.g. ARM): doubling XOR-scan.
+    var x = bitmask
+    x ^= x << 1
+    x ^= x << 2
+    x ^= x << 4
+    x ^= x << 8
+    x ^= x << 16
+    x ^= x << 32
+    return x
 
 
 @fieldwise_init
@@ -62,26 +88,22 @@ struct SimdInput(Movable, Copyable):
     def eq(self, target: UInt8) -> UInt64:
         """Return 64-bit mask: bit i set if byte i == target."""
         var splat = SIMD[DType.uint8, 32](target)
-        var m0 = self.chunks[0].eq(splat).select(
-            SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-        )
-        var m1 = self.chunks[1].eq(splat).select(
-            SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-        )
-        var lo = UInt64(movemask_epi8(m0).cast[DType.uint64]()) & 0xFFFFFFFF
-        var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]()) & 0xFFFFFFFF
+        var lo = pack_bits[DType.uint32](self.chunks[0].eq(splat)).cast[
+            DType.uint64
+        ]()
+        var hi = pack_bits[DType.uint32](self.chunks[1].eq(splat)).cast[
+            DType.uint64
+        ]()
         return lo | (hi << 32)
 
     @always_inline("nodebug")
     def lteq(self, target: UInt8) -> UInt64:
         """Return 64-bit mask: bit i set if byte i <= target (unsigned)."""
         var splat = SIMD[DType.uint8, 32](target)
-        var m0 = self.chunks[0].le(splat).select(
-            SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-        )
-        var m1 = self.chunks[1].le(splat).select(
-            SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-        )
-        var lo = UInt64(movemask_epi8(m0).cast[DType.uint64]()) & 0xFFFFFFFF
-        var hi = UInt64(movemask_epi8(m1).cast[DType.uint64]()) & 0xFFFFFFFF
+        var lo = pack_bits[DType.uint32](self.chunks[0].le(splat)).cast[
+            DType.uint64
+        ]()
+        var hi = pack_bits[DType.uint32](self.chunks[1].le(splat)).cast[
+            DType.uint64
+        ]()
         return lo | (hi << 32)

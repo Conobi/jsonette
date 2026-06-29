@@ -1,4 +1,24 @@
-from jsonette.stage1.simd_ops import SimdInput, movemask_epi8, shuffle_epi8
+from jsonette.stage1.simd_ops import SimdInput, shuffle_bytes
+from std.memory import pack_bits
+
+
+# Low-nibble table: which bits are set for each low nibble value (0-15)
+# 0xA -> bit 0 (: = 0x3A)
+# 0xB -> bit 1 ({ = 0x7B, [ = 0x5B)
+# 0xC -> bit 2 (, = 0x2C)
+# 0xD -> bit 3 (} = 0x7D, ] = 0x5D)
+comptime _LOW_NIBBLE_TABLE = SIMD[DType.uint8, 16](
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 0, 0,
+)
+
+# High-nibble table: which bits are allowed for each high nibble value (0-15)
+# High 2 (, = 0x2C) -> bit 2
+# High 3 (: = 0x3A) -> bit 0
+# High 5 ([ = 0x5B, ] = 0x5D) -> bits 1, 3 = 0x0A
+# High 7 ({ = 0x7B, } = 0x7D) -> bits 1, 3 = 0x0A
+comptime _HIGH_NIBBLE_TABLE = SIMD[DType.uint8, 16](
+    0, 0, 4, 1, 0, 0x0A, 0, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0,
+)
 
 
 @fieldwise_init
@@ -10,58 +30,33 @@ struct CharacterBlock(Movable, Copyable):
 
 
 @always_inline("nodebug")
+def _op_mask(chunk: SIMD[DType.uint8, 32]) -> UInt32:
+    """Return the 32-bit operator bitmask for one 32-byte chunk.
+
+    Intersects the low-nibble and high-nibble shuffle tables: a byte is a
+    structural operator ({, }, [, ], :, ,) only when its low nibble's candidate
+    bitset and its high nibble's permitted bitset share a bit. Packs the
+    nonzero-byte lanes into a bitmask. The byte shuffle is a full-width VPSHUFB
+    on AVX2 and a portable NEON `tbl` elsewhere (see `shuffle_bytes`).
+    """
+    var lo = chunk & SIMD[DType.uint8, 32](0x0F)
+    var hi = chunk >> 4
+    var op = shuffle_bytes(_LOW_NIBBLE_TABLE, lo) & shuffle_bytes(
+        _HIGH_NIBBLE_TABLE, hi
+    )
+    return pack_bits[DType.uint32](op.ne(SIMD[DType.uint8, 32](0)))
+
+
+@always_inline("nodebug")
 def classify(input: SimdInput) -> CharacterBlock:
     """Classify 64 bytes into whitespace and structural operator bitmasks.
 
-    Uses VPSHUFB shuffle-table approach for operators ({, }, [, ], :, ,)
-    and eq() calls for whitespace (space, tab, LF, CR).
+    Operators ({, }, [, ], :, ,) use the simdjson low/high-nibble shuffle-table
+    intersection (full-width VPSHUFB on AVX2, portable NEON TBL elsewhere);
+    whitespace (space, tab, LF, CR) uses eq() compares.
     """
-    # --- Operators via shuffle tables ---
-    # Low-nibble table: which bits are set for each low nibble value (0-15)
-    # 0xA -> bit 0 (: = 0x3A)
-    # 0xB -> bit 1 ({ = 0x7B, [ = 0x5B)
-    # 0xC -> bit 2 (, = 0x2C)
-    # 0xD -> bit 3 (} = 0x7D, ] = 0x5D)
-    var low_table = SIMD[DType.uint8, 32](
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 0, 0,
-    )
-
-    # High-nibble table: which bits are allowed for each high nibble value (0-15)
-    # High 2 (, = 0x2C) -> bit 2
-    # High 3 (: = 0x3A) -> bit 0
-    # High 5 ([ = 0x5B, ] = 0x5D) -> bits 1, 3 = 0x0A
-    # High 7 ({ = 0x7B, } = 0x7D) -> bits 1, 3 = 0x0A
-    var high_table = SIMD[DType.uint8, 32](
-        0, 0, 4, 1, 0, 0x0A, 0, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 4, 1, 0, 0x0A, 0, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0,
-    )
-
-    var low_nibble_mask = SIMD[DType.uint8, 32](0x0F)
-
-    # Process chunk 0
-    var lo0 = input.chunks[0] & low_nibble_mask
-    var hi0 = input.chunks[0] >> 4
-    var low_res0 = shuffle_epi8(low_table, lo0)
-    var high_res0 = shuffle_epi8(high_table, hi0)
-    var op0 = low_res0 & high_res0
-    # Convert nonzero -> 0xFF for movemask
-    var op_mask0 = op0.ne(SIMD[DType.uint8, 32](0)).select(
-        SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-    )
-
-    # Process chunk 1
-    var lo1 = input.chunks[1] & low_nibble_mask
-    var hi1 = input.chunks[1] >> 4
-    var low_res1 = shuffle_epi8(low_table, lo1)
-    var high_res1 = shuffle_epi8(high_table, hi1)
-    var op1 = low_res1 & high_res1
-    var op_mask1 = op1.ne(SIMD[DType.uint8, 32](0)).select(
-        SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-    )
-
-    var op_lo = UInt64(movemask_epi8(op_mask0).cast[DType.uint64]()) & 0xFFFFFFFF
-    var op_hi = UInt64(movemask_epi8(op_mask1).cast[DType.uint64]()) & 0xFFFFFFFF
+    var op_lo = _op_mask(input.chunks[0]).cast[DType.uint64]()
+    var op_hi = _op_mask(input.chunks[1]).cast[DType.uint64]()
     var op_combined = op_lo | (op_hi << 32)
 
     # --- Whitespace via eq() ---

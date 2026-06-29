@@ -8,7 +8,7 @@ SIMD scanning with unconditional stores (copy first, check after) and a
 String buffer layout: [UInt32 length (LE)][UTF-8 bytes][0x00 null terminator]
 """
 
-from jsonette.stage1.simd_ops import movemask_epi8
+from std.memory import pack_bits
 from jsonette.error import ParseError, ErrorCode
 from std.bit import count_trailing_zeros
 from std.memory import memcpy
@@ -146,26 +146,16 @@ def parse_string(
         memcpy(dest=write_ptr + write_pos, src=input_ptr + i, count=32)
 
         # Only 2 comparisons: quote and backslash
-        var quote_cmp = chunk.eq(quote_splat).select(
-            SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-        )
-        var bs_cmp = chunk.eq(bs_splat).select(
-            SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
-        )
-
-        var quote_mask = UInt32(movemask_epi8(quote_cmp).cast[DType.uint32]()) & 0xFFFFFFFF
-        var bs_mask = UInt32(movemask_epi8(bs_cmp).cast[DType.uint32]()) & 0xFFFFFFFF
+        var quote_mask = pack_bits[DType.uint32](chunk.eq(quote_splat))
+        var bs_mask = pack_bits[DType.uint32](chunk.eq(bs_splat))
         var special_mask = quote_mask | bs_mask
 
         if special_mask == 0:
             # No quotes or backslashes — all 32 bytes already copied.
             # Deferred ctrl check: scan this INPUT chunk for control chars.
-            var ctrl_cmp = chunk.le(SIMD[DType.uint8, 32](UInt8(0x1F))).select(
-                SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
+            var ctrl_mask = pack_bits[DType.uint32](
+                chunk.le(SIMD[DType.uint8, 32](UInt8(0x1F)))
             )
-            var ctrl_mask = UInt32(
-                movemask_epi8(ctrl_cmp).cast[DType.uint32]()
-            ) & 0xFFFFFFFF
             if ctrl_mask != 0:
                 raise ParseError(
                     code=ErrorCode.STRING_ERROR.value,
@@ -180,12 +170,9 @@ def parse_string(
 
         # Check for control chars in the prefix bytes before the special char
         if first_special > 0:
-            var ctrl_cmp = chunk.le(SIMD[DType.uint8, 32](UInt8(0x1F))).select(
-                SIMD[DType.uint8, 32](0xFF), SIMD[DType.uint8, 32](0)
+            var ctrl_mask = pack_bits[DType.uint32](
+                chunk.le(SIMD[DType.uint8, 32](UInt8(0x1F)))
             )
-            var ctrl_mask = UInt32(
-                movemask_epi8(ctrl_cmp).cast[DType.uint32]()
-            ) & 0xFFFFFFFF
             # Mask to only consider positions before first_special
             var prefix_mask = (UInt32(1) << UInt32(first_special)) - 1
             var prefix_ctrl = ctrl_mask & prefix_mask
