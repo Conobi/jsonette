@@ -8,14 +8,14 @@ Methodology:
   build_tape appends sentinels to its positions arg, so we truncate the list
   back to its original length each iteration (O(1) length reset, no realloc).
 - Full parse is measured two ways:
-    (a) Parser.parse(data)  -> public API; re-pads (memcpy+memset+alloc) each call.
+    (a) parse(data)  -> public API; re-pads (memcpy+memset+alloc) each call.
     (b) s1+s2 on the pre-padded buffer -> matches the stage-split sum exactly.
 
 Run with -D ASSERT=none for a meaningful profile; compare to -D ASSERT=all.
 """
 
 from std.time import perf_counter_ns
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
 from jsonette.tape import Tape
@@ -36,7 +36,7 @@ def read_file(path: String) raises -> List[UInt8]:
 
 
 def pad_buffer(data: List[UInt8]) -> List[UInt8]:
-    """Build the padded buffer exactly as Parser.parse does (input + 128 zeros)."""
+    """Build the padded buffer exactly as the parser does (input + 128 zeros)."""
     var input_len = len(data)
     var num_chunks = (input_len + 63) // 64
     var padded_len = num_chunks * 64 + 128
@@ -65,17 +65,19 @@ def profile(name: String, data: List[UInt8]) raises:
 
     print("==== " + name + " (" + String(size) + " bytes) ====")
 
-    # --- (a) Full parse via public API (re-pads each call) ---
-    var parser = Parser()
+    # --- (a) Full parse via public API (re-pads + allocates each call) ---
+    # Deliberately COLD: each `parse(data)` builds a fresh Document, re-padding
+    # (memcpy+memset) and allocating its buffers — the public-API path this
+    # path is meant to contrast against the pre-padded stage-split sum (d).
     for _ in range(WARMUP):
-        var doc = parser.parse(data)
-        sink += doc._tape[].elements[0]
+        var doc = parse(data)
+        sink += doc._parser._tape.elements[0]
     var full_min = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var doc = parser.parse(data)
+        var doc = parse(data)
         var t1 = perf_counter_ns()
-        sink += doc._tape[].elements[0]
+        sink += doc._parser._tape.elements[0]
         var dt = Int(t1 - t0)
         if dt < full_min:
             full_min = dt

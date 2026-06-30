@@ -3,7 +3,7 @@
 Decision bench for whether a branchless structural-index extraction is worth
 prototyping. Splits each parse into:
 
-  * full(API)        — Parser.parse (re-pads each call)
+  * full(API)        — parse (re-pads + allocates each call)
   * stage1_full      — structural_index (classify + emit + compaction)
   * stage1_classify  — the indexer loop MINUS the emit/compaction (DCE-guarded
                        by XOR-accumulating the per-chunk structurals bitmask)
@@ -17,7 +17,7 @@ Run:  uv run -- mojo run -I . -D ASSERT=none bench/profile_stage1.mojo
 """
 
 from std.time import perf_counter_ns
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage1.simd_ops import SimdInput
 from jsonette.stage1.classifier import classify
@@ -114,25 +114,24 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     var sink: UInt64 = 0
     print("==== " + name + " (" + String(size) + " bytes) ====")
 
-    # --- full parse via public API ---
-    var parser = Parser()
+    # --- full parse via public API (deliberately COLD: re-pads + allocates) ---
     for _ in range(WARMUP):
-        sink += parser.parse(data)._tape[].elements[0]
+        sink += parse(data)._parser._tape.elements[0]
     var full_ns = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var d = parser.parse(data)
+        var d = parse(data)
         var t1 = perf_counter_ns()
-        sink += d._tape[].elements[0]
+        sink += d._parser._tape.elements[0]
         if Int(t1 - t0) < full_ns:
             full_ns = Int(t1 - t0)
     var full_cyc = UInt64(0xFFFFFFFFFFFFFFFF)
     if perf.available:
         for _ in range(ITERS):
             perf.reset(); perf.enable()
-            var d = parser.parse(data)
+            var d = parse(data)
             perf.disable()
-            sink += d._tape[].elements[0]
+            sink += d._parser._tape.elements[0]
             if perf.cycles() < full_cyc:
                 full_cyc = perf.cycles()
 

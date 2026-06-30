@@ -3,7 +3,7 @@
 We retire ~the same instructions/byte as C++ simdjson but ~2.4x more cycles, so
 the gap lives entirely in IPC. IPC is an outcome, not a lever; this profile
 splits it into its first cause. It reads cycles + instructions + branches +
-branch-misses over one full `Parser.parse` (all four in one grouped region) and
+branch-misses over one warm `reparse` (all four in one grouped region) and
 reports, per corpus file:
 
   cyc/B, ins/B, IPC, branches/B, branch-miss rate, mispredict-cycle share.
@@ -24,7 +24,7 @@ ratio and is trustworthy on the laptop for shape.
 Run:  uv run -- mojo run -I . -D ASSERT=none bench/profile_ipc.mojo
 """
 
-from jsonette.parser import Parser
+from jsonette.document import parse
 from bench._metrics import PerfGroup
 
 
@@ -56,12 +56,14 @@ def f2(x: Float64) -> String:
 
 def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     var size = len(data)
-    var parser = Parser()
+    # Cold parse once (allocates the buffers); the warm `reparse` loop reuses
+    # them so the grouped counter region measures the parse, not allocation.
+    var doc = parse(data)
     var sink: UInt64 = 0
 
     for _ in range(WARMUP):
-        var doc = parser.parse(data)
-        sink += UInt64(len(doc._tape[].elements))
+        doc.reparse(data)
+        sink += UInt64(len(doc._parser._tape.elements))
 
     if not perf.available:
         print("==== " + name + ": perf unavailable ====")
@@ -75,9 +77,9 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     var best_brm = UInt64(0)
     for _ in range(ITERS):
         perf.reset(); perf.enable()
-        var doc = parser.parse(data)
+        doc.reparse(data)
         perf.disable()
-        sink += UInt64(len(doc._tape[].elements))
+        sink += UInt64(len(doc._parser._tape.elements))
         var c = perf.cycles()
         if c < best_cyc:
             best_cyc = c

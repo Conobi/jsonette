@@ -10,8 +10,8 @@ Build then measure:
   perf stat -e instructions:u,cycles:u,branches:u,branch-misses:u /tmp/parse_loop tests/fixtures/corpus/twitter.json
 """
 
-from sys import argv
-from jsonette.parser import Parser
+from std.sys import argv
+from jsonette.document import parse
 
 
 def read_file(path: String) raises -> List[UInt8]:
@@ -31,12 +31,14 @@ def main() raises:
         return
     var path = String(args[1])
     var data = read_file(path)
-    var parser = Parser()
+    # Cold parse once (allocates the buffers); the warmup + timed loops reuse
+    # them via `reparse` (the warm parse path the external perf-stat measures).
+    var doc = parse(data)
     var sink: UInt64 = 0
     for _ in range(10):  # warmup
-        var doc = parser.parse(data)
-        sink += UInt64(len(doc._tape[].elements))
+        doc.reparse(data)
+        sink += UInt64(len(doc._parser._tape.elements))
     for _ in range(500):  # timed region (count from outside)
-        var doc = parser.parse(data)
-        sink += UInt64(len(doc._tape[].elements))
+        doc.reparse(data)
+        sink += UInt64(len(doc._parser._tape.elements))
     print(path, " bytes=", len(data), " sink=", sink)

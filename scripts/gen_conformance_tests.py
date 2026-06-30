@@ -247,8 +247,7 @@ def bytes_to_append_lines(data: bytes, indent: str = "    ") -> str:
 def generate_accept_tests(vectors: list[tuple[str, bytes]]) -> str:
     """Generate test_accept.mojo content."""
     parts = []
-    parts.append("from simdjson.parser import Parser")
-    parts.append("from simdjson.document import Document")
+    parts.append("from jsonette.document import parse")
     parts.append("")
     parts.append("")
 
@@ -258,12 +257,11 @@ def generate_accept_tests(vectors: list[tuple[str, bytes]]) -> str:
         fname = "test_" + sanitize_name(filename)
         func_names.append(fname)
         parts.append(f"def {fname}() -> Bool:")
-        parts.append(f'    """Accept: {filename}"""')
+        parts.append(f'    """Accept: {filename}."""')
         parts.append("    var data = List[UInt8]()")
         parts.append(bytes_to_append_lines(data))
         parts.append("    try:")
-        parts.append("        var parser = Parser()")
-        parts.append("        _ = parser.parse(data)")
+        parts.append("        _ = parse(data)")
         parts.append("        return True")
         parts.append("    except:")
         parts.append(f'        print("FAIL (unexpected reject): {filename}")')
@@ -293,8 +291,7 @@ def generate_accept_tests(vectors: list[tuple[str, bytes]]) -> str:
 def generate_reject_tests(vectors: list[tuple[str, bytes]]) -> str:
     """Generate test_reject.mojo content."""
     parts = []
-    parts.append("from simdjson.parser import Parser")
-    parts.append("from simdjson.document import Document")
+    parts.append("from jsonette.document import parse")
     parts.append("")
     parts.append("")
 
@@ -304,12 +301,11 @@ def generate_reject_tests(vectors: list[tuple[str, bytes]]) -> str:
         fname = "test_" + sanitize_name(filename)
         func_names.append(fname)
         parts.append(f"def {fname}() -> Bool:")
-        parts.append(f'    """Reject: {filename}"""')
+        parts.append(f'    """Reject: {filename}."""')
         parts.append("    var data = List[UInt8]()")
         parts.append(bytes_to_append_lines(data))
         parts.append("    try:")
-        parts.append("        var parser = Parser()")
-        parts.append("        _ = parser.parse(data)")
+        parts.append("        _ = parse(data)")
         parts.append(f'        print("FAIL (unexpected accept): {filename}")')
         parts.append("        return False")
         parts.append("    except:")

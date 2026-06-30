@@ -4,9 +4,9 @@ Two measurements, min-time over many iterations (simdjson convention), input
 built ONCE outside every timed region, results accumulated into a printed sink
 (DCE guard):
 
-  (1) full_parse  — Parser.parse(data) on twitter.json + canada.json. The
-      NFR-2 "no regression" signal for the whole pipeline (also captures the
-      Parser padded-buffer reuse).
+  (1) full_parse  — warm `reparse(data)` on twitter.json + canada.json. The
+      "no regression" signal for the whole pipeline (also captures the
+      padded-buffer reuse of the warm path).
   (2) number_isolation — extract every number token from canada.json into a
       NUL-padded scratch buffer, then time _parse_number over all tokens. The
       NFR-3 signal: did the float/integer number path get faster?
@@ -16,7 +16,7 @@ min-time is trustworthy; perf counters are not required.
 """
 
 from std.time import perf_counter_ns
-from jsonette.parser import Parser
+from jsonette.document import parse
 from jsonette.stage2.numbers import _parse_number
 
 
@@ -60,17 +60,19 @@ def _is_num_char(b: UInt8) -> Bool:
 
 def bench_full_parse(name: String, data: List[UInt8]) raises:
     var size = len(data)
-    var parser = Parser()
+    # Cold parse once (allocates the buffers); the warm `reparse` loop reuses
+    # them so the timed region measures parsing, not allocation.
+    var doc = parse(data)
     var sink: UInt64 = 0
     for _ in range(WARMUP):
-        var doc = parser.parse(data)
-        sink += doc._tape[].elements[0]
+        doc.reparse(data)
+        sink += doc._parser._tape.elements[0]
     var best = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var doc = parser.parse(data)
+        doc.reparse(data)
         var t1 = perf_counter_ns()
-        sink += doc._tape[].elements[0]
+        sink += doc._parser._tape.elements[0]
         var dt = Int(t1 - t0)
         if dt < best:
             best = dt

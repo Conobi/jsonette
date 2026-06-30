@@ -1,5 +1,5 @@
 from std.time import perf_counter_ns
-from jsonette.parser import Parser
+from jsonette.document import parse
 
 
 def read_file(path: String) raises -> List[UInt8]:
@@ -19,17 +19,19 @@ def bench_file(path: String, name: String) raises:
     var size = len(data)
     print("Benchmarking:", name, "(", size, "bytes )")
 
-    var parser = Parser()
+    # Cold parse once (allocates the buffers); the warmup + measured loops
+    # reuse them via `reparse` (the warm, steady-state throughput path).
+    var doc = parse(data)
 
     # Warmup
     for _ in range(5):
-        var doc = parser.parse(data)
+        doc.reparse(data)
 
     # Measured iterations
     comptime ITERATIONS: Int = 20
     var start = perf_counter_ns()
     for _ in range(ITERATIONS):
-        var doc = parser.parse(data)
+        doc.reparse(data)
     var end = perf_counter_ns()
 
     var elapsed_ns = end - start

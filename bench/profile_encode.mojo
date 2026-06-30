@@ -9,8 +9,7 @@ Run:  uv run -- mojo run -I . -D ASSERT=none bench/profile_encode.mojo
 
 from std.time import perf_counter_ns
 from std.memory import bitcast
-from jsonette.parser import Parser
-from jsonette.document import Document
+from jsonette.document import Document, parse
 from jsonette.serialize.tape_writer import to_string, _write_value
 from jsonette.serialize.writer import JsonWriter
 from jsonette.tape import TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64
@@ -39,7 +38,7 @@ def f3(x: Float64) -> String:
     return String(s // 1000) + "." + fs
 
 
-def encode_reserved[o: Origin[mut=True]](ref doc: Document[o], cap: Int) raises -> Int:
+def encode_reserved[o: Origin[mut=True]](ref [o] doc: Document, cap: Int) raises -> Int:
     """Same walk as to_string, but into a pre-reserved buffer."""
     var w = JsonWriter()
     w.buf.reserve(cap)
@@ -51,8 +50,9 @@ def encode_reserved[o: Origin[mut=True]](ref doc: Document[o], cap: Int) raises 
 
 def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     var size = len(data)
-    var parser = Parser()
-    var doc = parser.parse(data)
+    # Single cold parse outside every timed region — only the encode path is
+    # measured here, so the parse cost does not enter the numbers.
+    var doc = parse(data)
     var out_size = len(to_string(doc))
     var sink: UInt64 = 0
 
@@ -91,9 +91,9 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
                 rs_cyc = perf.cycles()
 
     # --- collect string spans and number values from the tape (linear scan) ---
-    var ep = doc._tape[].elements.unsafe_ptr()
-    var sbp = doc._tape[].string_buf.unsafe_ptr()
-    var nelem = len(doc._tape[].elements)
+    var ep = doc._parser._tape.elements.unsafe_ptr()
+    var sbp = doc._parser._tape.string_buf.unsafe_ptr()
+    var nelem = len(doc._parser._tape.elements)
     var str_off = List[Int]()
     var str_len = List[Int]()
     var num_tag = List[UInt8]()
@@ -116,7 +116,7 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     if perf.available and len(str_off) > 0:
         for _ in range(ITERS):
             var w = JsonWriter(); w.buf.reserve(out_size + 16)
-            ref sb = doc._tape[].string_buf
+            ref sb = doc._parser._tape.string_buf
             perf.reset(); perf.enable()
             for k in range(len(str_off)):
                 w.write_escaped_buf(sb, str_off[k] + 4, str_len[k])

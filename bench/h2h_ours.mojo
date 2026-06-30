@@ -7,16 +7,16 @@ comparable:
   * WARMUP=10, ITERS=200, min-time over iterations (simdjson convention).
   * Input read ONCE outside every timed region.
   * One input-copy charged per parse call: ours copies the input into
-    the reused padded buffer inside `Parser.parse`; theirs copies the
+    the reused padded buffer inside `reparse`; theirs copies the
     owned `String` it consumes. Both marshal the whole document once
     per call, so the comparison is apples-to-apples.
-  * O(1) DCE sink (`doc._tape[].elements[0]`), printed at the end.
+  * O(1) DCE sink (`doc._parser._tape.elements[0]`), printed at the end.
 
 Run with -D ASSERT=none on the fixed-freq bench VPS.
 """
 
 from std.time import perf_counter_ns
-from jsonette.parser import Parser
+from jsonette.document import parse
 
 
 comptime WARMUP: Int = 10
@@ -43,17 +43,20 @@ def fmt_us(ns: Int) -> String:
 
 def bench(name: String, data: List[UInt8]) raises:
     var size = len(data)
-    var parser = Parser()
+    # Cold parse once (allocates the Document's buffers); the warm loop reuses
+    # them via `reparse`, which still copies the input into the padded buffer
+    # each call (server semantics; apples-to-apples with the owned-String copy).
+    var doc = parse(data)
     var sink: UInt64 = 0
     for _ in range(WARMUP):
-        var doc = parser.parse(data)
-        sink += doc._tape[].elements[0]
+        doc.reparse(data)
+        sink += doc._parser._tape.elements[0]
     var best = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
-        var doc = parser.parse(data)
+        doc.reparse(data)
         var t1 = perf_counter_ns()
-        sink += doc._tape[].elements[0]
+        sink += doc._parser._tape.elements[0]
         var dt = Int(t1 - t0)
         if dt < best:
             best = dt
