@@ -1,3 +1,24 @@
+"""Parser: the engine that owns the reusable buffers and runs both parse stages.
+
+`Parser` is the stateful core behind the public `parse`/`iter`/`validate` entry
+points (defined in `document.mojo`, `ondemand/reader.mojo`, and exposed here).
+It owns the grow-only scratch buffers — padded input, Stage-1 structural
+positions, the interleaved container stack, the tape, and the On-Demand unescape
+scratch — and reuses them across calls so a warm same-size reparse allocates
+nothing (the zero-allocation contract).
+
+Three private build paths drive the stages:
+  * `_build` runs Stage 1 (`structural_index`) then Stage 2 (`build_tape`) to
+    materialise a DOM tape.
+  * `_build_index` runs Stage 1 only, for the lazy On-Demand reader.
+  * `validate` runs Stage 1 then a strict grammar walk that materialises nothing.
+
+Every path first rejects input beyond the 4 GiB structural-index limit
+(`_check_input_len`) and, for the tape and validate paths, input that is not
+well-formed UTF-8 (`_check_utf8`), so `parse` and `validate` agree on every
+input. No I/O happens here: the caller supplies a pre-loaded byte buffer.
+"""
+
 from std.memory import memcpy, memset
 
 from std.collections.string.string_slice import _is_valid_utf8

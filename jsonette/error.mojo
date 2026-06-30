@@ -1,3 +1,14 @@
+"""Error model: the cheap `ParseError` carried on the hot path and its codes.
+
+Internal parse functions raise the typed `ParseError` — just an error code plus a
+byte position, with no `String` field — so the happy path stays allocation-free
+and the compiler can elide the dynamic error-type check. The human-readable
+message is built lazily by `format_parse_error` only when an error is actually
+caught and surfaced, keyed off the `ErrorCode` constant. `ErrorCode` enumerates
+every RFC 8259 / structural failure the parser and validator can report.
+"""
+
+
 @fieldwise_init
 struct ErrorCode(Movable, Copyable):
     """Error codes for parse failures."""
@@ -41,6 +52,12 @@ struct ParseError(Movable, Writable):
         self.position = move.position
 
     def write_to[W: Writer](self, mut writer: W):
+        """Format this error lazily and write it to `writer` (the `Writable` hook).
+
+        Builds the human-readable `"<NAME> at position <n>"` string from the stored
+        code and position only here — at the point of output — keeping the raising
+        path free of any `String` construction.
+        """
         writer.write(format_parse_error(self.code, self.position))
 
 

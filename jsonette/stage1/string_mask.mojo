@@ -1,3 +1,20 @@
+"""Stage 1 string masking: which bytes are escaped, and which are inside strings.
+
+Two small carry-carrying scanners run per 64-byte chunk and thread their state
+across chunk boundaries so a backslash run or an open string spanning a 64-byte
+edge is handled correctly:
+
+  * `EscapeScanner.next` turns a backslash bitmask into an "escaped" bitmask using
+    simdjson's odd-bits parity trick (a byte is escaped iff it follows an
+    odd-length run of backslashes).
+  * `StringScanner.next` turns the real (non-escaped) quote bitmask into an
+    "in-string" bitmask via a prefix-XOR over quotes, carrying the open/closed
+    polarity into the next chunk.
+
+The in-string mask is what lets the indexer exclude string content from
+structural-character detection. No per-byte branching.
+"""
+
 from jsonette.stage1.simd_ops import prefix_xor
 
 

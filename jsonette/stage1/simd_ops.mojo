@@ -1,3 +1,22 @@
+"""Stage 1 SIMD primitives: the ISA-portable building blocks for the indexer.
+
+This module isolates the few hardware-width SIMD operations the rest of Stage 1
+builds on, each with a fast x86 path and a portable fallback that is verified
+bit-identical:
+
+  * `SimdInput` wraps the 64-byte logical chunk (two 32-byte registers),
+    abstracting the hardware SIMD width, and exposes `load`, `eq`, and `lteq`
+    that produce 64-bit per-byte masks.
+  * `shuffle_bytes` is a full-width 16-entry byte table lookup (AVX2 VPSHUFB, or
+    two portable lane shuffles), used by the classifier's nibble tables.
+  * `prefix_xor` is the inclusive XOR-scan of a 64-bit mask (AVX2 PCLMUL by
+    all-ones, or a Hillis-Steele doubling scan), used to propagate in-string
+    state across a quote mask.
+
+Keeping these here means the indexer/classifier/string-mask code reads as
+straight-line bit logic with no `comptime if` ISA branching inline.
+"""
+
 from std.sys.intrinsics import llvm_intrinsic
 from std.sys.info import CompilationTarget
 from std.memory import pack_bits

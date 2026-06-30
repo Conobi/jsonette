@@ -1,3 +1,22 @@
+"""Value: the user-facing, zero-copy DOM accessor over a Document's tape.
+
+`Value` is a lightweight view — a pointer to the owning `Document`, a tape index,
+and the generation it was created at — so it allocates nothing and copies
+cheaply. Type predicates (`is_object`, `is_string`, ...) read the tag at the
+current tape index; typed getters (`get_int`, `get_string`, ...) read and decode
+the value, raising on a type mismatch; `as_*` variants return `Optional` instead
+of raising. Navigation (`field`/`elem` and their `[]` sugar, plus the
+`fields()`/`elems()` iterators) walks the tape via `_skip_value`.
+
+Every access first runs `_check`, which traps use of a `Value` whose generation
+no longer matches the Document's — i.e. use after a `reparse` — under
+`-D ASSERT=all`. The `o` origin parameter binds the view's lifetime to the
+Document so the borrow checker forbids it from outliving the source.
+
+This module also defines the supporting `_Entry`, `_FieldIter`, and `_ElemIter`
+iteration helpers and the `_skip_value` tape-skip primitive.
+"""
+
 from std.collections import Optional
 from std.memory import bitcast
 from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
@@ -51,27 +70,53 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
             | (UInt32(self._sbuf(offset + 3)) << 24)
         )
 
-    def is_object(self) -> Bool: return self._tag() == TAG_OBJECT_OPEN
-    def is_array(self) -> Bool: return self._tag() == TAG_ARRAY_OPEN
-    def is_string(self) -> Bool: return self._tag() == TAG_STRING
-    def is_int(self) -> Bool: return self._tag() == TAG_INT64
-    def is_uint(self) -> Bool: return self._tag() == TAG_UINT64
-    def is_float(self) -> Bool: return self._tag() == TAG_FLOAT64
+    def is_object(self) -> Bool:
+        """True iff this value is a JSON object."""
+        return self._tag() == TAG_OBJECT_OPEN
+    def is_array(self) -> Bool:
+        """True iff this value is a JSON array."""
+        return self._tag() == TAG_ARRAY_OPEN
+    def is_string(self) -> Bool:
+        """True iff this value is a JSON string."""
+        return self._tag() == TAG_STRING
+    def is_int(self) -> Bool:
+        """True iff this value is a signed-integer tape entry (negative integers).
+
+        Non-negative integers carry `TAG_UINT64`, so test `is_uint` (or `is_number`)
+        for those; `is_int` alone is not "is it an integer".
+        """
+        return self._tag() == TAG_INT64
+    def is_uint(self) -> Bool:
+        """True iff this value is an unsigned-integer tape entry (non-negative integers, incl. 0)."""
+        return self._tag() == TAG_UINT64
+    def is_float(self) -> Bool:
+        """True iff this value is a floating-point tape entry."""
+        return self._tag() == TAG_FLOAT64
     def is_number(self) -> Bool:
+        """True iff this value is any JSON number (signed int, unsigned int, or float)."""
         var t = self._tag()
         return t == TAG_INT64 or t == TAG_UINT64 or t == TAG_FLOAT64
     def is_bool(self) -> Bool:
+        """True iff this value is a JSON boolean (true or false)."""
         var t = self._tag()
         return t == TAG_TRUE or t == TAG_FALSE
-    def is_null(self) -> Bool: return self._tag() == TAG_NULL
+    def is_null(self) -> Bool:
+        """True iff this value is JSON null."""
+        return self._tag() == TAG_NULL
 
     def get_bool(self) raises -> Bool:
+        """Read this value as a Bool. Raises if it is not a JSON boolean."""
         var t = self._tag()
         if t == TAG_TRUE: return True
         if t == TAG_FALSE: return False
         raise "TAPE_ERROR: expected bool"
 
     def get_uint(self) raises -> UInt64:
+        """Read this value as a UInt64. Raises unless it is an unsigned-integer entry.
+
+        Only accepts `TAG_UINT64` (non-negative integers); a negative integer
+        (`TAG_INT64`) raises. Use `get_int` to read across both integer tags.
+        """
         if self._tag() != TAG_UINT64: raise "TAPE_ERROR: expected uint64"
         return self._elem(self._idx + 1)
 
@@ -109,10 +154,22 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         raise "TAPE_ERROR: expected number"
 
     def get_string_length(self) raises -> Int:
+        """Return the byte length of this string's (already-unescaped) content.
+
+        Reads the 4-byte length prefix from the string buffer without copying the
+        bytes out. Raises if this value is not a string.
+        """
         if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
         return self._strlen_at(Int(self._payload()))
 
     def get_string(self) raises -> String:
+        """Copy this string's content out as an owned `String`.
+
+        The bytes are the already-unescaped UTF-8 content held in the document's
+        string buffer; this allocates a fresh `String` (the only copy on the read
+        path). Raises if this value is not a string. For a non-allocating compare,
+        use `string_eq`.
+        """
         if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
         var offset = Int(self._payload())
         var str_len = self._strlen_at(offset)
@@ -122,6 +179,12 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         return String(from_utf8=buf^)
 
     def string_eq(self, expected: String) raises -> Bool:
+        """Compare this string's content to `expected` without allocating.
+
+        Checks length then bytes directly against the document's string buffer, so
+        no `String` is materialised (unlike `get_string`). Raises if this value is
+        not a string.
+        """
         if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
         var offset = Int(self._payload())
         var str_len = self._strlen_at(offset)

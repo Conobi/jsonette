@@ -1,3 +1,16 @@
+"""Document: the owning DOM handle and the top-level `parse` entry points.
+
+A `Document` owns a fully built tape (via its `Parser`) plus a generation
+counter. It is the value returned by `parse(...)`; callers navigate it through
+`root()`, which hands back a self-bound `Value` view over the already-built tape
+(no re-parse, callable repeatedly). `reparse(data)` rebuilds into the same
+buffers for zero warm allocations and bumps the generation counter, which
+invalidates any outstanding `Value` (trapped under `-D ASSERT=all`).
+
+The module also defines the free `parse` functions (bytes and `String`
+overloads) that construct an owning `Document` — the default DOM entry point.
+"""
+
 from jsonette.parser import Parser
 from jsonette.value import Value
 

@@ -1,3 +1,20 @@
+"""Tape: the flat, depth-first value array Stage 2 builds and `Value` views.
+
+The tape is a `List[UInt64]` where each element packs an 8-bit type tag in the
+high byte and a 56-bit payload in the low bytes (`make_tape_entry` /`tape_tag` /
+`tape_payload` encode and decode this). Scalars that need a full 64-bit word
+(ints, floats) occupy a second raw element written by `append_raw`. The tag
+constants below are the simdjson tape tags, deliberately chosen to equal the
+ASCII byte that opens each JSON value (`{`, `[`, `"`, `t`, `f`, `n`) so Stage 2
+can dispatch on the structural byte directly; the numeric tags (`l`/`u`/`d`) and
+`TAG_ROOT` (`r`) follow simdjson's lettering.
+
+String content lives in the separate `string_buf` (length-prefixed, NUL-padded),
+referenced by offset from a `TAG_STRING` element. Both backing Lists are owned by
+the `Parser` and reused across parses, so this struct holds no allocation logic
+beyond the optional capacity-preallocating constructor.
+"""
+
 from jsonette._alloc_count import record_alloc
 
 comptime TAG_ROOT = UInt8(0x72)
@@ -38,31 +55,52 @@ struct Tape(Movable):
 
     @always_inline("nodebug")
     def tag_at(self, idx: Int) -> UInt8:
+        """Return the 8-bit type tag of the element at `idx` (its high byte).
+
+        Uses `unsafe_get` (no bounds check): `idx` is a trusted tape offset.
+        """
         return UInt8(self.elements.unsafe_get(idx) >> 56)
 
     @always_inline("nodebug")
     def payload_at(self, idx: Int) -> UInt64:
+        """Return the 56-bit payload of the element at `idx` (tag byte masked off).
+
+        Uses `unsafe_get` (no bounds check): `idx` is a trusted tape offset.
+        """
         return self.elements.unsafe_get(idx) & 0x00FFFFFFFFFFFFFF
 
     @always_inline("nodebug")
     def append(mut self, tag: UInt8, payload: UInt64):
+        """Append one tagged element, packing `tag` and `payload` into a 64-bit word."""
         self.elements.append(make_tape_entry(tag, payload))
 
     @always_inline("nodebug")
     def append_raw(mut self, value: UInt64):
+        """Append a raw 64-bit word with no tag packing.
+
+        Used for the second element of a number (the full int/float bit pattern),
+        which needs all 64 bits and is read in tandem with its preceding tag.
+        """
         self.elements.append(value)
 
 
 @always_inline("nodebug")
 def make_tape_entry(tag: UInt8, payload: UInt64) -> UInt64:
+    """Pack an 8-bit `tag` (high byte) and a 56-bit `payload` into one tape word.
+
+    The payload is masked to 56 bits, so any high bits the caller passes are
+    dropped rather than corrupting the tag.
+    """
     return (UInt64(tag) << 56) | (payload & 0x00FFFFFFFFFFFFFF)
 
 
 @always_inline("nodebug")
 def tape_tag(entry: UInt64) -> UInt8:
+    """Extract the 8-bit type tag (high byte) from a packed tape `entry`."""
     return UInt8(entry >> 56)
 
 
 @always_inline("nodebug")
 def tape_payload(entry: UInt64) -> UInt64:
+    """Extract the 56-bit payload (tag byte masked off) from a packed tape `entry`."""
     return entry & 0x00FFFFFFFFFFFFFF

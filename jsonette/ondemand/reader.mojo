@@ -1,3 +1,19 @@
+"""Reader: the owning handle for the lazy On-Demand parsing API and `iter` entry.
+
+Where the DOM eagerly materialises a tape, the On-Demand path runs Stage 1 only
+(a structural index, no tape) and navigates JSON lazily, parsing each leaf just
+in time. `Reader` owns the `Parser` that holds that index plus a generation
+counter; `root()` hands back a self-bound On-Demand `Value` at the document's
+first structural, and `reparse(data)` re-indexes into the same buffers for zero
+warm allocations while bumping the generation (which invalidates outstanding
+handles, trapped under `-D ASSERT=all`).
+
+The free `iter(...)` functions (bytes and `String` overloads) are the public
+entry point: they run Stage 1 and return an owning `Reader`. Note this module's
+`Value` is the On-Demand value type, distinct from the DOM `Value`, which is why
+the On-Demand API stays namespaced under `jsonette.ondemand`.
+"""
+
 from jsonette.parser import Parser
 from jsonette.ondemand.ondemand import Value
 from jsonette.error import format_parse_error, ErrorCode

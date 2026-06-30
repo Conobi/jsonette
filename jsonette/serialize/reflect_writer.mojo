@@ -18,6 +18,12 @@ from jsonette.serialize.writer import JsonWriter
 trait JsonSerializable:
     """A type that can write itself as JSON. Default body uses reflection."""
     def write_json(self, mut w: JsonWriter) raises:
+        """Emit `self` as JSON into `w`.
+
+        The default body routes to the reflective field-walk (`_default_emit`), so
+        a plain struct conforms with no methods of its own. Override to customise a
+        type's JSON representation.
+        """
         _default_emit(self, w)
 
 

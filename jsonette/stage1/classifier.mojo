@@ -1,3 +1,14 @@
+"""Stage 1 character classifier: 64 bytes -> whitespace + structural-operator masks.
+
+`classify` turns one 64-byte `SimdInput` chunk into a `CharacterBlock` of two
+64-bit masks — one bit per byte. Structural operators (`{ } [ ] : ,`) are
+detected branchlessly with simdjson's low/high-nibble shuffle-table intersection
+(`_op_mask`): a byte is an operator only when the candidate bitset for its low
+nibble and the permitted bitset for its high nibble share a bit. Whitespace
+(space, tab, LF, CR) is detected with parallel equality compares. No per-byte
+branching — the whole chunk is classified in a handful of SIMD ops.
+"""
+
 from jsonette.stage1.simd_ops import SimdInput, shuffle_bytes
 from std.memory import pack_bits
 

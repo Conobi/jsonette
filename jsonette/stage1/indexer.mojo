@@ -1,3 +1,21 @@
+"""Stage 1 indexer: the chunk loop that emits structural character positions.
+
+`structural_index` is the Stage 1 entry point. It walks the padded input 64 bytes
+at a time, and for each chunk combines the classifier's operator/whitespace masks
+with the string-mask scanners to compute that chunk's structural bits: structural
+operators outside strings, every real (non-escaped) quote, and pseudo-structural
+scalar starts (the first byte of a number or `true`/`false`/`null`). Set bits are
+scattered into the caller's reusable `positions` buffer by a branchless,
+8-at-a-time `emit` (simdjson AVX2-kernel style) that trades a small over-write
+tail for removing the per-structural mispredicted branch.
+
+Output is deferred by one chunk so cross-chunk carries settle, and the spurious
+tail produced by the final chunk's zero-padding is trimmed at the end. On exit,
+`len(positions)` equals the true structural count so Stage 2 reads it directly.
+The buffer is reused across calls and grows only on capacity, so a warm run
+allocates nothing.
+"""
+
 from std.bit import count_trailing_zeros, pop_count
 
 from jsonette.stage1.simd_ops import SimdInput

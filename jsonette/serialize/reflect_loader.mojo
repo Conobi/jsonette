@@ -49,6 +49,12 @@ trait JsonDeserializable(Movable):
     to the reflective struct field-walk, so a plain struct conforms with zero methods."""
     @staticmethod
     def from_json[o: Origin[mut=True]](val: Value[o], out s: Self) raises:
+        """Build `Self` from the DOM `val` by out-return.
+
+        The default body routes to the reflective struct field-walk
+        (`_default_decode`), so a plain `Defaultable` struct conforms with no
+        methods of its own. Override to customise how a type decodes from JSON.
+        """
         s = _default_decode[downcast[Self, _Struct]](val)
 
 
@@ -121,6 +127,11 @@ def load[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable]
 def load[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
     data: Span[UInt8, _], out s: T
 ) raises:
+    """Parse JSON `data` (raw bytes) and reflectively build a fresh `T`.
+
+    The byte-span overload of `load`; identical behaviour to the `String` overload
+    but avoids constructing a `String` from a caller-owned buffer.
+    """
     var doc = parse(data)
     s = T.from_json(doc.root())
 
