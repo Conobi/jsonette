@@ -2,7 +2,7 @@
 name = "jsonette"
 version = "0.1.0"
 description = "SIMD-accelerated JSON parser for Mojo"
-license = "Apache-2.0"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "mojox>=0.2",
