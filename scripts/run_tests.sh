@@ -54,7 +54,7 @@ TESTS=(
 )
 
 cd "$PROJECT_DIR"
-rm -f *.mojopkg
+rm -f *.mojoc *.mojopkg
 
 PASSED=0
 FAILED=0

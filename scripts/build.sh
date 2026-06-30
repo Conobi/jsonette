@@ -6,11 +6,11 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$PROJECT_DIR"
 
-echo "Removing stale .mojopkg files..."
-rm -f *.mojopkg
+echo "Removing stale package files..."
+rm -f *.mojoc *.mojopkg
 
 echo "Building jsonette..."
-mojo package jsonette -o jsonette.mojopkg
+mojo precompile jsonette -o jsonette.mojoc
 
 echo "All packages built."
-ls -lh *.mojopkg
+ls -lh *.mojoc
