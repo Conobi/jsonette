@@ -195,7 +195,7 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         return True
 
     def field(self, key: String) raises -> Value[Self.o]:
-        """Object key lookup (O(n) scan). Was `get(doc, key)`."""
+        """Object key lookup (O(n) scan). Raises if absent or not an object."""
         if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object for key lookup"
         var i = self._idx + 1
         var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
@@ -239,7 +239,7 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         return False
 
     def elem(self, idx: Int) raises -> Value[Self.o]:
-        """Array element by index (O(n) skip). Was `at(doc, idx)`."""
+        """Array element by index (O(n) skip). Raises if out of range or not an array."""
         if self._tag() != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected array for index access"
         var i = self._idx + 1
         var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
@@ -252,7 +252,7 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         raise "INDEX_ERROR: index " + String(idx) + " out of range"
 
     def len(self) raises -> Int:
-        """Element count of this container. Was `count(doc)`."""
+        """Element count of this container (object members or array elements)."""
         var t = self._tag()
         if t != TAG_OBJECT_OPEN and t != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected container for len"
         return Int((self._payload() >> 32) & 0xFFFFFF)

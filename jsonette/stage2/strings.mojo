@@ -232,7 +232,7 @@ def parse_string(
     raise ParseError(code=ErrorCode.UNCLOSED_STRING.value, position=pos)
 
 
-# --- Hex digit parser (unchanged) ---
+# --- Hex digit parser ---
 
 
 def _parse_hex4(

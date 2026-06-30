@@ -37,7 +37,7 @@ def _counter_ptr() -> _CounterPtr:
     reached when `ALLOC_COUNT_ENABLED` is True.
     """
     var raw = __mlir_op.`pop.global_alloc`[
-        name = "json_simd_alloc_counter".value,
+        name = "jsonette_alloc_counter".value,
         count = __mlir_attr.`1:index`,
         _type = __mlir_type[`!kgen.pointer<`, Int, `>`],
     ]()
