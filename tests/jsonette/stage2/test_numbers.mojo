@@ -377,6 +377,50 @@ def test_leading_zero_fraction() raises:
     assert_equal(result.value, UInt64(0x3FE0000000000000))
 
 
+# --- huge-exponent clamp: fast-path accumulator must not overflow ------------
+
+
+def test_huge_positive_exponent_is_inf() raises:
+    """'1e99999999999999999999' (20-digit exponent) saturates to +inf.
+
+    The exponent has more than 19 digits, which would overflow the fast-path
+    `Int` accumulator (Mojo wraps silently). The accumulator is clamped like the
+    slow path, so the result still saturates to +inf — matching Python's
+    json.loads (bits 0x7ff0000000000000)."""
+
+    var s = String("1e99999999999999999999")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x7FF0000000000000))
+
+
+def test_huge_negative_exponent_is_zero() raises:
+    """'1e-99999999999999999999' (20-digit exponent) saturates to +0.0.
+
+    Same clamp on the fast-path accumulator; a huge negative exponent underflows
+    to +0.0 (bits 0x0), matching Python's json.loads."""
+
+    var s = String("1e-99999999999999999999")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x0))
+
+
+def test_huge_exponent_with_mantissa_is_inf() raises:
+    """'9e999999999999999999' (19-digit exponent) saturates to +inf.
+
+    Exercises the clamp right at the 19/20-digit boundary with a non-1 mantissa;
+    Python's json.loads also yields +inf (bits 0x7ff0000000000000)."""
+
+    var s = String("9e999999999999999999")
+    var buf = _nul_padded(s)
+    var result = _parse_number(buf.unsafe_ptr(), len(s.as_bytes()))
+    assert_equal(result.tag, TAG_FLOAT64)
+    assert_equal(result.value, UInt64(0x7FF0000000000000))
+
+
 def main() raises:
     test_parse_positive_int()
     test_parse_zero()
@@ -410,4 +454,7 @@ def main() raises:
     test_exponent_plus_sign()
     test_exponent_minus_sign()
     test_leading_zero_fraction()
+    test_huge_positive_exponent_is_inf()
+    test_huge_negative_exponent_is_zero()
+    test_huge_exponent_with_mantissa_is_inf()
     print("test_numbers: all passed")

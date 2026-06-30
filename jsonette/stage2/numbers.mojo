@@ -246,7 +246,16 @@ def _parse_float(
         if pos >= max_len or not _is_digit(ptr[pos]):
             raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
         while pos < max_len and _is_digit(ptr[pos]):
-            parsed_exponent = parsed_exponent * 10 + Int(_digit_value(ptr[pos]))
+            # Clamp the accumulator like the slow path (slow_float._parse_decimal):
+            # a 19+ digit exponent would overflow Int (Mojo wraps silently). Any
+            # exponent this large already saturates the result to inf or 0.0 via
+            # the downstream Eisel-Lemire range check, so stopping the accumulation
+            # changes no result — it only removes the wrap. `pos` still advances
+            # over every exponent digit so the token boundary is unchanged.
+            if parsed_exponent < 100000:
+                parsed_exponent = (
+                    parsed_exponent * 10 + Int(_digit_value(ptr[pos]))
+                )
             pos += 1
         if exp_negative:
             parsed_exponent = -parsed_exponent
