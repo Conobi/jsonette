@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host-load audit gate for benchmarking (ported from navette's bench discipline).
+# Host-load audit gate for benchmarking.
 # Aborts (exit 1) unless the machine is quiet enough for verdict-grade numbers.
 # Usage: bash scripts/audit_host.sh && <run bench>
 set -euo pipefail
