@@ -192,18 +192,15 @@ def profile_file(path: String, name: String) raises:
 
     # --- Full Stage 2 baseline ---
     var cs = List[UInt32](capacity=1024)
-    var ks = List[UInt32](capacity=1024)
     var tape = Tape()
     for _ in range(WARMUP):
         cs.resize(0, UInt32(0))
-        ks.resize(0, UInt32(0))
-        build_tape(data, input_len, positions, cs, ks, tape)
+        build_tape(data, input_len, positions, cs, tape)
 
     var s2_start = perf_counter_ns()
     for _ in range(ITERS):
         cs.resize(0, UInt32(0))
-        ks.resize(0, UInt32(0))
-        build_tape(data, input_len, positions, cs, ks, tape)
+        build_tape(data, input_len, positions, cs, tape)
     var s2_end = perf_counter_ns()
     var s2_total_ns = Int(s2_end - s2_start)
     var s2_avg_ns = s2_total_ns // ITERS

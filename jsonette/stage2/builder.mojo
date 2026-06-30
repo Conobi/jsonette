@@ -34,7 +34,7 @@ comptime ST_DOC_END: Int = 9        # root value complete: nothing may follow
 
 def build_tape(
     input_buf: List[UInt8], input_len: Int, mut structural_positions: List[UInt32],
-    mut container_stack: List[UInt32], mut count_stack: List[UInt32],
+    mut container_stack: List[UInt32],
     mut tape: Tape,
 ) raises ParseError:
     """Stage 2 entry point: fill a caller-owned tape from structural positions and input bytes.
@@ -51,7 +51,8 @@ def build_tape(
         input_len: Real (unpadded) length of the JSON input.
         structural_positions: Structural character positions from Stage 1.
         container_stack: Pre-allocated stack for container open positions (capacity >= MAX_DEPTH).
-        count_stack: Pre-allocated stack for element counts (capacity >= MAX_DEPTH).
+            Used as an interleaved [open_idx, count] stack — see the loop body — so it
+            also carries per-container element counts; no separate count stack is needed.
         tape: Caller-owned tape to fill (reused across parses for zero warm allocs).
     """
     var num_structurals = len(structural_positions)
@@ -97,7 +98,7 @@ def build_tape(
     tape_pos += 1
 
     # Interleaved container stack: stk[depth*2] = open_idx, stk[depth*2+1] = count
-    # Merges container_stack and count_stack into one pointer, saving one register.
+    # One pointer carries both the open index and the element count, saving a register.
     container_stack.resize(MAX_DEPTH * 2, UInt32(0))
     var stk = container_stack.unsafe_ptr()
     var depth = 0

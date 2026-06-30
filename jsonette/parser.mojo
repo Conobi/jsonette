@@ -54,7 +54,6 @@ struct Parser(Movable):
     the Document's origin parameter."""
 
     var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
-    var count_stack: List[UInt32]     # unused after interleaving, kept for API compat
     var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)
     var positions: List[UInt32]       # reusable Stage 1 structural-offset buffer (grows only)
     var _tape: Tape                   # parser-owned tape, reused across parses (grows only)
@@ -62,7 +61,6 @@ struct Parser(Movable):
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
-        self.count_stack = List[UInt32](capacity=1024)
         self.padded = List[UInt8]()
         self.positions = List[UInt32]()
         self._tape = Tape()  # empty Lists -> no allocation until first parse grows them
@@ -70,7 +68,6 @@ struct Parser(Movable):
 
     def __init__(out self, *, deinit move: Self):
         self.container_stack = move.container_stack^
-        self.count_stack = move.count_stack^
         self.padded = move.padded^
         self.positions = move.positions^
         self._tape = move._tape^
@@ -106,9 +103,8 @@ struct Parser(Movable):
         # more room than prior parses; warm same-size reparses contribute 0 allocs.
         structural_index(self.padded, input_len, self.positions)
         self.container_stack.resize(0, UInt32(0))
-        self.count_stack.resize(0, UInt32(0))
         try:
-            build_tape(self.padded, input_len, self.positions, self.container_stack, self.count_stack, self._tape)
+            build_tape(self.padded, input_len, self.positions, self.container_stack, self._tape)
         except e:
             raise format_parse_error(e.code, e.position)
 

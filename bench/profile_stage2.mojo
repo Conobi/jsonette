@@ -109,18 +109,17 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     structural_index(padded, size, positions2)
     var n_struct = len(positions2)
     var cs = List[UInt32](capacity=4096)
-    var ks = List[UInt32](capacity=1024)
     var tape = Tape()
     for _ in range(WARMUP):
-        positions2.resize(n_struct, UInt32(0)); cs.resize(0, UInt32(0)); ks.resize(0, UInt32(0))
-        build_tape(padded, size, positions2, cs, ks, tape)
+        positions2.resize(n_struct, UInt32(0)); cs.resize(0, UInt32(0))
+        build_tape(padded, size, positions2, cs, tape)
         sink += tape.elements.unsafe_get(0)
     var s2_cyc = UInt64(0xFFFFFFFFFFFFFFFF)
     if perf.available:
         for _ in range(ITERS):
-            positions2.resize(n_struct, UInt32(0)); cs.resize(0, UInt32(0)); ks.resize(0, UInt32(0))
+            positions2.resize(n_struct, UInt32(0)); cs.resize(0, UInt32(0))
             perf.reset(); perf.enable()
-            build_tape(padded, size, positions2, cs, ks, tape)
+            build_tape(padded, size, positions2, cs, tape)
             perf.disable()
             sink += tape.elements.unsafe_get(0)
             if perf.cycles() < s2_cyc:

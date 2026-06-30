@@ -56,7 +56,6 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     var padded = List[UInt8](unsafe_uninit_length=padded_len)
     var positions = List[UInt32]()
     var container_stack = List[UInt32](capacity=2048)
-    var count_stack = List[UInt32](capacity=1024)
     var tape = Tape()
     var sink: UInt64 = 0
 
@@ -67,9 +66,8 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
         structural_index(padded, input_len, positions)
         var cc = len(positions)
         container_stack.resize(0, UInt32(0))
-        count_stack.resize(0, UInt32(0))
         try:
-            build_tape(padded, input_len, positions, container_stack, count_stack, tape)
+            build_tape(padded, input_len, positions, container_stack, tape)
         except e:
             raise format_parse_error(e.code, e.position)
         positions.resize(cc, UInt32(0))
@@ -118,10 +116,9 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
     for _ in range(ITERS):
         positions.resize(clean_count, UInt32(0))   # restore (drop sentinels) — outside measure
         container_stack.resize(0, UInt32(0))
-        count_stack.resize(0, UInt32(0))
         perf.reset(); perf.enable()
         try:
-            build_tape(padded, input_len, positions, container_stack, count_stack, tape)
+            build_tape(padded, input_len, positions, container_stack, tape)
         except e:
             raise format_parse_error(e.code, e.position)
         perf.disable()
@@ -199,9 +196,8 @@ def profile(name: String, data: List[UInt8], mut perf: PerfGroup) raises:
         memset(padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
         structural_index(padded, input_len, positions)
         container_stack.resize(0, UInt32(0))
-        count_stack.resize(0, UInt32(0))
         try:
-            build_tape(padded, input_len, positions, container_stack, count_stack, tape)
+            build_tape(padded, input_len, positions, container_stack, tape)
         except e:
             raise format_parse_error(e.code, e.position)
         perf.disable()
