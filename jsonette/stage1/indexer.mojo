@@ -6,30 +6,6 @@ from jsonette.stage1.string_mask import EscapeScanner, StringScanner
 from jsonette._alloc_count import record_alloc
 
 
-struct BitIndexer:
-    """Converts a 64-bit bitmask into positions via direct pointer writes."""
-
-    var positions: List[UInt32]
-    var write_pos: Int
-
-    def __init__(out self, capacity: Int = 0):
-        if capacity > 0:
-            self.positions = List[UInt32](unsafe_uninit_length=capacity)
-        else:
-            self.positions = List[UInt32]()
-        self.write_pos = 0
-
-    @always_inline("nodebug")
-    def write(mut self, base_idx: UInt32, bits: UInt64):
-        """Write positions of each set bit (relative to base_idx)."""
-        var ptr = self.positions.unsafe_ptr()
-        var b = bits
-        while b != 0:
-            ptr[self.write_pos] = base_idx + UInt32(count_trailing_zeros(b))
-            self.write_pos += 1
-            b = b & (b - 1)
-
-
 def structural_index(
     padded_buf: List[UInt8], input_len: Int, mut positions: List[UInt32]
 ):

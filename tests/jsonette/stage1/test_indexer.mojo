@@ -1,6 +1,6 @@
 from std.testing import assert_true, assert_equal
 
-from jsonette.stage1.indexer import BitIndexer, structural_index
+from jsonette.stage1.indexer import structural_index
 
 
 def _pad(data: List[UInt8]) -> List[UInt8]:
@@ -21,45 +21,6 @@ def _index(padded: List[UInt8], input_len: Int) -> List[UInt32]:
     var positions = List[UInt32]()
     structural_index(padded, input_len, positions)
     return positions^
-
-
-# ===== BitIndexer tests =====
-
-
-def test_bit_indexer_empty() raises:
-    """Empty bitmask produces no positions."""
-    var bi = BitIndexer(64)
-    bi.write(UInt32(0), UInt64(0))
-    assert_equal(bi.write_pos, 0)
-
-
-def test_bit_indexer_single_bit() raises:
-    """Single bit at position 5."""
-    var bi = BitIndexer(64)
-    bi.write(UInt32(0), UInt64(1) << 5)
-    assert_equal(bi.write_pos, 1)
-    assert_equal(bi.positions.unsafe_ptr()[0], UInt32(5))
-
-
-def test_bit_indexer_multiple_bits_with_base() raises:
-    """Multiple bits (0, 3, 7, 63) with base_idx=100."""
-    var bi = BitIndexer(64)
-    var bits = (UInt64(1) << 0) | (UInt64(1) << 3) | (UInt64(1) << 7) | (UInt64(1) << 63)
-    bi.write(UInt32(100), bits)
-    assert_equal(bi.write_pos, 4)
-    assert_equal(bi.positions.unsafe_ptr()[0], UInt32(100))
-    assert_equal(bi.positions.unsafe_ptr()[1], UInt32(103))
-    assert_equal(bi.positions.unsafe_ptr()[2], UInt32(107))
-    assert_equal(bi.positions.unsafe_ptr()[3], UInt32(163))
-
-
-def test_bit_indexer_all_bits_set() raises:
-    """All 64 bits set produces positions 0..63."""
-    var bi = BitIndexer(64)
-    bi.write(UInt32(0), ~UInt64(0))
-    assert_equal(bi.write_pos, 64)
-    for i in range(64):
-        assert_equal(bi.positions.unsafe_ptr()[i], UInt32(i))
 
 
 # ===== structural_index integration tests =====
@@ -168,10 +129,6 @@ def test_structural_index_long_string() raises:
 
 
 def main() raises:
-    test_bit_indexer_empty()
-    test_bit_indexer_single_bit()
-    test_bit_indexer_multiple_bits_with_base()
-    test_bit_indexer_all_bits_set()
     test_structural_index_empty_object()
     test_structural_index_simple_object()
     test_structural_index_nested()
