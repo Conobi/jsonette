@@ -15,6 +15,9 @@ struct ErrorCode(Movable, Copyable):
     comptime UNCLOSED_CONTAINER = ErrorCode(9)
     comptime INVALID_LITERAL = ErrorCode(10)
     comptime INVALID_UTF8 = ErrorCode(11)
+    comptime INPUT_TOO_LARGE = ErrorCode(12)
+    """Input exceeds the 4 GiB structural-index limit (Stage-1 positions are
+    UInt32). Raised before any parsing so oversized input cannot wrap an offset."""
 
 
 @fieldwise_init
@@ -66,6 +69,8 @@ def format_parse_error(code: UInt8, position: Int) -> String:
         name = "INVALID_LITERAL"
     elif code == ErrorCode.INVALID_UTF8.value:
         name = "INVALID_UTF8"
+    elif code == ErrorCode.INPUT_TOO_LARGE.value:
+        name = "INPUT_TOO_LARGE"
     else:
         name = "UNKNOWN_ERROR"
     return name + " at position " + String(position)

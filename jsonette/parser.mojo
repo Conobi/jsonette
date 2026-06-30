@@ -10,6 +10,26 @@ from jsonette.stage2.builder import build_tape
 from jsonette.ondemand.validate import _validate_document
 
 
+# Maximum input length jsonette can index. Stage-1 structural positions are
+# UInt32 and container close-indices pack into the low 32 payload bits, with
+# 0xFFFFFFFF reserved as the builder's end sentinel; an input larger than this
+# would wrap offsets into out-of-bounds reads or premature truncation. simdjson
+# enforces the same ~4 GB cap. The guard is one comparison off the hot loop. A
+# 4 GiB input cannot be unit-tested (it would need >4 GiB of RAM), so this limit
+# is enforced and documented rather than exercised by a test.
+comptime _MAX_INPUT_LEN: Int = 0xFFFFFFFF
+
+
+def _check_input_len(input_len: Int) raises:
+    """Reject input at or beyond the 4 GiB structural-index limit (UInt32 offsets).
+
+    Raised before Stage 1 runs so an oversized buffer can never wrap a UInt32
+    structural position. Cheap: one comparison, off the per-chunk hot loop.
+    """
+    if input_len > _MAX_INPUT_LEN:
+        raise format_parse_error(ErrorCode.INPUT_TOO_LARGE.value, 0)
+
+
 def _check_utf8(data: Span[UInt8, _]) raises:
     """Reject input that is not well-formed UTF-8 (RFC 8259 mandates UTF-8 JSON text).
 
@@ -66,8 +86,9 @@ struct Parser(Movable):
         allocates nothing (the zero-alloc contract). Rejects non-UTF-8 input first,
         then raises a formatted ParseError on any malformed input.
         """
-        _check_utf8(data)
         var input_len = len(data)
+        _check_input_len(input_len)
+        _check_utf8(data)
 
         # Reusable padded buffer: input + 128 zero bytes (enough for SIMD overread).
         # Grow only when the current input needs more room than prior parses.
@@ -98,6 +119,7 @@ struct Parser(Movable):
         On-Demand owning `Reader` is built on top of this.
         """
         var input_len = len(data)
+        _check_input_len(input_len)
         var num_chunks = (input_len + 63) // 64
         var padded_len = num_chunks * 64 + 128
         if len(self.padded) < padded_len:
@@ -128,8 +150,9 @@ struct Parser(Movable):
         Rejects input that is not well-formed UTF-8 first (same guard as `parse`),
         so `validate` and `parse` agree on every input.
         """
-        _check_utf8(Span(data))
         var input_len = len(data)
+        _check_input_len(input_len)
+        _check_utf8(Span(data))
 
         # Reusable padded buffer: input + 128 zero bytes (SIMD overread headroom).
         # Same grow-only buffer the tape and On-Demand paths use.
