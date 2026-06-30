@@ -1,16 +1,16 @@
 *.mojopkg
 tests/fixtures/corpus/
 tests/fixtures/test_vectors/
-plans
-plans/
-docs/project-context.md
-docs/project-context.md/
-docs/superpowers/
 
 # Compiled C++ benchmark executable (rebuild with scripts/cpp_bench/build.sh)
 scripts/cpp_bench/bench
 
 # Local-only working documents and scratch (never pushed)
 specs/
+plans/
+research/
+docs/project-context.md
+docs/superpowers/
+.claude/
 __pycache__/
 bench/poc_*
