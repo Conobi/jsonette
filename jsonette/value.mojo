@@ -23,7 +23,7 @@ from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64
 from jsonette.document import Document
 
 
-struct Value[o: Origin[mut=True]](Copyable, Movable):
+struct Value[o: Origin[mut=True]](Copyable, Movable, Sized):
     """A self-bound zero-copy view into a Document's tape (no doc-threading)."""
 
     var _doc: Pointer[Document, Self.o]
@@ -300,6 +300,16 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
         var t = self._tag()
         if t != TAG_OBJECT_OPEN and t != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected container for len"
         return Int((self._payload() >> 32) & 0xFFFFFF)
+
+    def __len__(self) -> Int:
+        """Container element count (total; 0 on a non-container).
+
+        Read from the tape header in O(1). Strict twin: `len()` (raises on a
+        non-container). Makes `len(value)` work via the `Sized` protocol."""
+        var t = self._tag()
+        if t == TAG_OBJECT_OPEN or t == TAG_ARRAY_OPEN:
+            return Int((self._payload() >> 32) & 0xFFFFFF)
+        return 0
 
     def __getitem__(self, key: String) raises -> Value[Self.o]:
         """Sugar for object key lookup: `value["key"]`."""

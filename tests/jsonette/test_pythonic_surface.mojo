@@ -23,7 +23,19 @@ def test_contains() raises:
     assert_true(not ("a" in r.field("a")), "contains on a number is False")
 
 
+def test_len() raises:
+    var doc = parse(String('{"arr":[10,20,30],"obj":{"a":1,"b":2},"s":"hi","n":7}'))
+    var r = doc.root()
+    assert_equal(len(r.field("arr")), 3)
+    assert_equal(len(r.field("obj")), 2)
+    assert_equal(len(r), 4)  # root object has 4 members
+    # total: len() of a non-container is 0, never raises
+    assert_equal(len(r.field("s")), 0)
+    assert_equal(len(r.field("n")), 0)
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
+    test_len()
     print("test_pythonic_surface: all passed")
