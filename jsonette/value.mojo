@@ -325,6 +325,35 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized):
         var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
         return _FieldIter[Self.o](self._doc, self._idx + 1, close_plus_one, self._gen)
 
+    def keys(self) raises -> List[String]:
+        """Object keys in document order (raises on a non-object; allocates one
+        String per key). Pythonic sugar over `fields()`."""
+        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object for keys"
+        var out = List[String]()
+        var i = self._idx + 1
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        while i < close_plus_one - 1:
+            out.append(Value[Self.o](self._doc[], i, self._gen).get_string())
+            i = _skip_value(self._doc[], i + 1)
+        return out^
+
+    def items(self) raises -> List[Tuple[String, Value[Self.o]]]:
+        """Object (key, value) pairs in document order (raises on a non-object;
+        allocates one String per key). Enables `for k, v in value.items()`."""
+        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object for items"
+        var out = List[Tuple[String, Value[Self.o]]]()
+        var i = self._idx + 1
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        while i < close_plus_one - 1:
+            out.append(
+                (
+                    Value[Self.o](self._doc[], i, self._gen).get_string(),
+                    Value[Self.o](self._doc[], i + 1, self._gen),
+                )
+            )
+            i = _skip_value(self._doc[], i + 1)
+        return out^
+
     def elems(self) raises -> _ElemIter[Self.o]:
         """Iterate array elements in document order."""
         if self._tag() != TAG_ARRAY_OPEN: raise "TAPE_ERROR: expected array to iterate elements"

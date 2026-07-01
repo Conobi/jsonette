@@ -70,6 +70,29 @@ def test_get_optional() raises:
     assert_true(not r.field("arr").get(9).__bool__(), "out-of-range is None")
 
 
+def test_items_keys() raises:
+    var doc = parse(String('{"a":1,"b":2,"c":3}'))
+    var r = doc.root()
+    var ks = String("")
+    for k in r.keys():
+        ks += k
+    assert_equal(ks, String("abc"))
+    var kk = String("")
+    var vv = UInt64(0)
+    for k, v in r.items():
+        kk += k
+        vv += v.get_uint()
+    assert_equal(kk, String("abc"))
+    assert_equal(vv, UInt64(6))
+    # raises on a non-object receiver
+    var raised = False
+    try:
+        _ = r.field("a").keys()
+    except:
+        raised = True
+    assert_true(raised, "keys() on a number must raise")
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
@@ -77,4 +100,5 @@ def main() raises:
     test_iter_array()
     test_reiteration()
     test_get_optional()
+    test_items_keys()
     print("test_pythonic_surface: all passed")
