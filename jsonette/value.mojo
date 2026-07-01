@@ -8,6 +8,12 @@ the value, raising on a type mismatch; `as_*` variants return `Optional` instead
 of raising. Navigation (`field`/`elem` and their `[]` sugar, plus the
 `fields()`/`elems()` iterators) walks the tape via `_skip_value`.
 
+Pythonic total operators (`__eq__` vs a String, `__contains__`, `__len__`, `__iter__`
+over arrays) sit beside the strict raising twins (`string_eq`, `has_field`, `len`,
+`elems`); the totals never raise (0/False/empty on a type mismatch) and share
+non-raising cores with their twins. `keys()`/`items()` are object-iteration sugar,
+`get(key)`/`get(idx)` are pythonic aliases of `try_field`/`try_elem`.
+
 Every access first runs `_check`, which traps use of a `Value` whose generation
 no longer matches the Document's — i.e. use after a `reparse` — under
 `-D ASSERT=all`. The `o` origin parameter binds the view's lifetime to the

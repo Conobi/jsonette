@@ -9,6 +9,12 @@ invalidates any outstanding `Value` (trapped under `-D ASSERT=all`).
 
 The module also defines the free `parse` functions (bytes and `String`
 overloads) that construct an owning `Document` — the default DOM entry point.
+
+`Document` also forwards the navigation, predicate, leaf, and total-operator surface
+to `root()` (`doc["k"]`, `k in doc`, `doc == s`, `doc.field(...)`, `doc.is_*`,
+`doc.get_*`, `doc.as_*`, `doc.len()`), so straight-line code skips the `.root()` hop.
+`len(doc)` is not offered (Sized needs borrowed self) — use `doc.len()` or
+`len(doc["field"])`.
 """
 
 from std.collections import Optional
