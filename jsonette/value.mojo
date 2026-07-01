@@ -331,6 +331,19 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized):
         var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
         return _ElemIter[Self.o](self._doc, self._idx + 1, close_plus_one, self._gen)
 
+    def __iter__(self) -> _ElemIter[Self.o]:
+        """Iterate array elements (`for x in arr_value`); total: empty on a non-array.
+
+        Objects are not directly iterable (a static iterator cannot switch element
+        type) — use `items()` / `keys()`. On a non-array the iterator is constructed
+        already-exhausted (yields nothing) rather than raising; the strict twin is
+        `elems()` (raises on a non-array)."""
+        var t = self._tag()
+        if t != TAG_ARRAY_OPEN:
+            return _ElemIter[Self.o](self._doc, self._idx + 1, self._idx + 1, self._gen)
+        var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        return _ElemIter[Self.o](self._doc, self._idx + 1, close_plus_one, self._gen)
+
     def try_field(self, key: String) raises -> Optional[Value[Self.o]]:
         """Some(value) if `key` is present (even a JSON null), None if absent;
         raises if the receiver is not an object (via has_field)."""

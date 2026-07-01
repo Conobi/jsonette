@@ -34,8 +34,34 @@ def test_len() raises:
     assert_equal(len(r.field("n")), 0)
 
 
+def test_iter_array() raises:
+    var doc = parse(String('{"xs":[4,5,6]}'))
+    var total = UInt64(0)
+    for x in doc.root().field("xs"):
+        total += x.get_uint()
+    assert_equal(total, UInt64(15))
+    # total: iterating a non-array yields nothing, never raises
+    var count = 0
+    for _x in doc.root().field("xs").elem(0):  # elem(0) is a number
+        count += 1
+    assert_equal(count, 0)
+
+
+def test_reiteration() raises:
+    var doc = parse(String("[1,2,3]"))
+    var r = doc.root()
+    var a = UInt64(0)
+    for x in r: a += x.get_uint()
+    var b = UInt64(0)
+    for x in r: b += x.get_uint()  # second pass must read identically
+    assert_equal(a, b)
+    assert_equal(r.elem(0).get_uint(), UInt64(1))  # random access still works after iterating
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
     test_len()
+    test_iter_array()
+    test_reiteration()
     print("test_pythonic_surface: all passed")
