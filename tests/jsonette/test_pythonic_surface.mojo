@@ -93,6 +93,29 @@ def test_items_keys() raises:
     assert_true(raised, "keys() on a number must raise")
 
 
+def test_document_facade_nav() raises:
+    var doc = parse(String('{"user":{"name":"Ada"},"tags":["x","y"],"k":3}'))
+    # no .root() hop:
+    assert_equal(doc["user"]["name"].get_string(), String("Ada"))
+    assert_equal(doc["tags"][1].get_string(), String("y"))
+    assert_equal(doc.field("k").get_uint(), UInt64(3))
+    assert_true("user" in doc, "contains on document")
+    assert_true(not ("zzz" in doc), "absent on document")
+    assert_equal(doc.len(), 3)
+    assert_true(doc.get("user").__bool__(), "get present")
+    assert_true(not doc.get("zzz").__bool__(), "get absent")
+    var total = UInt64(0)
+    for x in doc["tags"].elems():
+        _ = x
+        total += 1
+    assert_equal(total, UInt64(2))
+    var kk = String("")
+    for k, v in doc["user"].items():
+        kk += k
+        _ = v
+    assert_equal(kk, String("name"))
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
@@ -101,4 +124,5 @@ def main() raises:
     test_reiteration()
     test_get_optional()
     test_items_keys()
+    test_document_facade_nav()
     print("test_pythonic_surface: all passed")
