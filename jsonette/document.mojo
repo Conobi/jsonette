@@ -125,6 +125,86 @@ struct Document(Movable):
         """Facade for `root().items()`."""
         return self.root().items()
 
+    def is_object(mut self) -> Bool:
+        """Facade for `root().is_object()`."""
+        return self.root().is_object()
+
+    def is_array(mut self) -> Bool:
+        """Facade for `root().is_array()`."""
+        return self.root().is_array()
+
+    def is_string(mut self) -> Bool:
+        """Facade for `root().is_string()`."""
+        return self.root().is_string()
+
+    def is_int(mut self) -> Bool:
+        """Facade for `root().is_int()`."""
+        return self.root().is_int()
+
+    def is_uint(mut self) -> Bool:
+        """Facade for `root().is_uint()`."""
+        return self.root().is_uint()
+
+    def is_float(mut self) -> Bool:
+        """Facade for `root().is_float()`."""
+        return self.root().is_float()
+
+    def is_number(mut self) -> Bool:
+        """Facade for `root().is_number()`."""
+        return self.root().is_number()
+
+    def is_bool(mut self) -> Bool:
+        """Facade for `root().is_bool()`."""
+        return self.root().is_bool()
+
+    def is_null(mut self) -> Bool:
+        """Facade for `root().is_null()`."""
+        return self.root().is_null()
+
+    def get_bool(mut self) raises -> Bool:
+        """Facade for `root().get_bool()`."""
+        return self.root().get_bool()
+
+    def get_uint(mut self) raises -> UInt64:
+        """Facade for `root().get_uint()`."""
+        return self.root().get_uint()
+
+    def get_int(mut self) raises -> Int64:
+        """Facade for `root().get_int()`."""
+        return self.root().get_int()
+
+    def get_float(mut self) raises -> Float64:
+        """Facade for `root().get_float()`."""
+        return self.root().get_float()
+
+    def get_string(mut self) raises -> String:
+        """Facade for `root().get_string()`."""
+        return self.root().get_string()
+
+    def get_string_length(mut self) raises -> Int:
+        """Facade for `root().get_string_length()`."""
+        return self.root().get_string_length()
+
+    def as_int(mut self) raises -> Optional[Int64]:
+        """Facade for `root().as_int()`."""
+        return self.root().as_int()
+
+    def as_uint(mut self) raises -> Optional[UInt64]:
+        """Facade for `root().as_uint()`."""
+        return self.root().as_uint()
+
+    def as_float(mut self) raises -> Optional[Float64]:
+        """Facade for `root().as_float()`."""
+        return self.root().as_float()
+
+    def as_string(mut self) raises -> Optional[String]:
+        """Facade for `root().as_string()`."""
+        return self.root().as_string()
+
+    def as_bool(mut self) raises -> Optional[Bool]:
+        """Facade for `root().as_bool()`."""
+        return self.root().as_bool()
+
 
 def parse(data: Span[UInt8, _]) raises -> Document:
     """Parse JSON bytes into an owning Document (the default DOM entry)."""

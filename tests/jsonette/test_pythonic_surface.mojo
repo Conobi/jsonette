@@ -116,6 +116,23 @@ def test_document_facade_nav() raises:
     assert_equal(kk, String("name"))
 
 
+def test_document_facade_leaves() raises:
+    var s = parse(String('"hello"'))
+    assert_true(s.is_string(), "scalar-root is_string")
+    assert_equal(s.get_string(), String("hello"))
+    var n = parse(String("-7"))
+    assert_true(n.is_number(), "is_number")
+    assert_equal(n.get_int(), Int64(-7))
+    assert_equal(n.as_int().value(), Int64(-7))
+    var b = parse(String("true"))
+    assert_true(b.is_bool() and b.get_bool(), "bool root")
+    var nul = parse(String("null"))
+    assert_true(nul.is_null(), "null root")
+    var f = parse(String("1.5"))
+    assert_true(f.get_float() > 1.49 and f.get_float() < 1.51, "float root")
+    assert_true(f.as_string().__bool__() == False, "as_string on number is None")
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
@@ -125,4 +142,5 @@ def main() raises:
     test_get_optional()
     test_items_keys()
     test_document_facade_nav()
+    test_document_facade_leaves()
     print("test_pythonic_surface: all passed")
