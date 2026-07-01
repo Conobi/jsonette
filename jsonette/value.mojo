@@ -365,6 +365,16 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized):
             current += 1
         return None
 
+    def get(self, key: String) raises -> Optional[Value[Self.o]]:
+        """Pythonic alias of `try_field`: Some(value) if `key` is present (even a JSON
+        null), None if absent; raises on a non-object receiver."""
+        return self.try_field(key)
+
+    def get(self, idx: Int) raises -> Optional[Value[Self.o]]:
+        """Pythonic alias of `try_elem`: Some(element) if `idx` is in range, None if
+        out of range; raises on a non-array receiver."""
+        return self.try_elem(idx)
+
     def as_int(self) raises -> Optional[Int64]:
         """Some(Int64) if this is an integer; None for any non-integer kind; raises
         only on a UINT64 above Int64.MAX. The is_int()-or-is_uint() guard spans BOTH

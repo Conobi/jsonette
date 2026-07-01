@@ -58,10 +58,23 @@ def test_reiteration() raises:
     assert_equal(r.elem(0).get_uint(), UInt64(1))  # random access still works after iterating
 
 
+def test_get_optional() raises:
+    var doc = parse(String('{"a":null,"arr":[7,8]}'))
+    var r = doc.root()
+    # present key (even null) -> Some ; absent -> None
+    assert_true(r.get("a").__bool__(), "present-null key is Some")
+    assert_true(r.get("a").value().is_null(), "value is JSON null")
+    assert_true(not r.get("missing").__bool__(), "absent key is None")
+    # array index get
+    assert_equal(r.field("arr").get(1).value().get_uint(), UInt64(8))
+    assert_true(not r.field("arr").get(9).__bool__(), "out-of-range is None")
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
     test_len()
     test_iter_array()
     test_reiteration()
+    test_get_optional()
     print("test_pythonic_surface: all passed")
