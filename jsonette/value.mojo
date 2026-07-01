@@ -178,21 +178,44 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
             buf.append(self._sbuf(offset + 4 + i))
         return String(from_utf8=buf^)
 
-    def string_eq(self, expected: String) raises -> Bool:
-        """Compare this string's content to `expected` without allocating.
+    @always_inline("nodebug")
+    def _str_eq(self, expected: String) -> Bool:
+        """Non-raising byte-compare core: False if not a string or content differs.
 
-        Checks length then bytes directly against the document's string buffer, so
-        no `String` is materialised (unlike `get_string`). Raises if this value is
-        not a string.
-        """
-        if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
+        Compares directly against the tape's already-unescaped bytes with no String
+        materialisation. Shared by the total `__eq__` (returns False on a non-string)
+        and the strict `string_eq` (raises on a non-string receiver)."""
+        if self._tag() != TAG_STRING:
+            return False
         var offset = Int(self._payload())
         var str_len = self._strlen_at(offset)
         var eb = expected.as_bytes()
-        if str_len != len(eb): return False
+        if str_len != len(eb):
+            return False
         for i in range(str_len):
-            if self._sbuf(offset + 4 + i) != eb[i]: return False
+            if self._sbuf(offset + 4 + i) != eb[i]:
+                return False
         return True
+
+    def __eq__(self, other: String) -> Bool:
+        """True iff this value is a string whose content equals `other`.
+
+        Total and non-allocating: returns False for any non-string value (never
+        traps). The strict twin `string_eq` raises on a non-string receiver."""
+        return self._str_eq(other)
+
+    def __ne__(self, other: String) -> Bool:
+        """Negation of `__eq__` (total, non-allocating)."""
+        return not self._str_eq(other)
+
+    def string_eq(self, expected: String) raises -> Bool:
+        """Compare this string's content to `expected` without allocating.
+
+        Raises if this value is not a string; otherwise byte-compares against the
+        document's string buffer via the shared `_str_eq` core (no String
+        materialised). The total, non-raising twin is `__eq__`."""
+        if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
+        return self._str_eq(expected)
 
     def field(self, key: String) raises -> Value[Self.o]:
         """Object key lookup (O(n) scan). Raises if absent or not an object."""

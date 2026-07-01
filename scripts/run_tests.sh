@@ -20,6 +20,7 @@ TESTS=(
     tests/jsonette/stage2/test_float_differential.mojo
     tests/jsonette/test_parser.mojo
     tests/jsonette/test_value.mojo
+    tests/jsonette/test_pythonic_surface.mojo
     tests/jsonette/test_gen_token.mojo
     tests/jsonette/test_dom_differential.mojo
     tests/jsonette/test_leaf_parity.mojo
