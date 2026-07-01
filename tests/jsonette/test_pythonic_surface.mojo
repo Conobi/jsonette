@@ -1,4 +1,4 @@
-"""Pythonic surface: Value dunders + Document facade (Q1)."""
+"""Pythonic operator surface over the DOM: dunders, iteration sugar, get()."""
 from std.testing import assert_equal, assert_true
 from jsonette.document import parse
 
