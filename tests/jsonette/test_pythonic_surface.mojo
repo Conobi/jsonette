@@ -13,6 +13,17 @@ def test_eq_vs_string() raises:
     assert_true(r.field("n") != "5", "number != string is True")
 
 
+def test_contains() raises:
+    var doc = parse(String('{"a":1,"b":null,"nested":{"x":9}}'))
+    var r = doc.root()
+    assert_true("a" in r, "present key")
+    assert_true("b" in r, "present key with null value")
+    assert_true(not ("z" in r), "absent key")
+    # total: non-object receiver → False, never raises
+    assert_true(not ("a" in r.field("a")), "contains on a number is False")
+
+
 def main() raises:
     test_eq_vs_string()
+    test_contains()
     print("test_pythonic_surface: all passed")

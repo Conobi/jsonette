@@ -240,26 +240,47 @@ struct Value[o: Origin[mut=True]](Copyable, Movable):
             i = _skip_value(self._doc[], val_idx)
         raise "KEY_NOT_FOUND: '" + key + "'"
 
-    def has_field(self, key: String) raises -> Bool:
-        """True iff `key` exists (no raise on absence)."""
-        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object"
+    def _has_key(self, key: String) -> Bool:
+        """Non-raising key-scan core: False on a non-object or a clean absence.
+
+        Object keys in a pre-validated tape are always strings, so a non-string key
+        is a tape-corruption bug and is `debug_assert`-ed rather than raised. Shared
+        by the total `__contains__` (False on a non-object) and the strict `has_field`
+        (raises on a non-object receiver)."""
+        if self._tag() != TAG_OBJECT_OPEN:
+            return False
         var i = self._idx + 1
         var close_plus_one = Int(self._payload() & 0xFFFFFFFF)
+        var eb = key.as_bytes()
         while i < close_plus_one - 1:
-            var key_tag = UInt8(self._elem(i) >> 56)
-            if key_tag != TAG_STRING: raise "TAPE_ERROR: expected string key in object"
+            debug_assert(UInt8(self._elem(i) >> 56) == TAG_STRING, "object key must be a string")
             var offset = Int(self._elem(i) & 0x00FFFFFFFFFFFFFF)
             var key_len = self._strlen_at(offset)
-            var eb = key.as_bytes()
             var is_match = key_len == len(eb)
             if is_match:
                 for j in range(key_len):
                     if self._sbuf(offset + 4 + j) != eb[j]:
                         is_match = False
                         break
-            if is_match: return True
+            if is_match:
+                return True
             i = _skip_value(self._doc[], i + 1)
         return False
+
+    def __contains__(self, key: String) -> Bool:
+        """True iff this object contains `key` (total; False on a non-object).
+
+        Strict twin: `has_field(key) raises -> Bool` (raises on a non-object)."""
+        return self._has_key(key)
+
+    def has_field(self, key: String) raises -> Bool:
+        """True iff `key` exists (raises on a non-object receiver).
+
+        Strict twin of the total `in` operator (`__contains__`); shares the
+        `_has_key` scan. Raises only on a non-object receiver — a clean absence
+        returns False."""
+        if self._tag() != TAG_OBJECT_OPEN: raise "TAPE_ERROR: expected object"
+        return self._has_key(key)
 
     def elem(self, idx: Int) raises -> Value[Self.o]:
         """Array element by index (O(n) skip). Raises if out of range or not an array."""
