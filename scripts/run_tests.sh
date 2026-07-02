@@ -123,6 +123,25 @@ else
     FAILED=$((FAILED + 1))
 fi
 
+# Stale-Value serialization negative gate: serializing a Value (String(v) via
+# write_to, or the free to_string(v)/to_json(v) overloads) after a reparse MUST
+# abort (exit non-zero) with the gen-token message under -D ASSERT=all. A clean
+# exit (no abort) fails the suite.
+STALE_STR_TEST=tests/jsonette/_stale_string_aborts.mojo
+echo -n "RUN  $STALE_STR_TEST (negative: must abort) ... "
+if mojo run -I . -D ASSERT=all "$STALE_STR_TEST" > /tmp/mojo_test_out.txt 2>&1; then
+    echo "FAIL (expected abort, exited 0)"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+elif grep -qi "stale" /tmp/mojo_test_out.txt; then
+    echo "PASS (aborted with gen message)"
+    PASSED=$((PASSED + 1))
+else
+    echo "FAIL (non-zero exit but no 'stale' message)"
+    cat /tmp/mojo_test_out.txt
+    FAILED=$((FAILED + 1))
+fi
+
 # Stale On-Demand-handle negative gate: iterating an On-Demand array while
 # reparsing MUST abort (exit non-zero) with the gen-token message under
 # -D ASSERT=all. A clean exit (no abort) fails the suite.

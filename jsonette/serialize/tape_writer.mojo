@@ -130,7 +130,11 @@ def to_string[o: Origin[mut=True]](v: Value[o], nonfinite_null: Bool = False) ra
     `nonfinite_null=True` substitutes `null` for a non-finite float node instead
     of raising (this powers the infallible `Value.write_to`); the default keeps
     the strict raise-on-non-finite contract of the whole-document encoders.
+
+    Honors the gen-token: traps a stale `v` (used after `reparse`) under
+    `-D ASSERT=all`, exactly like every other `Value` access.
     """
+    v._check()
     var w = JsonWriter(nonfinite_null=nonfinite_null)
     _ = _write_value(v._doc[], v._idx, w)
     return w^.finish()
@@ -140,7 +144,10 @@ def to_json[o: Origin[mut=True], pretty: Bool = False](v: Value[o]) raises -> St
     """Serialize the sub-tree rooted at `v`; `pretty=True` indents with two spaces.
 
     Strict like the whole-document overload: a non-finite float node raises.
+    Honors the gen-token: traps a stale `v` (used after `reparse`) under
+    `-D ASSERT=all`.
     """
+    v._check()
     comptime if pretty:
         var w = JsonWriter(String("  "))
         _ = _write_value(v._doc[], v._idx, w)
