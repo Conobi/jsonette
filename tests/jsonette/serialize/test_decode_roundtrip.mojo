@@ -1,9 +1,9 @@
-"""Round-trip `load[T](dumps(x))` (field-wise), edge cases, and the Optional-prefix
+"""Round-trip `decode[T](dumps(x))` (field-wise), edge cases, and the Optional-prefix
 self-test (guards the missing-key policy against a future stdlib rename)."""
 from std.testing import assert_equal, assert_true
 from std.reflection import reflect
 from std.collections import Optional, Dict
-from jsonette.serialize.reflect_loader import load, JsonDeserializable
+from jsonette.serialize.reflect_loader import decode, JsonDeserializable
 from jsonette.serialize import dumps, JsonSerializable
 
 
@@ -32,7 +32,7 @@ struct RAll(Copyable, Movable, Defaultable, JsonSerializable, JsonDeserializable
 def test_optional_prefix_selftest() raises:
     assert_true(
         reflect[Optional[Int64]].name().startswith("std.collections.optional.Optional["),
-        "Optional reflected-name prefix changed — load[T]'s missing-key policy must be updated",
+        "Optional reflected-name prefix changed — decode[T]'s missing-key policy must be updated",
     )
 
 
@@ -45,7 +45,7 @@ def test_roundtrip_fieldwise() raises:
     x.meta[String("k")] = Int64(5)
 
     var js = dumps(x)
-    var y = load[RAll](js)
+    var y = decode[RAll](js)
 
     assert_equal(y.name, x.name)
     assert_equal(y.count, x.count)
@@ -61,12 +61,12 @@ def test_roundtrip_fieldwise() raises:
 
 def test_unicode_escaped_key() raises:
     # An escaped key in JSON matches by its unescaped form ("label" == "label").
-    var w = load[RInner](String('{"x":1,"lab\\u0065l":"ok"}'))
+    var w = decode[RInner](String('{"x":1,"lab\\u0065l":"ok"}'))
     assert_equal(w.label, String("ok"))
 
 
 def test_duplicate_keys_first_wins() raises:
-    var f = load[RInner](String('{"x":1,"label":"first","label":"second"}'))
+    var f = decode[RInner](String('{"x":1,"label":"first","label":"second"}'))
     assert_equal(f.label, String("first"))
 
 
@@ -75,4 +75,4 @@ def main() raises:
     test_roundtrip_fieldwise()
     test_unicode_escaped_key()
     test_duplicate_keys_first_wins()
-    print("test_load_roundtrip: all passed")
+    print("test_decode_roundtrip: all passed")

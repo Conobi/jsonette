@@ -1,7 +1,7 @@
-"""Typed loader load[T]: leaf fields, strict missing-key policy, memory safety."""
+"""Typed loader decode[T]: leaf fields, strict missing-key policy, memory safety."""
 from std.testing import assert_equal, assert_true
 from std.collections import Optional, Dict
-from jsonette.serialize.reflect_loader import load, JsonDeserializable
+from jsonette.serialize.reflect_loader import decode, JsonDeserializable
 
 
 struct Flat(Copyable, Movable, Defaultable, JsonDeserializable):
@@ -14,7 +14,7 @@ struct Flat(Copyable, Movable, Defaultable, JsonDeserializable):
 
 
 def test_flat_leaves() raises:
-    var f = load[Flat](String('{"name":"jsonette","count":42,"ratio":1.5,"flag":true}'))
+    var f = decode[Flat](String('{"name":"jsonette","count":42,"ratio":1.5,"flag":true}'))
     assert_equal(f.name, String("jsonette"))
     assert_equal(f.count, Int64(42))
     assert_true(f.ratio > 1.49 and f.ratio < 1.51, "ratio")
@@ -24,7 +24,7 @@ def test_flat_leaves() raises:
 def test_missing_required_leaf_raises() raises:
     var raised = False
     try:
-        _ = load[Flat](String('{"name":"x","count":1,"ratio":1.0}'))
+        _ = decode[Flat](String('{"name":"x","count":1,"ratio":1.0}'))
     except:
         raised = True
     assert_true(raised, "absent required leaf must raise MISSING_FIELD")
@@ -33,7 +33,7 @@ def test_missing_required_leaf_raises() raises:
 def test_type_mismatch_raises() raises:
     var raised = False
     try:
-        _ = load[Flat](String('{"name":"x","count":"oops","ratio":1.0,"flag":true}'))
+        _ = decode[Flat](String('{"name":"x","count":"oops","ratio":1.0,"flag":true}'))
     except:
         raised = True
     assert_true(raised, "string into Int64 field must raise")
@@ -42,14 +42,14 @@ def test_type_mismatch_raises() raises:
 def test_int_out_of_range_raises() raises:
     var raised = False
     try:
-        _ = load[Flat](String('{"name":"x","count":9223372036854775808,"ratio":1.0,"flag":true}'))
+        _ = decode[Flat](String('{"name":"x","count":9223372036854775808,"ratio":1.0,"flag":true}'))
     except:
         raised = True
     assert_true(raised, "UInt64 above Int64.MAX into Int64 field must raise")
 
 
 def test_unknown_keys_ignored() raises:
-    var f = load[Flat](String('{"name":"x","count":1,"ratio":1.0,"flag":false,"EXTRA":[1,2,3]}'))
+    var f = decode[Flat](String('{"name":"x","count":1,"ratio":1.0,"flag":false,"EXTRA":[1,2,3]}'))
     assert_equal(f.name, String("x"))
     assert_equal(f.count, Int64(1))
 
@@ -57,7 +57,7 @@ def test_unknown_keys_ignored() raises:
 def test_midwalk_raise_is_memory_safe() raises:
     var raised = False
     try:
-        _ = load[Flat](String('{"name":"assigned-then-raise"}'))
+        _ = decode[Flat](String('{"name":"assigned-then-raise"}'))
     except:
         raised = True
     assert_true(raised, "mid-walk raise must be caught cleanly")
@@ -71,7 +71,7 @@ struct Narrow(Copyable, Movable, Defaultable, JsonDeserializable):
 
 
 def test_narrow_int_in_range() raises:
-    var n = load[Narrow](String('{"i8":-128,"u8":255}'))
+    var n = decode[Narrow](String('{"i8":-128,"u8":255}'))
     assert_equal(n.i8, Int8(-128))
     assert_equal(n.u8, UInt8(255))
 
@@ -80,19 +80,19 @@ def test_narrow_int_overflow_raises() raises:
     """A value outside a narrow field's range must RAISE, never silently wrap."""
     var r1 = False
     try:
-        _ = load[Narrow](String('{"i8":300,"u8":1}'))  # 300 would wrap to 44
+        _ = decode[Narrow](String('{"i8":300,"u8":1}'))  # 300 would wrap to 44
     except:
         r1 = True
     assert_true(r1, "300 into Int8 must raise, not wrap to 44")
     var r2 = False
     try:
-        _ = load[Narrow](String('{"i8":0,"u8":300}'))  # 300 would wrap to 44
+        _ = decode[Narrow](String('{"i8":0,"u8":300}'))  # 300 would wrap to 44
     except:
         r2 = True
     assert_true(r2, "300 into UInt8 must raise, not wrap")
     var r3 = False
     try:
-        _ = load[Narrow](String('{"i8":0,"u8":-1}'))  # negative into UInt8
+        _ = decode[Narrow](String('{"i8":0,"u8":-1}'))  # negative into UInt8
     except:
         r3 = True
     assert_true(r3, "-1 into UInt8 must raise")
@@ -113,7 +113,7 @@ struct HasNested(Copyable, Movable, Defaultable, JsonDeserializable):
 
 
 def test_nested_struct() raises:
-    var h = load[HasNested](String('{"id":5,"inner":{"x":7,"label":"hi"}}'))
+    var h = decode[HasNested](String('{"id":5,"inner":{"x":7,"label":"hi"}}'))
     assert_equal(h.id, Int64(5))
     assert_equal(h.inner.x, Int64(7))
     assert_equal(h.inner.label, String("hi"))
@@ -122,7 +122,7 @@ def test_nested_struct() raises:
 def test_nested_missing_inner_leaf_raises() raises:
     var raised = False
     try:
-        _ = load[HasNested](String('{"id":5,"inner":{"x":7}}'))  # inner.label missing
+        _ = decode[HasNested](String('{"id":5,"inner":{"x":7}}'))  # inner.label missing
     except:
         raised = True
     assert_true(raised, "missing leaf inside a nested struct must raise")
@@ -131,7 +131,7 @@ def test_nested_missing_inner_leaf_raises() raises:
 def test_absent_nested_struct_raises() raises:
     var raised = False
     try:
-        _ = load[HasNested](String('{"id":5}'))  # whole inner object missing
+        _ = decode[HasNested](String('{"id":5}'))  # whole inner object missing
     except:
         raised = True
     assert_true(raised, "absent required nested struct must raise MISSING_FIELD")
@@ -151,7 +151,7 @@ struct WithContainers(Copyable, Movable, Defaultable, JsonDeserializable):
 
 
 def test_containers() raises:
-    var w = load[WithContainers](String(
+    var w = decode[WithContainers](String(
         '{"tags":["a","b","c"],'
         '"scores":[{"x":1,"label":"one"},{"x":2,"label":"two"}],'
         '"opt_present":99,"nullable":null,"meta":{"k1":10,"k2":20}}'
@@ -167,7 +167,7 @@ def test_containers() raises:
 
 
 def test_empty_containers() raises:
-    var w = load[WithContainers](String('{"tags":[],"scores":[],"opt_present":1,"meta":{}}'))
+    var w = decode[WithContainers](String('{"tags":[],"scores":[],"opt_present":1,"meta":{}}'))
     assert_equal(len(w.tags), 0)
     assert_equal(len(w.scores), 0)
     assert_equal(len(w.meta), 0)
@@ -176,7 +176,7 @@ def test_empty_containers() raises:
 def test_absent_list_raises() raises:
     var raised = False
     try:
-        _ = load[WithContainers](String('{"scores":[],"opt_present":1,"meta":{}}'))  # tags missing
+        _ = decode[WithContainers](String('{"scores":[],"opt_present":1,"meta":{}}'))  # tags missing
     except:
         raised = True
     assert_true(raised, "absent required List must raise (wrap in Optional to tolerate)")
@@ -189,7 +189,7 @@ struct HasF32(Copyable, Movable, Defaultable, JsonDeserializable):
 
 
 def test_float32_in_range() raises:
-    var h = load[HasF32](String('{"f":1.5}'))
+    var h = decode[HasF32](String('{"f":1.5}'))
     assert_true(h.f > 1.49 and h.f < 1.51, "float32 in range")
 
 
@@ -197,7 +197,7 @@ def test_float32_overflow_raises() raises:
     """A finite JSON double that overflows Float32 must RAISE, not become +inf."""
     var raised = False
     try:
-        _ = load[HasF32](String('{"f":1e40}'))  # > Float32.MAX -> would be +inf
+        _ = decode[HasF32](String('{"f":1e40}'))  # > Float32.MAX -> would be +inf
     except:
         raised = True
     assert_true(raised, "1e40 into Float32 must raise, not silently become inf")
@@ -220,4 +220,4 @@ def main() raises:
     test_absent_list_raises()
     test_float32_in_range()
     test_float32_overflow_raises()
-    print("test_load: all passed")
+    print("test_decode: all passed")

@@ -1,7 +1,7 @@
 """Deserialize JSON straight into a user struct via compile-time reflection.
 
 The decode-side mirror of `reflect_writer.dumps[T]`. Reads through the DOM and
-builds each value by OUT-RETURN. Safety: `load[T]` requires `T: Defaultable`,
+builds each value by OUT-RETURN. Safety: `decode[T]` requires `T: Defaultable`,
 default-constructs T (every field valid), then reflectively ASSIGNS each field —
 no uninitialised memory exists, so a mid-decode raise unwinds over a valid struct.
 """
@@ -92,13 +92,13 @@ def _decode[T: _Base, o: Origin[mut=True]](val: Value[o], out s: T) raises:
         elif reflect[T].is_struct():
             s = _default_decode[downcast[T, _Struct]](val)
         else:
-            comptime assert False, "load[T]: unsupported field type '" + tn + "'"
+            comptime assert False, "decode[T]: unsupported field type '" + tn + "'"
 
 
 def _default_decode[T: _Struct, o: Origin[mut=True]](val: Value[o], out s: T) raises:
     """Default-construct T, then assign each field. Absent key -> raise MISSING_FIELD
     EXCEPT an Optional field (kept as default None). Optional detected by name prefix."""
-    comptime assert conforms_to(T, Defaultable), "load[T]: T must be Defaultable (add a no-arg __init__)"
+    comptime assert conforms_to(T, Defaultable), "decode[T]: T must be Defaultable (add a no-arg __init__)"
     s = type_of(s)()
     comptime r = reflect[T]
     comptime names = r.field_names()
@@ -116,7 +116,7 @@ def _default_decode[T: _Struct, o: Origin[mut=True]](val: Value[o], out s: T) ra
                 raise "MISSING_FIELD: '" + key + "'"
 
 
-def load[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
+def decode[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
     data: String, out s: T
 ) raises:
     """Parse JSON `data` and reflectively build a fresh `T`."""
@@ -124,12 +124,12 @@ def load[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable]
     s = T.from_json(doc.root())
 
 
-def load[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
+def decode[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
     data: Span[UInt8, _], out s: T
 ) raises:
     """Parse JSON `data` (raw bytes) and reflectively build a fresh `T`.
 
-    The byte-span overload of `load`; identical behaviour to the `String` overload
+    The byte-span overload of `decode`; identical behaviour to the `String` overload
     but avoids constructing a `String` from a caller-owned buffer.
     """
     var doc = parse(data)
