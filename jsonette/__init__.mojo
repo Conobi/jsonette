@@ -3,3 +3,4 @@ from jsonette.document import parse, Document
 from jsonette.value import Value
 from jsonette.serialize import to_string, to_json, dumps, JsonSerializable
 from jsonette.serialize import decode, JsonDeserializable
+from jsonette.serialize import JsonValue

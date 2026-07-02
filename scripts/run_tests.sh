@@ -43,6 +43,7 @@ TESTS=(
     tests/jsonette/serialize/test_float_lock.mojo
     tests/jsonette/serialize/test_adversarial.mojo
     tests/jsonette/serialize/test_reflect.mojo
+    tests/jsonette/serialize/test_json_value.mojo
     tests/jsonette/serialize/test_decode.mojo
     tests/jsonette/serialize/test_decode_roundtrip.mojo
     tests/jsonette/serialize/test_fuzz_roundtrip.mojo
