@@ -27,9 +27,10 @@ from std.collections import Optional
 from std.memory import bitcast
 from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
 from jsonette.document import Document
+from jsonette.serialize.tape_writer import to_string
 
 
-struct Value[o: Origin[mut=True]](Copyable, Movable, Sized):
+struct Value[o: Origin[mut=True]](Copyable, Movable, Sized, Writable):
     """A self-bound zero-copy view into a Document's tape (no doc-threading)."""
 
     var _doc: Pointer[Document, Self.o]
@@ -441,6 +442,20 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized):
         if self.is_bool():
             return Optional(self.get_bool())
         return None
+
+    def write_to[W: Writer](self, mut writer: W):
+        """Write this value's JSON sub-tree into `writer` (infallible; non-finite -> null).
+
+        Backs `print(value)` and `String(value)`, so it must not fail: it serialises
+        with `nonfinite_null=True`, so only a non-finite float node degrades to `null`
+        while the rest emits correctly, and any residual error falls back to `null`.
+        The strict path that surfaces the non-finite error is the free
+        `to_string(value)` / `to_json(value)`.
+        """
+        try:
+            writer.write(to_string(self, nonfinite_null=True))
+        except:
+            writer.write(String("null"))
 
 
 struct _Entry[o: Origin[mut=True]](Copyable, Movable):

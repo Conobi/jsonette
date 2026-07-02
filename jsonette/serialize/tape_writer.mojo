@@ -8,6 +8,7 @@ external callers invoke `to_string`/`to_json` by inference, never naming the typ
 """
 from std.memory import bitcast
 from jsonette.document import Document
+from jsonette.value import Value
 from jsonette.tape import (
     TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64,
     TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL,
@@ -118,4 +119,33 @@ def to_json[o: Origin[mut=True], pretty: Bool = False](ref [o] doc: Document) ra
     else:
         var w = JsonWriter()
         _ = _write_value(doc, 1, w)
+        return w^.finish()
+
+
+def to_string[o: Origin[mut=True]](v: Value[o], nonfinite_null: Bool = False) raises -> String:
+    """Serialize the sub-tree rooted at `v` to compact JSON text.
+
+    Mirrors the whole-document `to_string`, but walks from the value's own tape
+    index instead of the root, so only that node (and its descendants) is emitted.
+    `nonfinite_null=True` substitutes `null` for a non-finite float node instead
+    of raising (this powers the infallible `Value.write_to`); the default keeps
+    the strict raise-on-non-finite contract of the whole-document encoders.
+    """
+    var w = JsonWriter(nonfinite_null=nonfinite_null)
+    _ = _write_value(v._doc[], v._idx, w)
+    return w^.finish()
+
+
+def to_json[o: Origin[mut=True], pretty: Bool = False](v: Value[o]) raises -> String:
+    """Serialize the sub-tree rooted at `v`; `pretty=True` indents with two spaces.
+
+    Strict like the whole-document overload: a non-finite float node raises.
+    """
+    comptime if pretty:
+        var w = JsonWriter(String("  "))
+        _ = _write_value(v._doc[], v._idx, w)
+        return w^.finish()
+    else:
+        var w = JsonWriter()
+        _ = _write_value(v._doc[], v._idx, w)
         return w^.finish()

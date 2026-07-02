@@ -1,6 +1,7 @@
 """Pythonic operator surface over the DOM: dunders, iteration sugar, get()."""
 from std.testing import assert_equal, assert_true
 from jsonette.document import parse
+from jsonette.serialize.tape_writer import to_string, to_json
 
 
 def test_eq_vs_string() raises:
@@ -133,6 +134,45 @@ def test_document_facade_leaves() raises:
     assert_true(f.as_string().__bool__() == False, "as_string on number is None")
 
 
+def test_value_serialization_subtree() raises:
+    """String(value) and to_string(value) serialize only the sub-tree, not the doc."""
+    var doc = parse(String('{"user":{"name":"Ada","age":36},"tags":["x","y"]}'))
+    # String(value) routes through the Writable conformance (write_to).
+    assert_equal(String(doc.root().field("user")), String('{"name":"Ada","age":36}'))
+    # Free to_string(value) overload on an array sub-tree (not the whole document).
+    assert_equal(to_string(doc.root().field("tags")), String('["x","y"]'))
+
+
+def test_to_json_pretty_subtree() raises:
+    """Pretty-printing a value sub-tree indents it with two spaces."""
+    var doc = parse(String('{"user":{"name":"Ada","age":36}}'))
+    var pretty = to_json[pretty=True](doc.root().field("user"))
+    assert_equal(pretty, String('{\n  "name": "Ada",\n  "age": 36\n}'))
+
+
+def test_value_scalar_serialization() raises:
+    """String(value) on scalar/null leaves yields their bare JSON tokens."""
+    var doc = parse(String('{"s":"hello","n":42,"z":null}'))
+    var r = doc.root()
+    assert_equal(String(r.field("s")), String('"hello"'))
+    assert_equal(String(r.field("n")), String("42"))
+    assert_equal(String(r.field("z")), String("null"))
+
+
+def test_value_nonfinite_serialization() raises:
+    """Strict to_string(value) raises on a non-finite node; String(value) is
+    infallible and substitutes null only for the offending node."""
+    var doc = parse(String('{"x":1e999}'))
+    var raised = False
+    try:
+        _ = to_string(doc.root())
+    except:
+        raised = True
+    assert_true(raised, "strict to_string(value) must raise on a non-finite node")
+    # Infallible write_to path: only the non-finite node becomes null, rest intact.
+    assert_equal(String(doc.root()), String('{"x":null}'))
+
+
 def main() raises:
     test_eq_vs_string()
     test_contains()
@@ -143,4 +183,8 @@ def main() raises:
     test_items_keys()
     test_document_facade_nav()
     test_document_facade_leaves()
+    test_value_serialization_subtree()
+    test_to_json_pretty_subtree()
+    test_value_scalar_serialization()
+    test_value_nonfinite_serialization()
     print("test_pythonic_surface: all passed")

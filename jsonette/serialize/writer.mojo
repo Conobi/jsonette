@@ -21,12 +21,20 @@ struct JsonWriter:
     var buf: List[UInt8]
     var indent_unit: String
     var depth: Int
+    var nonfinite_null: Bool
 
-    def __init__(out self, indent_unit: String = String("")):
-        """Create an empty writer. Non-empty `indent_unit` enables pretty mode."""
+    def __init__(out self, indent_unit: String = String(""), nonfinite_null: Bool = False):
+        """Create an empty writer. Non-empty `indent_unit` enables pretty mode.
+
+        `nonfinite_null=True` makes `write_float` emit `null` for a non-finite
+        float instead of raising, so an infallible per-node write can substitute
+        `null` for the single offending value. The default (False) keeps the
+        strict raise-on-non-finite contract of the whole-document encoders.
+        """
         self.buf = List[UInt8]()
         self.indent_unit = indent_unit
         self.depth = 0
+        self.nonfinite_null = nonfinite_null
 
     @always_inline("nodebug")
     def is_pretty(self) -> Bool:
@@ -100,8 +108,15 @@ struct JsonWriter:
         and the parser accepts). Round-tripping such a document therefore raises
         by design — emitting `null` or a bogus token instead would be silent
         data loss or invalid output.
+
+        The one exception is a writer built with `nonfinite_null=True`, which
+        emits `null` for the non-finite value instead of raising — used by the
+        infallible per-node `Value.write_to` so `print(value)` cannot fail.
         """
         if not isfinite(v):
+            if self.nonfinite_null:
+                self.raw(String("null"))
+                return
             raise "JSON_ENCODE_ERROR: non-finite float (NaN/Infinity) has no JSON representation"
         self.raw(String(v))
 
