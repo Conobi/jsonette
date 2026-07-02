@@ -8,7 +8,7 @@ auto-vivifying getter, pretty output parity with the encoder, the numeric
 signed/unsigned/float distinction, and the recursion depth guard.
 """
 from std.testing import assert_equal, assert_true
-from jsonette import JsonValue, dumps
+from jsonette import JsonValue, dumps, loads, parse
 
 
 def test_nested_compact() raises:
@@ -123,6 +123,61 @@ def test_depth_limit_raises() raises:
     assert_true(raised)
 
 
+def test_loads_any_root() raises:
+    """`loads` materializes any JSON root — scalar, array, or object — into an
+    owned tree that re-serializes to the same compact token(s)."""
+    assert_equal(dumps(loads(String("42"))), String("42"))
+    assert_equal(dumps(loads(String('"hi"'))), String('"hi"'))
+    assert_equal(dumps(loads(String("true"))), String("true"))
+    assert_equal(dumps(loads(String("null"))), String("null"))
+    assert_equal(dumps(loads(String("1.5"))), String("1.5"))
+    assert_equal(dumps(loads(String("[1,2,3]"))), String("[1,2,3]"))
+    assert_equal(dumps(loads(String('{"a":1}'))), String('{"a":1}'))
+
+
+def test_loads_roundtrip_nested() raises:
+    """A nested compact document (nested array + nested object, already in
+    insertion order) round-trips byte-for-byte through `loads` then `dumps`."""
+    var s = String(
+        '{"name":"jsonette","nums":[1,2,3],"meta":{"x":true,"y":null}}'
+    )
+    assert_equal(dumps(loads(s)), s)
+
+
+def test_loads_numeric_preserved() raises:
+    """`loads` preserves the signed/unsigned/float distinction: a magnitude above
+    Int64.MAX stays unsigned, a negative stays signed, a whole-valued float stays
+    a float."""
+    assert_equal(
+        dumps(loads(String("18446744073709551615"))),
+        String("18446744073709551615"),
+    )
+    assert_equal(dumps(loads(String("-9"))), String("-9"))
+    # A whole-valued float keeps its decimal point (stays a float, not an int).
+    assert_equal(dumps(loads(String("2.0"))), String("2.0"))
+
+
+def test_from_value_bridge() raises:
+    """`JsonValue.from_value` deep-copies a borrowing DOM sub-tree into an owned
+    tree that serializes to that sub-tree's JSON."""
+    var doc = parse(String('{"k":[1,2,{"z":true}]}'))
+    var jv = JsonValue.from_value(doc.root().field("k"))
+    assert_equal(dumps(jv), String('[1,2,{"z":true}]'))
+
+
+def test_loads_nonfinite_edge() raises:
+    """`loads` of `1e999` SUCCEEDS (materializes +inf, mirroring the DOM's
+    parse-accepts contract), but `dumps` of it RAISES (non-finite has no JSON
+    form, mirroring the encoder's refuse contract)."""
+    var jv = loads(String('{"x":1e999}'))  # parse accepts -> +inf materialized
+    var raised = False
+    try:
+        _ = dumps(jv)
+    except:
+        raised = True
+    assert_true(raised)
+
+
 def main() raises:
     test_nested_compact()
     test_pretty()
@@ -133,4 +188,9 @@ def main() raises:
     test_setitem_overwrite()
     test_empty_containers()
     test_depth_limit_raises()
+    test_loads_any_root()
+    test_loads_roundtrip_nested()
+    test_loads_numeric_preserved()
+    test_from_value_bridge()
+    test_loads_nonfinite_edge()
     print("test_json_value: all passed")

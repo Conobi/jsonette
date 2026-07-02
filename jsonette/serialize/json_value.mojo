@@ -22,6 +22,8 @@ move-only in its own builders: they take `var` parameters and transfer with `^`.
 """
 from jsonette.serialize.writer import JsonWriter
 from jsonette.serialize.reflect_writer import JsonSerializable
+from jsonette.value import Value
+from jsonette.document import parse
 
 # Recursion depth cap for serialization, matching the parser's tape builder. A
 # hand-built tree is not bounded by the parser, so `write_json` guards its native
@@ -139,6 +141,39 @@ struct JsonValue(JsonSerializable, Copyable, Movable):
         v.tag = _TAG_OBJECT
         return v^
 
+    @staticmethod
+    def from_value[o: Origin[mut=True]](v: Value[o]) raises -> JsonValue:
+        """Deep-copy a borrowing DOM `Value` into an owned, origin-free `JsonValue`.
+
+        Recursively materializes each parsed node using only `Value`'s public
+        accessors (never the tape internals), preserving the signed / unsigned /
+        float numeric distinction (three separate integer/float branches).
+        Recursion is naturally bounded by the parser's MAX_DEPTH — the tape cannot
+        nest deeper than what `parse` accepted — so no extra depth guard is needed
+        here.
+        """
+        if v.is_object():
+            var obj = JsonValue.object()
+            for k, val in v.items():
+                obj[k] = JsonValue.from_value(val)
+            return obj^
+        if v.is_array():
+            var arr = JsonValue.array()
+            for e in v:  # Value.__iter__ yields array elements
+                arr.append(JsonValue.from_value(e))
+            return arr^
+        if v.is_string():
+            return JsonValue(v.get_string())
+        if v.is_int():
+            return JsonValue(v.get_int())  # signed
+        if v.is_uint():
+            return JsonValue(v.get_uint())  # unsigned (preserves > Int64.MAX)
+        if v.is_float():
+            return JsonValue(v.get_float())
+        if v.is_bool():
+            return JsonValue(v.get_bool())
+        return JsonValue()  # null
+
     def append(mut self, var v: JsonValue):
         """Append `v` as the next array element (making `self` an array)."""
         self.tag = _TAG_ARRAY
@@ -233,3 +268,18 @@ struct JsonValue(JsonSerializable, Copyable, Movable):
             w.raw("}")
         else:
             raise "JSON_ENCODE_ERROR: unknown JsonValue tag"
+
+
+def loads(data: String) raises -> JsonValue:
+    """Parse JSON text into an OWNED `JsonValue` tree (Python-faithful: the result
+    owns its data and carries no origin, so it can be stored/returned freely).
+    This is the allocating, own-everything path; for zero-copy navigation use
+    `parse` -> `Document`, and for a typed struct use `decode[T]`."""
+    var doc = parse(data)
+    return JsonValue.from_value(doc.root())
+
+
+def loads(data: Span[UInt8, _]) raises -> JsonValue:
+    """Byte-span overload of `loads`."""
+    var doc = parse(data)
+    return JsonValue.from_value(doc.root())
