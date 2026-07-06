@@ -9,7 +9,7 @@ receivers, prefix collisions, embedded NUL / control / multibyte bytes,
 duplicate keys, non-finite nodes, the encoder depth cap, and scalar-overwrite
 auto-vivification.
 """
-from std.testing import assert_equal, assert_true
+from std.testing import assert_equal, assert_raises, assert_true
 from jsonette.document import parse
 from jsonette.serialize.tape_writer import to_string, to_json
 from jsonette.serialize.json_value import JsonValue, loads
@@ -179,20 +179,14 @@ def test_keys_items_edges() raises:
     assert_equal(len(dk), 2)
     assert_true(dk[0] == "a" and dk[1] == "a", "both duplicate keys returned")
 
-    # keys()/items() raise on a non-object receiver.
+    # keys()/items() raise on a non-object receiver, with the specific
+    # object-type guard message (not merely *some* exception, which would still
+    # pass if the guard were removed and a different fault raised downstream).
     var ad = parse(String("[1,2]"))
-    var raised_keys = False
-    try:
+    with assert_raises(contains="expected object for keys"):
         _ = ad.root().keys()
-    except:
-        raised_keys = True
-    assert_true(raised_keys, "keys() on an array must raise")
-    var raised_items = False
-    try:
+    with assert_raises(contains="expected object for items"):
         _ = ad.root().items()
-    except:
-        raised_items = True
-    assert_true(raised_items, "items() on an array must raise")
 
 
 def test_get_null_vs_absent() raises:
@@ -211,19 +205,13 @@ def test_get_null_vs_absent() raises:
     assert_true(not arr.get(5).__bool__(), "out-of-range index is None")
     assert_true(not arr.get(2).__bool__(), "one-past-end index is None")
 
-    # get(key) on a non-object raises (via has_field); get(idx) on a non-array raises.
-    var raised_gk = False
-    try:
+    # get(key) on a non-object raises the object-type guard (via has_field);
+    # get(idx) on a non-array raises the array-index guard. Match each specific
+    # message so a regression that faults on a different path is not accepted.
+    with assert_raises(contains="expected object"):
         _ = arr.get("k")  # array.get(key) -> non-object receiver
-    except:
-        raised_gk = True
-    assert_true(raised_gk, "get(key) on an array must raise")
-    var raised_gi = False
-    try:
+    with assert_raises(contains="expected array for index access"):
         _ = r.get(0)  # object.get(idx) -> non-array receiver
-    except:
-        raised_gi = True
-    assert_true(raised_gi, "get(idx) on an object must raise")
 
 
 def test_writable_escaping() raises:
@@ -264,31 +252,19 @@ def test_writable_nonfinite() raises:
     # Nested object: {"a":{"b":1e999}}.
     var nd = parse(String('{"a":{"b":1e999}}'))
     var nr = nd.root()
-    var raised = False
-    try:
+    with assert_raises(contains="non-finite float"):
         _ = to_string(nr)
-    except:
-        raised = True
-    assert_true(raised, "strict to_string must raise on a non-finite node")
     assert_equal(String(nr), String('{"a":{"b":null}}'))
-    # Strict pretty overload also raises.
-    var raised_p = False
-    try:
+    # Strict pretty overload also raises with the same non-finite diagnostic.
+    with assert_raises(contains="non-finite float"):
         _ = to_json[pretty=True](nr)
-    except:
-        raised_p = True
-    assert_true(raised_p, "strict pretty to_json must raise on a non-finite node")
 
     # Array: [1e999] -> String -> [null]; strict raises.
     var ad = parse(String("[1e999]"))
     var ar = ad.root()
     assert_equal(String(ar), String("[null]"))
-    var raised_a = False
-    try:
+    with assert_raises(contains="non-finite float"):
         _ = to_string(ar)
-    except:
-        raised_a = True
-    assert_true(raised_a, "strict to_string must raise on an array with a non-finite element")
 
 
 def test_jsonvalue_autovivify_overwrite() raises:
@@ -315,12 +291,8 @@ def test_jsonvalue_empty_and_nonfinite() raises:
     assert_equal(dumps(JsonValue.object()), String("{}"))
     assert_equal(dumps(JsonValue.array()), String("[]"))
     # dumps of a non-finite scalar raises (1e999 -> +inf).
-    var raised = False
-    try:
+    with assert_raises(contains="non-finite float"):
         _ = dumps(JsonValue(1e999))
-    except:
-        raised = True
-    assert_true(raised, "dumps of a non-finite JsonValue must raise")
 
 
 def test_jsonvalue_depth_boundary() raises:
@@ -332,25 +304,18 @@ def test_jsonvalue_depth_boundary() raises:
         var w = JsonValue.object()
         w["x"] = ok^
         ok = w^
-    var ok_raised = False
-    try:
-        _ = dumps(ok)
-    except:
-        ok_raised = True
-    assert_true(not ok_raised, "a tree at the depth cap must dump without raising")
+    # A tree exactly at the depth cap must dump without raising: a stray
+    # exception here propagates out of this `raises` test and fails it.
+    _ = dumps(ok)
 
-    # 1025 wrappers: one level past the cap -> raises, no crash.
+    # 1025 wrappers: one level past the cap -> raises the depth-cap guard, no crash.
     var deep = JsonValue(1)
     for _i in range(1025):
         var w = JsonValue.object()
         w["x"] = deep^
         deep = w^
-    var raised = False
-    try:
+    with assert_raises(contains="max nesting depth exceeded"):
         _ = dumps(deep)
-    except:
-        raised = True
-    assert_true(raised, "a tree past the depth cap must raise")
 
 
 def test_loads_from_value_fidelity() raises:
@@ -363,15 +328,16 @@ def test_loads_from_value_fidelity() raises:
     assert_equal(dumps(loads(String('"\\u00e9"'))), String('"') + chr(233) + String('"'))
 
     # Numeric kinds: uint above Int64.MAX stays unsigned; negative stays signed;
-    # 0 and -0.0 round-trip and re-dump idempotently.
+    # 0 stays 0, and -0.0 PRESERVES its sign. Python and simdjson both keep
+    # "-0.0"; assert the literal round-trip so a sign-dropping regression (which
+    # a self-referential idempotency check structurally cannot catch) fails here.
     assert_equal(
         dumps(loads(String("18446744073709551615"))),
         String("18446744073709551615"),
     )
     assert_equal(dumps(loads(String("-9"))), String("-9"))
     assert_equal(dumps(loads(String("0"))), String("0"))
-    var z = dumps(loads(String("-0.0")))
-    assert_equal(dumps(loads(z)), z)  # idempotent
+    assert_equal(dumps(loads(String("-0.0"))), String("-0.0"))
 
     # Empty nested containers round-trip.
     assert_equal(dumps(loads(String('{"a":[],"b":{}}'))), String('{"a":[],"b":{}}'))
@@ -392,12 +358,8 @@ def test_loads_from_value_fidelity() raises:
 
     # loads of 1e999 SUCCEEDS (materializes +inf), but dumps then RAISES.
     var inf = loads(String("1e999"))
-    var raised = False
-    try:
+    with assert_raises(contains="non-finite float"):
         _ = dumps(inf)
-    except:
-        raised = True
-    assert_true(raised, "dumps of a materialized non-finite must raise")
 
 
 def test_reparse_reroot_serializes_fresh() raises:
@@ -418,6 +380,7 @@ def _ser_field(src: String) raises -> String:
 
 
 def main() raises:
+    """Run every adversarial edge-case test in declaration order."""
     test_eq_string_fidelity()
     test_eq_control_multibyte_nul()
     test_totality_contains()
