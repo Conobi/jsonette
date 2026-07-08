@@ -1,0 +1,4 @@
+# Vendored third-party code (simdjson amalgamation for the reference
+# benchmark) — excluded from GitHub language stats and collapsed in diffs.
+scripts/cpp_bench/simdjson.cpp linguist-vendored
+scripts/cpp_bench/simdjson.h linguist-vendored
