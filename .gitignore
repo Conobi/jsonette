@@ -6,6 +6,15 @@ tests/fixtures/test_vectors/
 # Compiled C++ benchmark executable (rebuild with scripts/cpp_bench/build.sh)
 scripts/cpp_bench/bench
 
+# kostya benchmark: Rust build cache + compiled binaries (rebuild via
+# scripts/kostya_bench/build.sh, which falls back to nix shell on NixOS).
+scripts/kostya_bench/rust/target/
+scripts/kostya_bench/kostya_dom
+scripts/kostya_bench/kostya_ondemand
+scripts/kostya_bench/kostya_serde_untyped
+scripts/kostya_bench/kostya_serde_typed
+scripts/kostya_bench/kostya_serde_custom
+
 # Local-only working documents and scratch (never pushed)
 specs/
 plans/

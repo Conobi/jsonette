@@ -79,8 +79,14 @@ for the hardening details.
 
 ## Benchmarks
 
-Full-parse throughput on a single pinned Xeon 8260 core (idle, gate-checked) — MB/s,
-higher is better:
+Two shapes: **warm-parser throughput** (REST-server workload — one parser reused across
+many documents) and **cold parse + walk** (a fresh parser per document; kostya's
+cross-language JSON benchmark). Both run on the same pinned Xeon 8260 core, host-load
+audit passed. Full methodology in [`docs/benchmarks.md`](docs/benchmarks.md).
+
+### Warm-parser throughput
+
+Full-parse throughput — MB/s, higher is better:
 
 | document | jsonette | simdjson (C++) | serde_json (Rust) | ehsanmok/json (Mojo) |
 |---|--:|--:|--:|--:|
@@ -93,6 +99,29 @@ jsonette beats serde_json and the sibling Mojo parser
 ahead — a conservative gap, since it reuses its DOM buffer where jsonette re-copies the
 input per parse. Reproduce with the harnesses under [`bench/`](bench/). *(ehsanmok v0.2.1,
 measured in the head-to-head harness; citm_catalog not run there.)*
+
+### Cold parse + walk ([kostya's JSON benchmark](https://github.com/kostya/benchmarks))
+
+Parse a 110 MiB file of 524,288 `{x, y, z, name, opts}` objects, iterate `coordinates`,
+sum x/y/z. Fresh parser per iteration (matching the reference implementations), 3 warmup +
+10 measured, min-of-N. `perf_event_open` in every language, `VmHWM` for the memory
+column. All seven contenders produce the same coordinate to bit precision.
+
+| contender | ms | MB/s | cyc/B | ins/B | mem Δ MiB |
+|---|--:|--:|--:|--:|--:|
+| C++/simdjson On-Demand | 152 | 757 | 2.83 | 7.34 | 60 |
+| Rust/serde Custom (visitor) | 217 | 529 | 5.84 | 17.55 | **0.1** |
+| Rust/serde Typed (derive) | 223 | 516 | 5.96 | 17.57 | 12 |
+| **jsonette On-Demand** | 262 | 439 | 6.73 | 18.06 | 75 |
+| C++/simdjson DOM | 290 | 397 | 3.91 | 8.96 | 177 |
+| **jsonette DOM** | 340 | 339 | 8.69 | 23.99 | 194 |
+| Rust/serde Untyped (`Value`) | 1,083 | 106 | 28.41 | 48.97 | 840 |
+
+jsonette On-Demand lands faster than C++/simdjson DOM at ~24 % more memory per parse;
+jsonette DOM sits in the same tier as C++/simdjson DOM at ~10 % more memory. The
+Rust/serde Custom streaming visitor is the memory champion at 0.1 MiB delta. Reproduce
+with `bash scripts/kostya_bench/run.sh` (falls back to `nix shell nixpkgs#gcc nixpkgs#cargo
+nixpkgs#rustc` on NixOS hosts).
 
 ## License
 
