@@ -77,7 +77,7 @@ scripts/
 ├── gen_conformance_tests.py         # Generate conformance tests from vectors
 ├── gen_pow5_table.py                # Generate stage2/pow5_table.mojo
 ├── cpp_bench/                       # C++ simdjson reference benchmark
-└── rust_bench/                      # Rust reference benchmark
+└── kostya_bench/                    # Kostya JSON benchmark (Rust serde reference + Mojo pair)
 ```
 
 ## Design Principles

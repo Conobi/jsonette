@@ -4,7 +4,7 @@ Combines containers (objects/arrays), literals (true/false/null), strings, and
 numbers into a flat tape format with root envelope.
 """
 
-from jsonette.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
+from jsonette.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_TRUE, TAG_FALSE, TAG_NULL
 from jsonette.error import ParseError, ErrorCode
 from jsonette._alloc_count import record_alloc
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok

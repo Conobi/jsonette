@@ -19,7 +19,7 @@ allocates nothing.
 from std.bit import count_trailing_zeros, pop_count
 
 from jsonette.stage1.simd_ops import SimdInput
-from jsonette.stage1.classifier import classify, CharacterBlock
+from jsonette.stage1.classifier import classify
 from jsonette.stage1.string_mask import EscapeScanner, StringScanner
 from jsonette._alloc_count import record_alloc
 

@@ -1,5 +1,7 @@
 *.mojopkg
 *.mojoc
+dist/
+.ruff_cache/
 tests/fixtures/corpus/
 tests/fixtures/test_vectors/
 

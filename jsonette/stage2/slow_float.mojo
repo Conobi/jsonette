@@ -13,9 +13,6 @@ rounding. Only bounded fixed-size integer arithmetic is needed; no
 arbitrary-precision rationals.
 """
 
-from std.memory import bitcast
-
-
 comptime MAX_DIGITS: Int = 800
 """Big-endian digit array capacity (matches Go strconv.decimal).
 
