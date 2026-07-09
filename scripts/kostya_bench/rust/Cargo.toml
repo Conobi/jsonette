@@ -1,0 +1,38 @@
+[package]
+name = "kostya-rust"
+version = "0.1.0"
+edition = "2021"
+
+# Kostya JSON benchmark — Rust/serde variants.
+# Mirrors github.com/kostya/benchmarks/tree/master/json/json.rs verbatim
+# except the libnotify TCP wrapper is replaced by std::time::Instant so we
+# time the region ourselves (WARMUP + min-over-iterations, matched to the
+# jsonette and C++/simdjson runners in this directory).
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+# Wraps perf_event_open on Linux so the Rust variants can report cyc/B and
+# ins/B directly comparable to the Mojo PerfGroup and the C++ kostya_perf.h.
+# Linux-only; the shared timing scaffolding gates it behind cfg(target_os).
+[target.'cfg(target_os = "linux")'.dependencies]
+perf-event = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[[bin]]
+name = "kostya_serde_untyped"
+path = "src/serde_untyped.rs"
+
+[[bin]]
+name = "kostya_serde_typed"
+path = "src/serde_typed.rs"
+
+[[bin]]
+name = "kostya_serde_custom"
+path = "src/serde_custom.rs"
