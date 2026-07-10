@@ -9,6 +9,7 @@ TESTS=(
     tests/jsonette/stage1/test_classifier.mojo
     tests/jsonette/stage1/test_string_mask.mojo
     tests/jsonette/stage1/test_indexer.mojo
+    tests/jsonette/stage1/test_utf8.mojo
     tests/jsonette/test_tape.mojo
     tests/jsonette/stage2/test_numbers.mojo
     tests/jsonette/stage2/test_swar_digits.mojo
