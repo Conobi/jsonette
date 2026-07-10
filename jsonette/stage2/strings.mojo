@@ -108,6 +108,71 @@ def _parse_unicode_escape_ptr(
     return (new_pos, new_write_pos)
 
 
+# --- Exact-span fast path ---
+
+
+def parse_string_span(
+    input_ptr: UnsafePointer[UInt8, _],
+    pos: Int,
+    close_pos: Int,
+    input_len: Int,
+    string_buf_ptr: UnsafePointer[mut=True, UInt8, _],
+    buf_start: Int,
+) raises ParseError -> Int:
+    """Parse the string opening at `pos` whose closing quote position is already
+    known from the structural index (Stage 1 emits both quotes, so `close_pos`
+    is the next structural). Copies the exact span with unconditional 32-byte
+    stores while scanning for backslash/control bytes; any hit, or an
+    out-of-range `close_pos` (unterminated string), delegates to `parse_string`
+    for exact escape and error semantics. Returns bytes written to the buffer
+    ([u32 len][content][NUL] layout, like `parse_string`'s second result).
+
+    PRECONDITIONS: >= 32 readable bytes past `close_pos` (parser NUL padding)
+    and >= `close_pos - pos + 36` writable bytes at `buf_start` (Tape slack).
+    """
+    if close_pos >= input_len or input_ptr[close_pos] != UInt8(0x22):
+        var r = parse_string(input_ptr, pos, input_len, string_buf_ptr, buf_start)
+        return r[1]
+
+    var content_len = close_pos - pos - 1
+    var src = input_ptr + pos + 1
+    var dst = string_buf_ptr + buf_start + 4
+    var bs_splat = SIMD[DType.uint8, 32](UInt8(0x5C))
+    var ctrl_splat = SIMD[DType.uint8, 32](UInt8(0x1F))
+
+    # Full 32-byte chunks are entirely content: no lane masking needed.
+    var special = UInt32(0)
+    var i = 0
+    var full_end = content_len & ~31
+    while i < full_end:
+        var chunk = (src + i).load[width=32]()
+        (dst + i).store(chunk)
+        special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
+        i += 32
+    var rem = content_len - i
+    if rem > 0:
+        # Tail chunk: mask off lanes past the content (the closing quote and
+        # whatever follows it must not trip the control-byte check).
+        var chunk = (src + i).load[width=32]()
+        (dst + i).store(chunk)
+        var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
+        special |= m & ((UInt32(1) << UInt32(rem)) - 1)
+
+    if special != 0:
+        # Escape or control byte in the span: the general parser unescapes and
+        # raises with exact positions.
+        var r = parse_string(input_ptr, pos, input_len, string_buf_ptr, buf_start)
+        return r[1]
+
+    dst[content_len] = UInt8(0)
+    var str_len = UInt32(content_len)
+    string_buf_ptr[buf_start] = UInt8(str_len & 0xFF)
+    string_buf_ptr[buf_start + 1] = UInt8((str_len >> 8) & 0xFF)
+    string_buf_ptr[buf_start + 2] = UInt8((str_len >> 16) & 0xFF)
+    string_buf_ptr[buf_start + 3] = UInt8((str_len >> 24) & 0xFF)
+    return buf_start + 4 + content_len + 1
+
+
 # --- Main string parser ---
 
 

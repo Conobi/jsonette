@@ -8,7 +8,7 @@ from jsonette.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_
 from jsonette.error import ParseError, ErrorCode
 from jsonette._alloc_count import record_alloc
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
-from jsonette.stage2.strings import parse_string
+from jsonette.stage2.strings import parse_string_span
 from std.sys.intrinsics import unlikely
 
 comptime MAX_DEPTH: Int = 1024
@@ -130,15 +130,15 @@ def build_tape(
 
             if byte == TAG_STRING:  # '"'
                 var buf_offset = UInt64(sbuf_pos)
-                var result = parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
-                var consumed = result[0]
-                sbuf_pos += result[1]
+                # The closing quote is the next structural (Stage 1 emits both
+                # quotes; in-string bytes emit nothing). si+1 is always readable
+                # thanks to the sentinel; an unterminated string yields a
+                # close_pos past input_len, which the span parser rejects.
+                var close_pos = Int(si_ptr[si + 1])
+                sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
                 tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
-                si += 1
-                var string_end = pos + consumed - 1
-                while Int(si_ptr[si]) <= string_end:
-                    si += 1
+                si += 2
                 state = after_scalar
             elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):  # number
                 var result = _parse_number(input_ptr + pos, input_len - pos)
@@ -206,15 +206,11 @@ def build_tape(
             # permits a closing '}' (empty object).
             if byte == TAG_STRING:  # '"' key
                 var buf_offset = UInt64(sbuf_pos)
-                var result = parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
-                var consumed = result[0]
-                sbuf_pos += result[1]
+                var close_pos = Int(si_ptr[si + 1])
+                sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
                 tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
-                si += 1
-                var string_end = pos + consumed - 1
-                while Int(si_ptr[si]) <= string_end:
-                    si += 1
+                si += 2
                 state = ST_OBJ_COLON
             elif state == ST_OBJ_BEGIN and unlikely(byte == TAG_OBJECT_CLOSE):  # empty object '}'
                 _close_container(tape_ptr, tape_pos, stk, depth, TAG_OBJECT_CLOSE)
