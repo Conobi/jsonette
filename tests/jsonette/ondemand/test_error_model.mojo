@@ -158,6 +158,23 @@ def test_literal_trailing_junk_raises() raises:
     assert_true(rc3.root().field("n").is_null(), "clean null")
 
 
+def test_iter_rejects_invalid_utf8() raises:
+    """On-Demand `iter()` rejects invalid UTF-8 at Stage 1 (before any navigation)."""
+    var raw = List[UInt8]()
+    for b in String('{"k":"').as_bytes():
+        raw.append(b)
+    raw.append(UInt8(0xFF))
+    for b in String('"}').as_bytes():
+        raw.append(b)
+    var raised = False
+    try:
+        _ = iter(raw)
+    except err:
+        raised = True
+        assert_equal(String(err), "INVALID_UTF8 at position 0")
+    assert_true(raised, "iter must reject invalid UTF-8")
+
+
 def main() raises:
     test_has_field()
     test_has_field_nonobject_raises()
@@ -169,4 +186,5 @@ def main() raises:
     test_as_uint_as_float()
     test_as_string_as_bool()
     test_literal_trailing_junk_raises()
+    test_iter_rejects_invalid_utf8()
     print("test_error_model: all passed")

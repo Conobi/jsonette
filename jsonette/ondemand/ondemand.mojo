@@ -413,8 +413,8 @@ struct Value[o: Origin[mut=True]](Movable):
         return Optional(Float64(r.value))
 
     def as_string(self) raises -> Optional[String]:
-        """Some(String) if a string; None otherwise. A malformed string (bad escape
-        / invalid UTF-8) raises via get_string — never masked as None."""
+        """Some(String) if a string; None otherwise. A malformed string (bad escape)
+        raises via get_string — never masked as None."""
         self._check()
         if not self.is_string():
             return None

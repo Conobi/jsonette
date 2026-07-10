@@ -116,8 +116,10 @@ struct Parser(Movable):
     def _build_index(mut self, data: Span[UInt8, _]) raises:
         """Run Stage 1 only (pad + structural_index) into this parser's buffers; no tape.
 
-        Reuses the grow-only `padded`/`positions` buffers (zero warm allocs). The
-        On-Demand owning `Reader` is built on top of this.
+        Reuses the grow-only `padded`/`positions` buffers (zero warm allocs). Rejects
+        non-UTF-8 input (fused into Stage 1), so the On-Demand path validates UTF-8
+        at the same cost as the tape and validate paths. The On-Demand owning `Reader`
+        is built on top of this.
         """
         var input_len = len(data)
         _check_input_len(input_len)
@@ -128,7 +130,7 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-        structural_index(self.padded, input_len, self.positions)
+        structural_index[validate_utf8=True](self.padded, input_len, self.positions)
 
     def validate(mut self, data: List[UInt8]) raises -> None:
         """Validate JSON bytes strictly (RFC 8259); build NO tape, return no value.
