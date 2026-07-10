@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install toolchain
+        run: uv sync
+
+      - name: Cache test fixtures
+        id: fixtures
+        uses: actions/cache@v4
+        with:
+          path: |
+            tests/fixtures/test_vectors
+            tests/fixtures/corpus
+          key: fixtures-${{ hashFiles('scripts/download_test_vectors.py', 'scripts/download_corpus.py') }}
+
+      # Skipped on cache hit: the vectors script hits the GitHub API, which is
+      # rate-limited for the shared runner IPs.
+      - name: Download test fixtures
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: |
+          uv run -- python scripts/download_test_vectors.py
+          uv run -- python scripts/download_corpus.py
+
+      - name: Build package
+        run: uv run -- bash scripts/build.sh
+
+      - name: Run tests
+        run: uv run -- bash scripts/run_tests.sh
