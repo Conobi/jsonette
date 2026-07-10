@@ -1,6 +1,6 @@
-from std.testing import assert_equal
+from std.testing import assert_equal, assert_true
 from std.memory import bitcast
-from jsonette.tape import Tape, tape_tag, tape_payload
+from jsonette.tape import Tape, tape_tag, tape_payload, is_raw_string, raw_string_offset, raw_string_length
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.builder import build_tape
 
@@ -160,10 +160,31 @@ def test_string_value() raises:
     structural_index(padded, input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(2), UInt8(0x22))  # '"'
-    var offset = Int(tape.payload_at(2))
-    assert_equal(tape.string_buf[offset], UInt8(5))  # length
-    assert_equal(tape.string_buf[offset + 4], UInt8(0x68))  # 'h'
-    assert_equal(tape.string_buf[offset + 8], UInt8(0x6F))  # 'o'
+    # Escape-free string: a raw span into the input, no string_buf copy.
+    var payload = tape.payload_at(2)
+    assert_true(is_raw_string(payload), "clean string must be a raw span")
+    assert_equal(raw_string_length(payload), 5)
+    var off = raw_string_offset(payload)
+    assert_equal(padded[off], UInt8(0x68))      # 'h'
+    assert_equal(padded[off + 4], UInt8(0x6F))  # 'o'
+
+
+def test_escaped_string_uses_buffer() raises:
+    var input = _make_bytes(String('["a\\nb"]'))
+    var input_len = len(input)
+    var padded = _pad(input)
+    var positions = List[UInt32]()
+    structural_index(padded, input_len, positions)
+    var tape = _build(padded, input_len, positions)
+    assert_equal(tape.tag_at(2), UInt8(0x22))  # '"'
+    # Escaped string: unescaped into string_buf ([u32 len][content][NUL]).
+    var payload = tape.payload_at(2)
+    assert_true(not is_raw_string(payload), "escaped string must use string_buf")
+    var offset = Int(payload)
+    assert_equal(tape.string_buf[offset], UInt8(3))       # unescaped length
+    assert_equal(tape.string_buf[offset + 4], UInt8(0x61))  # 'a'
+    assert_equal(tape.string_buf[offset + 5], UInt8(0x0A))  # LF
+    assert_equal(tape.string_buf[offset + 6], UInt8(0x62))  # 'b'
 
 
 def test_object_with_values() raises:
@@ -244,6 +265,7 @@ def main() raises:
     test_array_with_literals()
     test_number_in_array()
     test_string_value()
+    test_escaped_string_uses_buffer()
     test_object_with_values()
     test_float_in_object()
     test_nested_object_array()
