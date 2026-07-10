@@ -149,14 +149,14 @@ def parse_string_span(
         (dst + i).store(chunk)
         special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
         i += 32
-    var rem = content_len - i
-    if rem > 0:
+    var tail_len = content_len - i
+    if tail_len > 0:
         # Tail chunk: mask off lanes past the content (the closing quote and
         # whatever follows it must not trip the control-byte check).
         var chunk = (src + i).load[width=32]()
         (dst + i).store(chunk)
         var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
-        special |= m & ((UInt32(1) << UInt32(rem)) - 1)
+        special |= m & ((UInt32(1) << UInt32(tail_len)) - 1)
 
     if special != 0:
         # Escape or control byte in the span: the general parser unescapes and
