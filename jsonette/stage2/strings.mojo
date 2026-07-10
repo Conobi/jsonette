@@ -111,6 +111,31 @@ def _parse_unicode_escape_ptr(
 # --- Exact-span fast path ---
 
 
+@always_inline("nodebug")
+def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
+    """True iff the span holds no backslash and no control byte, i.e. the raw
+    input bytes ARE the string content (zero-copy eligible).
+
+    PRECONDITION: >= 32 readable bytes past `src + content_len` (parser NUL
+    padding); the tail chunk's out-of-span lanes are masked off.
+    """
+    var bs_splat = SIMD[DType.uint8, 32](UInt8(0x5C))
+    var ctrl_splat = SIMD[DType.uint8, 32](UInt8(0x1F))
+    var special = UInt32(0)
+    var i = 0
+    var full_end = content_len & ~31
+    while i < full_end:
+        var chunk = (src + i).load[width=32]()
+        special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
+        i += 32
+    var rem = content_len - i
+    if rem > 0:
+        var chunk = (src + i).load[width=32]()
+        var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
+        special |= m & ((UInt32(1) << UInt32(rem)) - 1)
+    return special == 0
+
+
 def parse_string_span(
     input_ptr: UnsafePointer[UInt8, _],
     pos: Int,

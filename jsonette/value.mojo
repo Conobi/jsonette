@@ -25,7 +25,7 @@ iteration helpers and the `_skip_value` tape-skip primitive.
 
 from std.collections import Optional
 from std.memory import bitcast
-from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL
+from jsonette.tape import TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64, TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL, is_raw_string, raw_string_offset, raw_string_length
 from jsonette.document import Document
 from jsonette.serialize.tape_writer import to_string
 
@@ -76,6 +76,25 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized, Writable):
             | (UInt32(self._sbuf(offset + 2)) << 16)
             | (UInt32(self._sbuf(offset + 3)) << 24)
         )
+
+    @always_inline("nodebug")
+    def _str_len(self, payload: UInt64) -> Int:
+        """Content length of the string with this TAG_STRING payload (either variant)."""
+        if is_raw_string(payload):
+            return raw_string_length(payload)
+        return self._strlen_at(Int(payload))
+
+    @always_inline("nodebug")
+    def _str_byte(self, payload: UInt64, i: Int) -> UInt8:
+        """`i`-th content byte of the string with this TAG_STRING payload.
+
+        Raw spans read the parser's padded input in place; buffer entries read
+        the unescaped bytes in string_buf. The branch is perfectly predicted
+        within any one string.
+        """
+        if is_raw_string(payload):
+            return self._doc[]._parser.padded.unsafe_get(raw_string_offset(payload) + i)
+        return self._sbuf(Int(payload) + 4 + i)
 
     def is_object(self) -> Bool:
         """True iff this value is a JSON object."""
@@ -163,44 +182,45 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized, Writable):
     def get_string_length(self) raises -> Int:
         """Return the byte length of this string's (already-unescaped) content.
 
-        Reads the 4-byte length prefix from the string buffer without copying the
-        bytes out. Raises if this value is not a string.
+        Reads the length from the tape payload (raw span) or the 4-byte prefix
+        (string buffer) without copying the bytes out. Raises if not a string.
         """
         if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
-        return self._strlen_at(Int(self._payload()))
+        return self._str_len(self._payload())
 
     def get_string(self) raises -> String:
         """Copy this string's content out as an owned `String`.
 
-        The bytes are the already-unescaped UTF-8 content held in the document's
-        string buffer; this allocates a fresh `String` (the only copy on the read
-        path). Raises if this value is not a string. For a non-allocating compare,
-        use `string_eq`.
+        Escape-free strings are read in place from the input buffer (zero-copy
+        tape); unescaped ones from the string buffer. Either way this allocates
+        one fresh `String` (the only copy on the read path). Raises if not a
+        string. For a non-allocating compare, use `string_eq`.
         """
         if self._tag() != TAG_STRING: raise "TAPE_ERROR: expected string"
-        var offset = Int(self._payload())
-        var str_len = self._strlen_at(offset)
+        var payload = self._payload()
+        var str_len = self._str_len(payload)
         var buf = List[UInt8](capacity=str_len)
         for i in range(str_len):
-            buf.append(self._sbuf(offset + 4 + i))
+            buf.append(self._str_byte(payload, i))
         return String(from_utf8=buf^)
 
     @always_inline("nodebug")
     def _str_eq(self, expected: String) -> Bool:
         """Non-raising byte-compare core: False if not a string or content differs.
 
-        Compares directly against the tape's already-unescaped bytes with no String
-        materialisation. Shared by the total `__eq__` (returns False on a non-string)
-        and the strict `string_eq` (raises on a non-string receiver)."""
+        Compares directly against the string's content bytes (input span or
+        string buffer) with no String materialisation. Shared by the total
+        `__eq__` (returns False on a non-string) and the strict `string_eq`
+        (raises on a non-string receiver)."""
         if self._tag() != TAG_STRING:
             return False
-        var offset = Int(self._payload())
-        var str_len = self._strlen_at(offset)
+        var payload = self._payload()
+        var str_len = self._str_len(payload)
         var eb = expected.as_bytes()
         if str_len != len(eb):
             return False
         for i in range(str_len):
-            if self._sbuf(offset + 4 + i) != eb[i]:
+            if self._str_byte(payload, i) != eb[i]:
                 return False
         return True
 
@@ -232,13 +252,13 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized, Writable):
         while i < close_plus_one - 1:
             var key_tag = UInt8(self._elem(i) >> 56)
             if key_tag != TAG_STRING: raise "TAPE_ERROR: expected string key in object"
-            var offset = Int(self._elem(i) & 0x00FFFFFFFFFFFFFF)
-            var key_len = self._strlen_at(offset)
+            var payload = self._elem(i) & 0x00FFFFFFFFFFFFFF
+            var key_len = self._str_len(payload)
             var eb = key.as_bytes()
             var is_match = key_len == len(eb)
             if is_match:
                 for j in range(key_len):
-                    if self._sbuf(offset + 4 + j) != eb[j]:
+                    if self._str_byte(payload, j) != eb[j]:
                         is_match = False
                         break
             var val_idx = i + 1
@@ -261,12 +281,12 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized, Writable):
         var eb = key.as_bytes()
         while i < close_plus_one - 1:
             debug_assert(UInt8(self._elem(i) >> 56) == TAG_STRING, "object key must be a string")
-            var offset = Int(self._elem(i) & 0x00FFFFFFFFFFFFFF)
-            var key_len = self._strlen_at(offset)
+            var payload = self._elem(i) & 0x00FFFFFFFFFFFFFF
+            var key_len = self._str_len(payload)
             var is_match = key_len == len(eb)
             if is_match:
                 for j in range(key_len):
-                    if self._sbuf(offset + 4 + j) != eb[j]:
+                    if self._str_byte(payload, j) != eb[j]:
                         is_match = False
                         break
             if is_match:

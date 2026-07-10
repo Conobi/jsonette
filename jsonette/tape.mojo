@@ -9,10 +9,15 @@ ASCII byte that opens each JSON value (`{`, `[`, `"`, `t`, `f`, `n`) so Stage 2
 can dispatch on the structural byte directly; the numeric tags (`l`/`u`/`d`) and
 `TAG_ROOT` (`r`) follow simdjson's lettering.
 
-String content lives in the separate `string_buf` (length-prefixed, NUL-padded),
-referenced by offset from a `TAG_STRING` element. Both backing Lists are owned by
-the `Parser` and reused across parses, so this struct holds no allocation logic
-beyond the optional capacity-preallocating constructor.
+A `TAG_STRING` payload comes in two variants, discriminated by bit 55:
+  * raw span (bit 55 set): bits 0..31 = offset of the content in the parser's
+    padded input, bits 32..54 = content length. Used for escape-free strings,
+    which need no unescaping and hence no copy at all.
+  * buffer entry (bit 55 clear): offset into the separate `string_buf`, which
+    holds `[u32 len LE][content][NUL]` for strings that required unescaping.
+Both backing Lists are owned by the `Parser` and reused across parses, so this
+struct holds no allocation logic beyond the optional capacity-preallocating
+constructor.
 """
 
 from jsonette._alloc_count import record_alloc
@@ -29,6 +34,36 @@ comptime TAG_FLOAT64 = UInt8(0x64)
 comptime TAG_TRUE = UInt8(0x74)
 comptime TAG_FALSE = UInt8(0x66)
 comptime TAG_NULL = UInt8(0x6E)
+
+# Raw-span string payload encoding (see module docstring). The 23-bit length
+# field caps raw spans at ~8 MiB; longer escape-free strings fall back to the
+# string_buf copy path.
+comptime RAW_STRING_FLAG: UInt64 = UInt64(1) << 55
+comptime RAW_STRING_MAX_LEN: Int = 0x7FFFFF
+
+
+@always_inline("nodebug")
+def make_raw_string_payload(offset: Int, length: Int) -> UInt64:
+    """Pack a raw-span string payload. `length` must be <= RAW_STRING_MAX_LEN."""
+    return RAW_STRING_FLAG | (UInt64(length) << 32) | UInt64(offset)
+
+
+@always_inline("nodebug")
+def is_raw_string(payload: UInt64) -> Bool:
+    """True iff this TAG_STRING payload is a raw input span (not a string_buf offset)."""
+    return (payload & RAW_STRING_FLAG) != 0
+
+
+@always_inline("nodebug")
+def raw_string_offset(payload: UInt64) -> Int:
+    """Content start offset (into the parser's padded input) of a raw-span payload."""
+    return Int(payload & 0xFFFFFFFF)
+
+
+@always_inline("nodebug")
+def raw_string_length(payload: UInt64) -> Int:
+    """Content byte length of a raw-span payload."""
+    return Int((payload >> 32) & 0x7FFFFF)
 
 
 struct Tape(Movable):

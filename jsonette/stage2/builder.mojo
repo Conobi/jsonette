@@ -4,11 +4,11 @@ Combines containers (objects/arrays), literals (true/false/null), strings, and
 numbers into a flat tape format with root envelope.
 """
 
-from jsonette.tape import Tape, make_tape_entry, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_TRUE, TAG_FALSE, TAG_NULL
+from jsonette.tape import Tape, make_tape_entry, make_raw_string_payload, RAW_STRING_MAX_LEN, TAG_ROOT, TAG_OBJECT_OPEN, TAG_OBJECT_CLOSE, TAG_ARRAY_OPEN, TAG_ARRAY_CLOSE, TAG_STRING, TAG_TRUE, TAG_FALSE, TAG_NULL
 from jsonette.error import ParseError, ErrorCode
 from jsonette._alloc_count import record_alloc
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
-from jsonette.stage2.strings import parse_string_span
+from jsonette.stage2.strings import parse_string_span, span_is_clean
 from std.sys.intrinsics import unlikely
 
 comptime MAX_DEPTH: Int = 1024
@@ -129,14 +129,28 @@ def build_tape(
                 after_scalar = ST_OBJ_CONTINUE
 
             if byte == TAG_STRING:  # '"'
-                var buf_offset = UInt64(sbuf_pos)
                 # The closing quote is the next structural (Stage 1 emits both
                 # quotes; in-string bytes emit nothing). si+1 is always readable
                 # thanks to the sentinel; an unterminated string yields a
                 # close_pos past input_len, which the span parser rejects.
                 var close_pos = Int(si_ptr[si + 1])
-                sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
+                var content_len = close_pos - pos - 1
+                if (
+                    close_pos < input_len
+                    and input_ptr[close_pos] == TAG_STRING
+                    and content_len <= RAW_STRING_MAX_LEN
+                    and span_is_clean(input_ptr + pos + 1, content_len)
+                ):
+                    # Zero-copy: the tape references the input span directly.
+                    tape_ptr[tape_pos] = make_tape_entry(
+                        TAG_STRING, make_raw_string_payload(pos + 1, content_len)
+                    )
+                else:
+                    # Escapes, control bytes, oversize, or unterminated: copy /
+                    # unescape into string_buf (or raise) via the span parser.
+                    var buf_offset = UInt64(sbuf_pos)
+                    sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
+                    tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
                 si += 2
                 state = after_scalar
@@ -205,10 +219,21 @@ def build_tape(
             # An object member key (a string) is expected; ST_OBJ_BEGIN also
             # permits a closing '}' (empty object).
             if byte == TAG_STRING:  # '"' key
-                var buf_offset = UInt64(sbuf_pos)
                 var close_pos = Int(si_ptr[si + 1])
-                sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
+                var content_len = close_pos - pos - 1
+                if (
+                    close_pos < input_len
+                    and input_ptr[close_pos] == TAG_STRING
+                    and content_len <= RAW_STRING_MAX_LEN
+                    and span_is_clean(input_ptr + pos + 1, content_len)
+                ):
+                    tape_ptr[tape_pos] = make_tape_entry(
+                        TAG_STRING, make_raw_string_payload(pos + 1, content_len)
+                    )
+                else:
+                    var buf_offset = UInt64(sbuf_pos)
+                    sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
+                    tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
                 si += 2
                 state = ST_OBJ_COLON

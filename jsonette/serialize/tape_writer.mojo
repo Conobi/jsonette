@@ -12,14 +12,20 @@ from jsonette.value import Value
 from jsonette.tape import (
     TAG_OBJECT_OPEN, TAG_ARRAY_OPEN, TAG_STRING, TAG_INT64, TAG_UINT64,
     TAG_FLOAT64, TAG_TRUE, TAG_FALSE, TAG_NULL,
+    is_raw_string, raw_string_offset, raw_string_length,
 )
 from jsonette.serialize.writer import JsonWriter
 
 
 def _write_string_at[o: Origin[mut=True]](ref [o] doc: Document, idx: Int, mut w: JsonWriter):
-    """Emit the STRING entry at `idx` (payload = offset into string_buf)."""
-    var entry = doc._parser._tape.elements[idx]
-    var offset = Int(entry & 0x00FFFFFFFFFFFFFF)
+    """Emit the STRING entry at `idx` (raw input span or string_buf entry)."""
+    var payload = doc._parser._tape.elements[idx] & 0x00FFFFFFFFFFFFFF
+    if is_raw_string(payload):
+        w.write_escaped_buf(
+            doc._parser.padded, raw_string_offset(payload), raw_string_length(payload)
+        )
+        return
+    var offset = Int(payload)
     var slen = Int(
         UInt32(doc._parser._tape.string_buf[offset])
         | (UInt32(doc._parser._tape.string_buf[offset + 1]) << 8)
