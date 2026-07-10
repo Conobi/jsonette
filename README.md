@@ -90,9 +90,9 @@ Full-parse throughput — MB/s, higher is better:
 
 | document | jsonette | simdjson (C++) | serde_json (Rust) | ehsanmok/json (Mojo) |
 |---|--:|--:|--:|--:|
-| twitter (631 KB) | **655** | 1,973 | 162 | 444 |
-| citm_catalog (1.7 MB) | **772** | 2,109 | 280 | — |
-| canada (2.3 MB, float-heavy) | **271** | 594 | 102 | 39 |
+| twitter (631 KB) | **698** | 1,973 | 162 | 444 |
+| citm_catalog (1.7 MB) | **857** | 2,109 | 280 | — |
+| canada (2.3 MB, float-heavy) | **333** | 594 | 102 | 39 |
 
 jsonette beats serde_json and the sibling Mojo parser
 [ehsanmok/json](https://github.com/ehsanmok/json); simdjson's hand-tuned C++ stays ~2–3×
