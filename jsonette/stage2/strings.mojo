@@ -112,12 +112,13 @@ def _parse_unicode_escape_ptr(
 
 
 @always_inline("nodebug")
-def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
-    """True iff the span holds no backslash and no control byte, i.e. the raw
-    input bytes ARE the string content (zero-copy eligible).
+def _special_mask(src: UnsafePointer[UInt8, _], content_len: Int) -> UInt32:
+    """Bitmask of span positions holding a backslash or control byte, the bytes
+    that would need unescaping. Zero iff `src[0:content_len]` is verbatim string
+    content. Full 32-byte chunks scan unmasked; the tail chunk masks off lanes
+    past `content_len` so the closing quote and following bytes never trip it.
 
-    PRECONDITION: >= 32 readable bytes past `src + content_len` (parser NUL
-    padding); the tail chunk's out-of-span lanes are masked off.
+    PRECONDITION: >= 32 readable bytes past `src + content_len` (parser NUL padding).
     """
     var bs_splat = SIMD[DType.uint8, 32](UInt8(0x5C))
     var ctrl_splat = SIMD[DType.uint8, 32](UInt8(0x1F))
@@ -133,7 +134,15 @@ def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
         var chunk = (src + i).load[width=32]()
         var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
         special |= m & ((UInt32(1) << UInt32(tail_len)) - 1)
-    return special == 0
+    return special
+
+
+@always_inline("nodebug")
+def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
+    """True iff the span holds no backslash and no control byte, i.e. the raw
+    input bytes ARE the string content (zero-copy eligible). See `_special_mask`
+    for the scan and its readable-bytes precondition."""
+    return _special_mask(src, content_len) == 0
 
 
 def parse_string_span(
@@ -144,51 +153,30 @@ def parse_string_span(
     string_buf_ptr: UnsafePointer[mut=True, UInt8, _],
     buf_start: Int,
 ) raises ParseError -> Int:
-    """Parse the string opening at `pos` whose closing quote position is already
-    known from the structural index (Stage 1 emits both quotes, so `close_pos`
-    is the next structural). Copies the exact span with unconditional 32-byte
-    stores while scanning for backslash/control bytes; any hit, or an
-    out-of-range `close_pos` (unterminated string), delegates to `parse_string`
-    for exact escape and error semantics. Returns bytes written to the buffer
-    ([u32 len][content][NUL] layout, like `parse_string`'s second result).
+    """Copy the escape-free string at `pos` into the buffer, given its closing
+    quote position `close_pos` from the structural index (Stage 1 emits both
+    quotes, so `close_pos` is the next structural). A span with an escape or
+    control byte, or an out-of-range `close_pos` (unterminated string),
+    delegates to `parse_string` for exact unescaping and error semantics.
+    Returns bytes written ([u32 len][content][NUL] layout, like `parse_string`'s
+    second result).
 
     PRECONDITIONS: >= 32 readable bytes past `close_pos` (parser NUL padding)
-    and >= `close_pos - pos + 36` writable bytes at `buf_start` (Tape slack).
+    and >= `close_pos - pos + 4` writable bytes at `buf_start` (Tape slack).
     """
     if close_pos >= input_len or input_ptr[close_pos] != UInt8(0x22):
-        var r = parse_string(input_ptr, pos, input_len, string_buf_ptr, buf_start)
-        return r[1]
+        return parse_string(input_ptr, pos, input_len, string_buf_ptr, buf_start)[1]
 
     var content_len = close_pos - pos - 1
     var src = input_ptr + pos + 1
+    if _special_mask(src, content_len) != 0:
+        # Escape or control byte: the general parser unescapes and raises with
+        # exact positions.
+        return parse_string(input_ptr, pos, input_len, string_buf_ptr, buf_start)[1]
+
+    # Verbatim span: copy content and frame it with length prefix + NUL.
     var dst = string_buf_ptr + buf_start + 4
-    var bs_splat = SIMD[DType.uint8, 32](UInt8(0x5C))
-    var ctrl_splat = SIMD[DType.uint8, 32](UInt8(0x1F))
-
-    # Full 32-byte chunks are entirely content: no lane masking needed.
-    var special = UInt32(0)
-    var i = 0
-    var full_end = content_len & ~31
-    while i < full_end:
-        var chunk = (src + i).load[width=32]()
-        (dst + i).store(chunk)
-        special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
-        i += 32
-    var tail_len = content_len - i
-    if tail_len > 0:
-        # Tail chunk: mask off lanes past the content (the closing quote and
-        # whatever follows it must not trip the control-byte check).
-        var chunk = (src + i).load[width=32]()
-        (dst + i).store(chunk)
-        var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
-        special |= m & ((UInt32(1) << UInt32(tail_len)) - 1)
-
-    if special != 0:
-        # Escape or control byte in the span: the general parser unescapes and
-        # raises with exact positions.
-        var r = parse_string(input_ptr, pos, input_len, string_buf_ptr, buf_start)
-        return r[1]
-
+    memcpy(dest=dst, src=src, count=content_len)
     dst[content_len] = UInt8(0)
     var str_len = UInt32(content_len)
     string_buf_ptr[buf_start] = UInt8(str_len & 0xFF)
