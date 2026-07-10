@@ -15,12 +15,9 @@ tail produced by the final chunk's zero-padding is trimmed at the end. On exit,
 The buffer is reused across calls and grows only on capacity, so a warm run
 allocates nothing.
 
-When instantiated with `validate_utf8=True`, a `Utf8Checker` rides the same
-chunk loop, so RFC 8259's UTF-8 requirement is enforced without a second pass
-over the input (the bytes are already in registers). Zero padding is valid
-ASCII, so validating the padded chunks is equivalent to validating the exact
-input, and a multibyte sequence truncated at end of input is caught because a
-NUL is not a continuation byte.
+With `validate_utf8=True`, a `Utf8Checker` rides the same chunk loop, enforcing
+RFC 8259's UTF-8 requirement without a second pass. The zero padding is valid
+ASCII, so checking the padded chunks equals checking the exact input.
 """
 
 from std.bit import count_trailing_zeros, pop_count
@@ -50,9 +47,8 @@ def structural_index[
     number of structurals so Stage 2 can read it directly.
 
     Parameters:
-        validate_utf8: When True, validate UTF-8 well-formedness in the same
-                       chunk loop (fused, no extra pass) and raise a formatted
-                       INVALID_UTF8 error if the input violates it.
+        validate_utf8: When True, validate UTF-8 in the same chunk loop and
+                       raise a formatted INVALID_UTF8 error on violation.
 
     Args:
         padded_buf: Input buffer already padded to at least
@@ -133,8 +129,6 @@ def structural_index[
         var base_idx = UInt32(chunk_idx * 64)
         var input = SimdInput.load(ptr + Int(base_idx))
 
-        # Fused UTF-8 validation: the chunk is already in registers, so the
-        # check costs no extra memory pass (and one movemask on ASCII chunks).
         comptime if validate_utf8:
             utf8_checker.check_next_input(input)
 
@@ -185,10 +179,7 @@ def structural_index[
     positions.resize(write_pos, UInt32(0))
 
     comptime if validate_utf8:
-        # The eof carry catches an input that ends mid-sequence exactly at a
-        # chunk boundary; anything else was caught in-chunk because the NUL
-        # padding is not a valid continuation byte. Checked after the buffer
-        # bookkeeping so `positions` is left consistent even on the error path.
+        # After the buffer bookkeeping, so `positions` stays consistent on raise.
         utf8_checker.check_eof()
         if utf8_checker.has_error():
             raise format_parse_error(ErrorCode.INVALID_UTF8.value, 0)

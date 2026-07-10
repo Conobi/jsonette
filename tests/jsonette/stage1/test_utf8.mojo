@@ -1,23 +1,10 @@
 """Fused Stage 1 UTF-8 validation: boundary, carry, and differential tests.
 
-The fused checker (`structural_index[validate_utf8=True]`) validates the same
-64-byte chunks the indexer walks, threading three pieces of cross-chunk state:
-the previous 32-byte block (for pair checks near a boundary), an "ended
-mid-sequence" carry (folded in by pure-ASCII chunks and at eof), and the error
-accumulator. These tests target exactly those seams:
-
-  * every sequence swept across offsets 0..80, so it straddles the 32-byte
-    half-block boundary and the 64-byte chunk boundary in every phase;
-  * inputs whose length is an exact multiple of 64, where the NUL padding
-    cannot terminate a dangling lead and only the eof carry catches it;
-  * an incomplete chunk followed by a pure-ASCII chunk (the ASCII fast path
-    must fold the carry into the error);
-  * a pure-ASCII chunk sandwiched between non-ASCII chunks (the stale
-    prev-block must cause neither false negatives nor false positives);
-  * a deterministic block fuzz differential against the stdlib validator.
-
-Every verdict is cross-checked against `_is_valid_utf8`, the stdlib SIMD
-validator the parser used before the check was fused into Stage 1.
+Targets the checker's cross-chunk seams: offset sweeps across the 32/64-byte
+boundaries, eof-aligned truncations (only the eof carry catches them), the
+ASCII fast path's carry fold, the stale prev-block after an ASCII chunk, and a
+deterministic fuzz. Every verdict is cross-checked against the stdlib
+`_is_valid_utf8` oracle.
 """
 
 from std.collections.string.string_slice import _is_valid_utf8
@@ -65,13 +52,8 @@ def _assert_verdict(name: String, data: List[UInt8], expected: Bool) raises:
 
 
 def _sweep(name: String, seq: List[UInt8], expected: Bool) raises:
-    """Check `seq` embedded at every offset 0..80 (ASCII fill on both sides).
-
-    Offsets 0..80 put the sequence in every phase relative to the 32-byte
-    half-block and the 64-byte chunk boundary, including fully inside the
-    second chunk. Trailing fill keeps the sequence away from eof; eof cases
-    get dedicated tests below.
-    """
+    """Check `seq` at every offset 0..80 (ASCII fill on both sides), covering
+    every phase of the 32-byte half-block and 64-byte chunk boundaries."""
     for offset in range(81):
         var data = List[UInt8]()
         for _ in range(offset):
@@ -151,11 +133,8 @@ def test_invalid_sequences_all_offsets() raises:
 
 
 def test_truncation_at_exact_chunk_boundary() raises:
-    """Inputs ending mid-sequence exactly at a 64-byte boundary.
-
-    Here the NUL padding never meets the dangling lead inside a processed
-    chunk, so only the checker's eof carry (`check_eof`) catches it.
-    """
+    """Inputs ending mid-sequence exactly at a 64-byte boundary: the NUL
+    padding cannot catch these in-chunk, only the eof carry does."""
     for total in [64, 128, 192]:
         # Dangling 2-byte lead as the very last byte.
         var d1 = List[UInt8]()
@@ -192,11 +171,8 @@ def test_truncation_at_exact_chunk_boundary() raises:
 
 
 def test_incomplete_chunk_then_ascii_chunk() raises:
-    """A chunk ending mid-sequence followed by a pure-ASCII chunk.
-
-    The ASCII chunk takes the fast path, which must fold the carried
-    `prev_incomplete` into the error instead of skipping it.
-    """
+    """A chunk ending mid-sequence then a pure-ASCII chunk: the ASCII fast
+    path must fold the carried `prev_incomplete` into the error."""
     var data = List[UInt8]()
     for _ in range(63):
         data.append(UInt8(0x61))
@@ -207,12 +183,8 @@ def test_incomplete_chunk_then_ascii_chunk() raises:
 
 
 def test_ascii_chunk_between_non_ascii_chunks() raises:
-    """A pure-ASCII chunk between non-ASCII chunks (stale prev-block seam).
-
-    The ASCII fast path leaves `prev_input_block` pointing at the older
-    non-ASCII chunk. A lone continuation opening the next chunk must still be
-    flagged, and a complete sequence opening it must not be.
-    """
+    """Stale prev-block seam: after an ASCII chunk, a lone continuation
+    opening the next chunk must be flagged and a complete sequence must not."""
     # Chunk 0: complete 2-byte char then ASCII. Chunk 1: pure ASCII.
     # Chunk 2 opens with a lone continuation byte: must reject.
     var bad = List[UInt8]()
@@ -244,13 +216,8 @@ def test_ascii_chunk_between_non_ascii_chunks() raises:
 
 
 def test_fuzz_differential_against_stdlib() raises:
-    """Deterministic block fuzz: fused checker must match `_is_valid_utf8`.
-
-    Inputs are assembled from valid multibyte building blocks, ASCII runs, and
-    (with low probability) one raw random byte, so both valid and invalid
-    buffers occur at all kinds of chunk alignments. The stdlib validator is
-    the oracle; no expected values are hardcoded.
-    """
+    """Deterministic block fuzz (valid multibyte blocks, ASCII runs, rare raw
+    random bytes): the fused checker must match the stdlib oracle."""
     var state = UInt64(0x9E3779B97F4A7C15)
 
     @parameter

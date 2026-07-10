@@ -14,11 +14,10 @@ Three private build paths drive the stages:
   * `validate` runs Stage 1 then a strict grammar walk that materialises nothing.
 
 Every path first rejects input beyond the 4 GiB structural-index limit
-(`_check_input_len`). The tape and validate paths additionally reject input
-that is not well-formed UTF-8; that check is fused into Stage 1's chunk loop
-(`structural_index[validate_utf8=True]`) so it costs no extra pass over the
-input, and `parse` and `validate` agree on every input. No I/O happens here:
-the caller supplies a pre-loaded byte buffer.
+(`_check_input_len`). The tape and validate paths also reject non-UTF-8 input
+via the check fused into Stage 1 (`structural_index[validate_utf8=True]`), so
+`parse` and `validate` agree on every input. No I/O happens here: the caller
+supplies a pre-loaded byte buffer.
 """
 
 from std.memory import memcpy, memset
@@ -87,8 +86,8 @@ struct Parser(Movable):
         materialises the tape (single pass, each leaf parsed once). Reuses the
         grow-only `padded`/`positions`/`_tape` buffers; a warm same-size rebuild
         allocates nothing (the zero-alloc contract). Rejects non-UTF-8 input
-        (validated inside the Stage 1 chunk loop, no separate pass), then raises
-        a formatted ParseError on any malformed input.
+        (fused into Stage 1), then raises a formatted ParseError on any
+        malformed input.
         """
         var input_len = len(data)
         _check_input_len(input_len)
@@ -107,7 +106,6 @@ struct Parser(Movable):
 
         # Reusable structural-offset buffer: grows only when a larger input needs
         # more room than prior parses; warm same-size reparses contribute 0 allocs.
-        # UTF-8 validation rides the same chunk loop and raises INVALID_UTF8 here.
         structural_index[validate_utf8=True](self.padded, input_len, self.positions)
         self.container_stack.resize(0, UInt32(0))
         try:
@@ -166,8 +164,7 @@ struct Parser(Movable):
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
-        # Stage 1 only — no tape is built on the validate path. UTF-8
-        # validation rides the chunk loop and raises INVALID_UTF8 here.
+        # Stage 1 only — no tape is built on the validate path.
         structural_index[validate_utf8=True](self.padded, input_len, self.positions)
 
         # The shared leaf parsers (parse_string, _parse_number via the strings
