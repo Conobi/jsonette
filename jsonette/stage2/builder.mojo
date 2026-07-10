@@ -103,8 +103,6 @@ def build_tape(
     var stk = container_stack.unsafe_ptr()
     var depth = 0
 
-    # Sentinel: append UINT32_MAX so the loop needs no bounds check on si
-    structural_positions.append(UInt32(0xFFFFFFFF))
     var si_ptr = structural_positions.unsafe_ptr()
     var si = 0
 
