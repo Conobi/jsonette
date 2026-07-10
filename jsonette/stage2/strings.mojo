@@ -128,11 +128,11 @@ def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
         var chunk = (src + i).load[width=32]()
         special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
         i += 32
-    var rem = content_len - i
-    if rem > 0:
+    var tail_len = content_len - i
+    if tail_len > 0:
         var chunk = (src + i).load[width=32]()
         var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
-        special |= m & ((UInt32(1) << UInt32(rem)) - 1)
+        special |= m & ((UInt32(1) << UInt32(tail_len)) - 1)
     return special == 0
 
 
