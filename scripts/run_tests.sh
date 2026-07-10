@@ -14,6 +14,7 @@ TESTS=(
     tests/jsonette/stage2/test_numbers.mojo
     tests/jsonette/stage2/test_swar_digits.mojo
     tests/jsonette/stage2/test_strings.mojo
+    tests/jsonette/stage2/test_string_span.mojo
     tests/jsonette/stage2/test_builder.mojo
     tests/jsonette/stage2/test_eisel_lemire.mojo
     tests/jsonette/stage2/test_slow_float.mojo
