@@ -1,8 +1,8 @@
 """UTF-8 well-formedness: parse() and validate() reject non-UTF-8 input.
 
-RFC 8259 requires JSON text to be valid UTF-8. jsonette validates the whole input
-buffer (via the stdlib SIMD validator, wrapped in `parser._check_utf8`) before the
-structural walk. The interesting vectors put raw byte-invalid UTF-8 INSIDE an
+RFC 8259 requires JSON text to be valid UTF-8. jsonette validates the input
+inside the Stage 1 chunk loop (`structural_index[validate_utf8=True]`), fused
+with structural indexing. The interesting vectors put raw byte-invalid UTF-8 INSIDE an
 otherwise structurally-valid JSON string — the case structural parsing alone
 misses, since string content bytes are not encoding-checked by Stage 2. Both the
 DOM `parse()` and the strict `validate()` must reject them (and agree), and valid

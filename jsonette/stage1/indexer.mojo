@@ -14,6 +14,13 @@ tail produced by the final chunk's zero-padding is trimmed at the end. On exit,
 `len(positions)` equals the true structural count so Stage 2 reads it directly.
 The buffer is reused across calls and grows only on capacity, so a warm run
 allocates nothing.
+
+When instantiated with `validate_utf8=True`, a `Utf8Checker` rides the same
+chunk loop, so RFC 8259's UTF-8 requirement is enforced without a second pass
+over the input (the bytes are already in registers). Zero padding is valid
+ASCII, so validating the padded chunks is equivalent to validating the exact
+input, and a multibyte sequence truncated at end of input is caught because a
+NUL is not a continuation byte.
 """
 
 from std.bit import count_trailing_zeros, pop_count
@@ -21,12 +28,14 @@ from std.bit import count_trailing_zeros, pop_count
 from jsonette.stage1.simd_ops import SimdInput
 from jsonette.stage1.classifier import classify
 from jsonette.stage1.string_mask import EscapeScanner, StringScanner
+from jsonette.stage1.utf8 import Utf8Checker
+from jsonette.error import format_parse_error, ErrorCode
 from jsonette._alloc_count import record_alloc
 
 
-def structural_index(
-    padded_buf: List[UInt8], input_len: Int, mut positions: List[UInt32]
-):
+def structural_index[
+    validate_utf8: Bool = False
+](padded_buf: List[UInt8], input_len: Int, mut positions: List[UInt32]) raises:
     """Stage 1 main entry point: fill `positions` with structural character offsets.
 
     Processes input in 64-byte chunks using SIMD classification, escape/string
@@ -39,6 +48,11 @@ def structural_index(
     `positions` resized DOWN to the (small) structural count, so a warm buffer
     has a tiny length but a large capacity. On exit, `len(positions)` equals the
     number of structurals so Stage 2 can read it directly.
+
+    Parameters:
+        validate_utf8: When True, validate UTF-8 well-formedness in the same
+                       chunk loop (fused, no extra pass) and raise a formatted
+                       INVALID_UTF8 error if the input violates it.
 
     Args:
         padded_buf: Input buffer already padded to at least
@@ -65,6 +79,7 @@ def structural_index(
 
     var escape_scanner = EscapeScanner()
     var string_scanner = StringScanner()
+    var utf8_checker = Utf8Checker()
 
     var prev_structurals: UInt64 = 0
     var prev_scalar_carry: UInt64 = 0
@@ -118,6 +133,11 @@ def structural_index(
         var base_idx = UInt32(chunk_idx * 64)
         var input = SimdInput.load(ptr + Int(base_idx))
 
+        # Fused UTF-8 validation: the chunk is already in registers, so the
+        # check costs no extra memory pass (and one movemask on ASCII chunks).
+        comptime if validate_utf8:
+            utf8_checker.check_next_input(input)
+
         # Classify whitespace and operators
         var block = classify(input)
 
@@ -163,3 +183,12 @@ def structural_index(
         write_pos -= 1
     # Shrink to actual structural count so Stage 2 sees the right len().
     positions.resize(write_pos, UInt32(0))
+
+    comptime if validate_utf8:
+        # The eof carry catches an input that ends mid-sequence exactly at a
+        # chunk boundary; anything else was caught in-chunk because the NUL
+        # padding is not a valid continuation byte. Checked after the buffer
+        # bookkeeping so `positions` is left consistent even on the error path.
+        utf8_checker.check_eof()
+        if utf8_checker.has_error():
+            raise format_parse_error(ErrorCode.INVALID_UTF8.value, 0)

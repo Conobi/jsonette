@@ -14,14 +14,14 @@ Three private build paths drive the stages:
   * `validate` runs Stage 1 then a strict grammar walk that materialises nothing.
 
 Every path first rejects input beyond the 4 GiB structural-index limit
-(`_check_input_len`) and, for the tape and validate paths, input that is not
-well-formed UTF-8 (`_check_utf8`), so `parse` and `validate` agree on every
-input. No I/O happens here: the caller supplies a pre-loaded byte buffer.
+(`_check_input_len`). The tape and validate paths additionally reject input
+that is not well-formed UTF-8; that check is fused into Stage 1's chunk loop
+(`structural_index[validate_utf8=True]`) so it costs no extra pass over the
+input, and `parse` and `validate` agree on every input. No I/O happens here:
+the caller supplies a pre-loaded byte buffer.
 """
 
 from std.memory import memcpy, memset
-
-from std.collections.string.string_slice import _is_valid_utf8
 
 from jsonette.tape import Tape
 from jsonette.error import format_parse_error, ErrorCode
@@ -49,21 +49,6 @@ def _check_input_len(input_len: Int) raises:
     """
     if input_len > _MAX_INPUT_LEN:
         raise format_parse_error(ErrorCode.INPUT_TOO_LARGE.value, 0)
-
-
-def _check_utf8(data: Span[UInt8, _]) raises:
-    """Reject input that is not well-formed UTF-8 (RFC 8259 mandates UTF-8 JSON text).
-
-    Wraps the stdlib SIMD validator in ONE place so the private `_is_valid_utf8`
-    dependency is isolated: if a future Mojo release renames or moves it, only this
-    line changes. A whole-buffer check (~3-6% of parse time on the standard
-    corpora); raises INVALID_UTF8. The structural walk assumes nothing about UTF-8
-    well-formedness — all structural/number/literal bytes are ASCII, and raw
-    non-ASCII appears only inside strings where Stage 2 does not validate the byte
-    encoding — so this guard is what closes the invalid-UTF-8-in-strings gap.
-    """
-    if not _is_valid_utf8(data):
-        raise format_parse_error(ErrorCode.INVALID_UTF8.value, 0)
 
 
 struct Parser(Movable):
@@ -101,12 +86,12 @@ struct Parser(Movable):
         strict RFC-8259 grammar state machine, rejecting malformed input as it
         materialises the tape (single pass, each leaf parsed once). Reuses the
         grow-only `padded`/`positions`/`_tape` buffers; a warm same-size rebuild
-        allocates nothing (the zero-alloc contract). Rejects non-UTF-8 input first,
-        then raises a formatted ParseError on any malformed input.
+        allocates nothing (the zero-alloc contract). Rejects non-UTF-8 input
+        (validated inside the Stage 1 chunk loop, no separate pass), then raises
+        a formatted ParseError on any malformed input.
         """
         var input_len = len(data)
         _check_input_len(input_len)
-        _check_utf8(data)
 
         # Reusable padded buffer: input + 128 zero bytes (enough for SIMD overread).
         # Grow only when the current input needs more room than prior parses.
@@ -122,7 +107,8 @@ struct Parser(Movable):
 
         # Reusable structural-offset buffer: grows only when a larger input needs
         # more room than prior parses; warm same-size reparses contribute 0 allocs.
-        structural_index(self.padded, input_len, self.positions)
+        # UTF-8 validation rides the same chunk loop and raises INVALID_UTF8 here.
+        structural_index[validate_utf8=True](self.padded, input_len, self.positions)
         self.container_stack.resize(0, UInt32(0))
         try:
             build_tape(self.padded, input_len, self.positions, self.container_stack, self._tape)
@@ -164,12 +150,11 @@ struct Parser(Movable):
         every structural is grammar-checked and every leaf is parsed for
         validity. It allocates no `Document` and exposes no handle.
 
-        Rejects input that is not well-formed UTF-8 first (same guard as `parse`),
-        so `validate` and `parse` agree on every input.
+        Rejects input that is not well-formed UTF-8 (same fused Stage 1 guard as
+        `parse`), so `validate` and `parse` agree on every input.
         """
         var input_len = len(data)
         _check_input_len(input_len)
-        _check_utf8(Span(data))
 
         # Reusable padded buffer: input + 128 zero bytes (SIMD overread headroom).
         # Same grow-only buffer the tape and On-Demand paths use.
@@ -181,8 +166,9 @@ struct Parser(Movable):
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
-        # Stage 1 only — no tape is built on the validate path.
-        structural_index(self.padded, input_len, self.positions)
+        # Stage 1 only — no tape is built on the validate path. UTF-8
+        # validation rides the chunk loop and raises INVALID_UTF8 here.
+        structural_index[validate_utf8=True](self.padded, input_len, self.positions)
 
         # The shared leaf parsers (parse_string, _parse_number via the strings
         # path) write into / read from a scratch buffer sized input_len + 64;
