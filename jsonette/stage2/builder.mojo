@@ -8,7 +8,7 @@ from jsonette.tape import Tape, make_tape_entry, make_raw_string_payload, RAW_ST
 from jsonette.error import ParseError, ErrorCode
 from jsonette._alloc_count import record_alloc
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
-from jsonette.stage2.strings import parse_string_span, span_is_clean
+from jsonette.stage2.strings import parse_string, span_is_clean
 from std.sys.intrinsics import unlikely
 
 comptime MAX_DEPTH: Int = 1024
@@ -146,10 +146,10 @@ def build_tape(
                         TAG_STRING, make_raw_string_payload(pos + 1, content_len)
                     )
                 else:
-                    # Escapes, control bytes, oversize, or unterminated: copy /
-                    # unescape into string_buf (or raise) via the span parser.
+                    # Escapes, control bytes, oversize, or unterminated: unescape
+                    # / copy into string_buf (or raise) via the general parser.
                     var buf_offset = UInt64(sbuf_pos)
-                    sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
+                    sbuf_pos += parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)[1]
                     tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
                 si += 2
@@ -232,7 +232,7 @@ def build_tape(
                     )
                 else:
                     var buf_offset = UInt64(sbuf_pos)
-                    sbuf_pos += parse_string_span(input_ptr, pos, close_pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)
+                    sbuf_pos += parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)[1]
                     tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
                 si += 2

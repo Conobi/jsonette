@@ -1,9 +1,10 @@
-"""Exact-span string fast path: boundary and delegation seams via `parse()`.
+"""Zero-copy string fast path: boundary and delegation seams via `parse()`.
 
-The tape builder feeds `parse_string_span` the closing-quote position from the
-structural index. Cover the 32-byte chunk seams (content lengths around 32 and
-64), the masked tail (control-byte false positives from bytes after the close
-quote), and delegation (escapes, control bytes, unterminated strings).
+The tape builder decides zero-copy eligibility with `span_is_clean`, using the
+closing-quote position from the structural index. Cover the 32-byte chunk seams
+(content lengths around 32 and 64), the masked tail (control-byte false
+positives from bytes after the close quote), and delegation to the general
+parser (escapes, control bytes, unterminated strings).
 """
 
 from std.testing import assert_equal, assert_true
