@@ -112,9 +112,9 @@ column. All seven contenders produce the same coordinate to bit precision.
 | C++/simdjson On-Demand | 152 | 757 | 2.83 | 7.34 | 60 |
 | Rust/serde Custom (visitor) | 217 | 529 | 5.84 | 17.55 | **0.1** |
 | Rust/serde Typed (derive) | 223 | 516 | 5.96 | 17.57 | 12 |
-| **jsonette On-Demand** | 262 | 439 | 6.73 | 18.06 | 75 |
+| **jsonette On-Demand** | 259 | 444 | 6.62 | 18.48 | 75 |
 | C++/simdjson DOM | 290 | 397 | 3.91 | 8.96 | 177 |
-| **jsonette DOM** | 340 | 339 | 8.69 | 23.99 | 194 |
+| **jsonette DOM** | 310 | 372 | 7.89 | 23.75 | 194 |
 | Rust/serde Untyped (`Value`) | 1,083 | 106 | 28.41 | 48.97 | 840 |
 
 jsonette On-Demand lands faster than C++/simdjson DOM at ~24 % more memory per parse;
