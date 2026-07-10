@@ -187,35 +187,39 @@ def _check_multibyte_lengths(
 
 
 @always_inline("nodebug")
-def _is_incomplete(input: SIMD[DType.uint8, 32]) -> SIMD[DType.uint8, 32]:
-    """Return nonzero lanes iff the vector ends mid-UTF-8-sequence.
+def _is_incomplete(input: SIMD[DType.uint8, 32]) -> Bool:
+    """Return True iff the vector ends mid-UTF-8-sequence.
 
-    Only the last three lanes can fire (see `_build_incomplete_max`). The
-    result is carried into the next chunk; if that chunk is pure ASCII (or
-    the input ends), the carry itself becomes the error.
+    Only the last three lanes can exceed their maximum (see
+    `_build_incomplete_max`). The verdict is carried into the next chunk as a
+    scalar; if that chunk is pure ASCII (or the input ends), the carry itself
+    becomes the error. simdjson carries this as a vector and ORs it into the
+    vector error; a scalar is equivalent for the final any-bits verdict and
+    keeps one less vector register live across the indexer's chunk loop.
     """
-    return input.gt(_INCOMPLETE_MAX).select(
-        SIMD[DType.uint8, 32](0x80), SIMD[DType.uint8, 32](0)
-    )
+    return pack_bits[DType.uint32](input.gt(_INCOMPLETE_MAX)) != 0
 
 
 struct Utf8Checker(Movable):
     """Accumulating UTF-8 validator over the Stage 1 chunk stream.
 
     Feed every 64-byte chunk in order via `check_next_input`, call `check_eof`
-    after the last one, then test `has_error`. Errors accumulate in a vector,
-    so the hot loop never branches on validity; pure-ASCII chunks short-circuit
-    past the table checks on a single movemask test.
+    after the last one, then test `has_error`. Pair errors accumulate in a
+    vector and the ended-mid-sequence carry in a scalar, so the hot loop never
+    branches on validity; pure-ASCII chunks short-circuit past the table checks
+    on two sign-bit movemasks, touching no vector state at all.
     """
 
     var error: SIMD[DType.uint8, 32]
     var prev_input_block: SIMD[DType.uint8, 32]
-    var prev_incomplete: SIMD[DType.uint8, 32]
+    var prev_incomplete: Bool
+    var incomplete_error: Bool
 
     def __init__(out self):
         self.error = SIMD[DType.uint8, 32](0)
         self.prev_input_block = SIMD[DType.uint8, 32](0)
-        self.prev_incomplete = SIMD[DType.uint8, 32](0)
+        self.prev_incomplete = False
+        self.incomplete_error = False
 
     @always_inline("nodebug")
     def _check_utf8_block(
@@ -243,11 +247,15 @@ struct Utf8Checker(Movable):
         crossed INTO the ASCII chunk, and `prev_incomplete` already flagged
         that; any fresh error inside this chunk is detected regardless.
         """
+        # Sign-bit movemask per half (a byte is non-ASCII iff its high bit is
+        # set); this lowers to two VPMOVMSKB and a scalar OR, with no compare.
         var non_ascii = pack_bits[DType.uint32](
-            (input.chunks[0] | input.chunks[1]).ge(SIMD[DType.uint8, 32](0x80))
+            input.chunks[0].cast[DType.int8]().lt(SIMD[DType.int8, 32](0))
+        ) | pack_bits[DType.uint32](
+            input.chunks[1].cast[DType.int8]().lt(SIMD[DType.int8, 32](0))
         )
         if non_ascii == 0:
-            self.error |= self.prev_incomplete
+            self.incomplete_error |= self.prev_incomplete
             return
         self._check_utf8_block(input.chunks[0], self.prev_input_block)
         self._check_utf8_block(input.chunks[1], input.chunks[0])
@@ -262,9 +270,9 @@ struct Utf8Checker(Movable):
         (input length a multiple of 64); otherwise the indexer's NUL padding
         terminates the sequence inside the chunk and the pair checks catch it.
         """
-        self.error |= self.prev_incomplete
+        self.incomplete_error |= self.prev_incomplete
 
     @always_inline("nodebug")
     def has_error(self) -> Bool:
         """Return True iff any chunk seen so far violated UTF-8 well-formedness."""
-        return self.error.reduce_or() != 0
+        return self.incomplete_error or self.error.reduce_or() != 0
