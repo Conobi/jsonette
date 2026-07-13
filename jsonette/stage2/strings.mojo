@@ -135,6 +135,37 @@ def _parse_unicode_escape_ptr(
     return (new_pos, new_write_pos)
 
 
+# --- Zero-copy eligibility scan ---
+
+
+@always_inline("nodebug")
+def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
+    """True iff `src[0:content_len]` holds no backslash and no control byte, i.e.
+    the raw input bytes ARE the string content (no unescaping needed, so the tape
+    can reference the input span directly instead of copying).
+
+    Full 32-byte chunks scan unmasked; the tail chunk masks off lanes past
+    `content_len` so the closing quote and following bytes never trip the check.
+
+    PRECONDITION: >= 32 readable bytes past `src + content_len` (parser NUL padding).
+    """
+    var bs_splat = SIMD[DType.uint8, 32](UInt8(0x5C))
+    var ctrl_splat = SIMD[DType.uint8, 32](UInt8(0x1F))
+    var special = UInt32(0)
+    var i = 0
+    var full_end = content_len & ~31
+    while i < full_end:
+        var chunk = (src + i).load[width=32]()
+        special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
+        i += 32
+    var tail_len = content_len - i
+    if tail_len > 0:
+        var chunk = (src + i).load[width=32]()
+        var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
+        special |= m & ((UInt32(1) << UInt32(tail_len)) - 1)
+    return special == 0
+
+
 # --- Main string parser ---
 
 

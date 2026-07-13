@@ -33,6 +33,7 @@ def test_nocopy_parse_object() raises:
         doc_copy.root().field("age").get_uint(),
         doc_nc.root().field("age").get_uint(),
     )
+    _ = padded^
 
 
 def test_nocopy_reparse() raises:
@@ -53,6 +54,8 @@ def test_nocopy_reparse() raises:
         len(json2.as_bytes()),
     )
     assert_equal(doc.root().field("x").get_uint(), UInt64(2))
+    _ = padded1^
+    _ = padded2^
 
 
 def test_nocopy_iter() raises:
@@ -68,6 +71,7 @@ def test_nocopy_iter() raises:
     var obj = root.get_object()
     var f = obj.field("key")
     assert_equal(f.get_string(), "value")
+    _ = padded^
 
 
 def test_nocopy_matches_copy() raises:
@@ -89,6 +93,7 @@ def test_nocopy_matches_copy() raises:
     assert_equal(c_arr.elem(2).get_bool(), n_arr.elem(2).get_bool())
     assert_equal(c_arr.elem(3).is_null(), n_arr.elem(3).is_null())
     assert_equal(c_arr.elem(4).get_string(), n_arr.elem(4).get_string())
+    _ = padded^
 
 
 def test_nocopy_iter_reparse() raises:
@@ -109,6 +114,8 @@ def test_nocopy_iter_reparse() raises:
         len(json2.as_bytes()),
     )
     assert_equal(reader.root().get_object().field("a").get_uint(), UInt64(20))
+    _ = padded1^
+    _ = padded2^
 
 
 def main() raises:

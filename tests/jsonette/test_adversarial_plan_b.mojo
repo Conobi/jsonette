@@ -198,6 +198,7 @@ def test_od_utf8_string_fast_path() raises:
     assert_equal(rb[3], UInt8(0xC3))
     assert_equal(rb[4], UInt8(0xA9))
     print("  PASS: UTF-8 string through fast path is correct")
+    _ = padded^
 
 
 def test_od_control_char_rejected_via_fast_path_guard() raises:
@@ -448,6 +449,7 @@ def test_dom_nocopy_complex_document() raises:
     assert_equal(Int(doc_nc.root().field("empty").len()), 0)
     assert_equal(Int(doc_nc.root().field("earr").len()), 0)
     print("  PASS: nocopy complex document matches copy path")
+    _ = padded^
 
 
 def test_dom_nocopy_strings_with_escapes() raises:
@@ -466,6 +468,7 @@ def test_dom_nocopy_strings_with_escapes() raises:
     assert_equal(doc_nc.root().field("b").get_string(), "tab\there")
     assert_equal(doc_nc.root().field("c").get_string(), "A")
     print("  PASS: nocopy DOM strings with escapes correct")
+    _ = padded^
 
 
 def test_dom_nocopy_reparse_shorter_doc() raises:
@@ -506,6 +509,8 @@ def test_dom_nocopy_reparse_shorter_doc() raises:
         pass
     assert_true(not old_field_found, "old field 'a' must not exist after reparse")
     print("  PASS: nocopy reparse with shorter document works correctly")
+    _ = padded1^
+    _ = padded2^
 
 
 def test_dom_nocopy_reparse_longer_doc() raises:
@@ -538,6 +543,8 @@ def test_dom_nocopy_reparse_longer_doc() raises:
     )
     assert_equal(doc.root().field("f").get_string(), "string")
     print("  PASS: nocopy reparse with longer document works correctly")
+    _ = padded1^
+    _ = padded2^
 
 
 def test_dom_nocopy_minimum_padding() raises:
@@ -573,6 +580,8 @@ def test_dom_nocopy_minimum_padding() raises:
     )
     assert_equal(doc64.root().field("a").get_string(), content56)
     print("  PASS: minimum padding size works correctly")
+    _ = padded^
+    _ = padded64^
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -622,6 +631,7 @@ def test_od_nocopy_vs_copy_strings() raises:
         r_nc.root().get_object().field("backslash").get_string(),
     )
     print("  PASS: OD nocopy strings match copy path")
+    _ = padded^
 
 
 def test_od_nocopy_vs_copy_numbers() raises:
@@ -670,6 +680,7 @@ def test_od_nocopy_vs_copy_numbers() raises:
         r_nc.root().get_object().field("zero").get_uint(),
     )
     print("  PASS: OD nocopy numbers match copy path")
+    _ = padded^
 
 
 def test_od_nocopy_vs_copy_booleans_null() raises:
@@ -696,6 +707,7 @@ def test_od_nocopy_vs_copy_booleans_null() raises:
         r_nc.root().get_object().field("n").is_null(),
     )
     print("  PASS: OD nocopy booleans/null match copy path")
+    _ = padded^
 
 
 def test_od_nocopy_vs_copy_nested() raises:
@@ -751,6 +763,7 @@ def test_od_nocopy_vs_copy_nested() raises:
     )
     assert_equal(n_copy, n_nc)
     print("  PASS: OD nocopy deeply nested document matches copy path")
+    _ = padded^
 
 
 def test_od_nocopy_vs_copy_array_iteration() raises:
@@ -806,6 +819,7 @@ def test_od_nocopy_vs_copy_array_iteration() raises:
         r_n0.root().elem(6).field("k").get_string(),
     )
     print("  PASS: OD nocopy array iteration matches copy path")
+    _ = padded^
 
 
 def test_od_nocopy_reparse_parity() raises:
@@ -834,6 +848,8 @@ def test_od_nocopy_reparse_parity() raises:
         reader.root().get_object().field("c").get_uint(), UInt64(99)
     )
     print("  PASS: OD nocopy reparse produces correct results")
+    _ = padded1^
+    _ = padded2^
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -935,6 +951,7 @@ def test_dom_nocopy_vs_copy_parity_full() raises:
         dn.root().field("obj").field("inner").get_string(),
     )
     print("  PASS: DOM nocopy/copy full parity confirmed")
+    _ = padded^
 
 
 def test_raw_span_unicode_surrogate_pair() raises:
@@ -978,6 +995,8 @@ def test_od_nocopy_string_only_document() raises:
     )
     assert_equal(reader2.root().get_string(), "hello\nworld")
     print("  PASS: root-level string document works with nocopy")
+    _ = padded^
+    _ = padded2^
 
 
 def test_od_key_matching_with_escapes_nocopy() raises:
@@ -1006,6 +1025,7 @@ def test_od_key_matching_with_escapes_nocopy() raises:
         UInt64(2),
     )
     print("  PASS: escaped key matching works with nocopy")
+    _ = padded^
 
 
 # ──────────────────────────────────────────────────────────────────────

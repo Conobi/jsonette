@@ -90,6 +90,13 @@ struct JsonWriter:
             self._esc_one(buf[start + i])
         self.buf.append(0x22)
 
+    def write_escaped_buf(mut self, ptr: UnsafePointer[UInt8, _], start: Int, length: Int):
+        """Write `length` bytes from `ptr + start` as a quoted, escaped string."""
+        self.buf.append(0x22)
+        for i in range(length):
+            self._esc_one(ptr[start + i])
+        self.buf.append(0x22)
+
     def write_int(mut self, v: Int64):
         """Append a signed integer in decimal."""
         self.raw(String(v))
