@@ -18,6 +18,7 @@ to `root()` (`doc["k"]`, `k in doc`, `doc == s`, `doc.field(...)`, `doc.is_*`,
 """
 
 from std.collections import Optional
+from std.memory import UnsafePointer
 
 from jsonette.parser import Parser
 from jsonette.value import Value, _FieldIter, _ElemIter
@@ -56,6 +57,16 @@ struct Document(Movable):
     def reparse(mut self, data: String) raises:
         """Reparse from a JSON String (convenience), reusing buffers."""
         self.reparse(data.as_bytes())
+
+    def reparse_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+        """Rebuild from a caller-owned padded buffer (no memcpy); bumps the gen.
+
+        The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
+        bytes allocated and the bytes past input_len are zero. The buffer must
+        stay alive while any Value from this Document is in use.
+        """
+        self._parser._build_nocopy(data, input_len)
+        self._gen += 1
 
     def __getitem__(mut self, key: String) raises -> Value[origin_of(self)]:
         """Facade for `root().field(key)` — `doc["k"]` with no `.root()` hop."""
@@ -222,3 +233,15 @@ def parse(data: Span[UInt8, _]) raises -> Document:
 def parse(data: String) raises -> Document:
     """Parse a JSON String (convenience; no manual byte buffer)."""
     return parse(data.as_bytes())
+
+
+def parse_nocopy(data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises -> Document:
+    """Parse JSON from a caller-owned padded buffer (no memcpy).
+
+    The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
+    bytes allocated and the bytes past input_len are zero. The buffer must
+    stay alive while any Value from the returned Document is in use.
+    """
+    var p = Parser()
+    p._build_nocopy(data, input_len)
+    return Document(p^)

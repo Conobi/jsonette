@@ -14,6 +14,8 @@ entry point: they run Stage 1 and return an owning `Reader`. Note this module's
 the On-Demand API stays namespaced under `jsonette.ondemand`.
 """
 
+from std.memory import UnsafePointer
+
 from jsonette.parser import Parser
 from jsonette.ondemand.ondemand import Value
 from jsonette.error import format_parse_error, ErrorCode
@@ -57,6 +59,16 @@ struct Reader(Movable):
         """Reparse from a JSON String (convenience), reusing buffers."""
         self.reparse(data.as_bytes())
 
+    def reparse_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+        """Re-run Stage 1 from a caller-owned padded buffer (no memcpy); bumps gen.
+
+        Same padding contract as iter_nocopy. Buffer must stay alive while any
+        handle from this Reader is in use.
+        """
+        self._parser._build_index_nocopy(data, input_len)
+        self._input_len = input_len
+        self._gen += 1
+
 
 def iter(data: Span[UInt8, _]) raises -> Reader:
     """Run Stage 1 and return an owning On-Demand Reader (the lazy entry)."""
@@ -68,3 +80,15 @@ def iter(data: Span[UInt8, _]) raises -> Reader:
 def iter(data: String) raises -> Reader:
     """Run Stage 1 from a JSON String (convenience) and return an owning Reader."""
     return iter(data.as_bytes())
+
+
+def iter_nocopy(data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises -> Reader:
+    """Run Stage 1 from a caller-owned padded buffer (no memcpy).
+
+    The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
+    bytes allocated and the bytes past input_len are zero. The buffer must
+    stay alive while any handle from the returned Reader is in use.
+    """
+    var p = Parser()
+    p._build_index_nocopy(data, input_len)
+    return Reader(p^, input_len)
