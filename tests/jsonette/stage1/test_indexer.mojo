@@ -19,7 +19,7 @@ def _pad(data: List[UInt8]) -> List[UInt8]:
 def _index(padded: List[UInt8], input_len: Int) raises -> List[UInt32]:
     """Run Stage 1 into a fresh buffer and return the structural positions."""
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     return positions^
 
 

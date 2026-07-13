@@ -29,7 +29,7 @@ def _build(padded: List[UInt8], input_len: Int, mut positions: List[UInt32]) rai
     """Helper: build tape with a temporary container stack into a fresh local tape."""
     var cs = List[UInt32](capacity=2048)
     var tape = Tape()
-    build_tape(padded, input_len, positions, cs, tape)
+    build_tape(padded.unsafe_ptr(), input_len, positions, cs, tape)
     return tape^
 
 
@@ -39,7 +39,7 @@ def test_literal_true() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     # tape[0] = root open 'r', tape[1] = 't', tape[2] = root close 'r'
     assert_equal(len(tape.elements), 3)
@@ -55,7 +55,7 @@ def test_literal_false() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x66))  # 'f'
 
@@ -65,7 +65,7 @@ def test_literal_null() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x6E))  # 'n'
 
@@ -75,7 +75,7 @@ def test_empty_array() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     # tape: r, [, ], r
     assert_equal(len(tape.elements), 4)
@@ -93,7 +93,7 @@ def test_empty_object() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(len(tape.elements), 4)
     assert_equal(tape.tag_at(1), UInt8(0x7B))  # '{'
@@ -106,7 +106,7 @@ def test_nested_containers() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     # tape: r, [outer, [inner, ]inner, ]outer, r
     assert_equal(len(tape.elements), 6)
@@ -126,7 +126,7 @@ def test_array_with_literals() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     # tape: r, [, true, false, null, ], r
     assert_equal(len(tape.elements), 7)
@@ -141,7 +141,7 @@ def test_number_in_array() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     # tape: r, [, u(42), 42, l(-7), -7, ], r
     assert_equal(len(tape.elements), 8)
@@ -157,7 +157,7 @@ def test_string_value() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(2), UInt8(0x22))  # '"'
     var offset = Int(tape.payload_at(2))
@@ -171,7 +171,7 @@ def test_object_with_values() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x7B))  # '{'
     assert_equal(tape.tag_at(2), UInt8(0x22))  # '"' key "a"
@@ -188,7 +188,7 @@ def test_float_in_object() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(3), UInt8(0x64))  # 'd'
     var float_bits = tape.elements[4]
@@ -204,7 +204,7 @@ def test_nested_object_array() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(0), UInt8(0x72))  # root
     assert_equal(tape.tag_at(1), UInt8(0x7B))  # '{'
@@ -216,7 +216,7 @@ def test_scalar_root_number() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     # tape: r, u(42), 42, r
     assert_equal(len(tape.elements), 4)
@@ -229,7 +229,7 @@ def test_scalar_root_string() raises:
     var input_len = len(input)
     var padded = _pad(input)
     var positions = List[UInt32]()
-    structural_index(padded, input_len, positions)
+    structural_index(padded.unsafe_ptr(), input_len, positions)
     var tape = _build(padded, input_len, positions)
     assert_equal(tape.tag_at(1), UInt8(0x22))
 

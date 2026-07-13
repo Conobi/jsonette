@@ -32,7 +32,7 @@ from jsonette._alloc_count import record_alloc
 
 def structural_index[
     validate_utf8: Bool = False
-](padded_buf: List[UInt8], input_len: Int, mut positions: List[UInt32]) raises:
+](input_ptr: UnsafePointer[UInt8, _], input_len: Int, mut positions: List[UInt32]) raises:
     """Stage 1 main entry point: fill `positions` with structural character offsets.
 
     Processes input in 64-byte chunks using SIMD classification, escape/string
@@ -51,8 +51,8 @@ def structural_index[
                        raise a formatted INVALID_UTF8 error on violation.
 
     Args:
-        padded_buf: Input buffer already padded to at least
-                    ceil(input_len/64)*64 + 64 zero bytes.
+        input_ptr: Pointer to input buffer already padded to at least
+                   ceil(input_len/64)*64 + 128 zero bytes.
         input_len: Real (unpadded) length of the JSON input.
         positions: Caller-owned, reusable output buffer. Filled with structural
                    offsets and resized to the structural count.
@@ -81,7 +81,6 @@ def structural_index[
     var prev_scalar_carry: UInt64 = 0
     var prev_base: UInt32 = 0
 
-    var ptr = padded_buf.unsafe_ptr()
     var out_ptr = positions.unsafe_ptr()
     var write_pos = 0
 
@@ -127,7 +126,7 @@ def structural_index[
 
     for chunk_idx in range(num_chunks):
         var base_idx = UInt32(chunk_idx * 64)
-        var input = SimdInput.load(ptr + Int(base_idx))
+        var input = SimdInput.load(input_ptr + Int(base_idx))
 
         comptime if validate_utf8:
             utf8_checker.check_next_input(input)

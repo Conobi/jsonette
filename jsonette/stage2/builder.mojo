@@ -33,7 +33,7 @@ comptime ST_DOC_END: Int = 9        # root value complete: nothing may follow
 
 
 def build_tape(
-    input_buf: List[UInt8], input_len: Int, mut structural_positions: List[UInt32],
+    input_ptr: UnsafePointer[UInt8, _], input_len: Int, mut structural_positions: List[UInt32],
     mut container_stack: List[UInt32],
     mut tape: Tape,
 ) raises ParseError:
@@ -46,8 +46,8 @@ def build_tape(
     end, so capacity (not length) drives the grow decision.
 
     Args:
-        input_buf: Padded input buffer (must have >= 128 zero bytes after input_len
-            for safe SIMD overread in parse_string and _parse_number).
+        input_ptr: Pointer to padded input buffer (must have >= 128 zero bytes after
+            input_len for safe SIMD overread in parse_string and _parse_number).
         input_len: Real (unpadded) length of the JSON input.
         structural_positions: Structural character positions from Stage 1.
         container_stack: Pre-allocated stack for container open positions (capacity >= MAX_DEPTH).
@@ -91,8 +91,6 @@ def build_tape(
     var tape_ptr = tape.elements.unsafe_ptr()
     var tape_pos = 0
     var sbuf_pos = 0  # tracks used bytes in string_buf
-    var input_ptr = input_buf.unsafe_ptr()
-
     # Root open placeholder at tape[0]
     tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
     tape_pos += 1

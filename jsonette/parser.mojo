@@ -106,10 +106,10 @@ struct Parser(Movable):
 
         # Reusable structural-offset buffer: grows only when a larger input needs
         # more room than prior parses; warm same-size reparses contribute 0 allocs.
-        structural_index[validate_utf8=True](self.padded, input_len, self.positions)
+        structural_index[validate_utf8=True](self.padded.unsafe_ptr(), input_len, self.positions)
         self.container_stack.resize(0, UInt32(0))
         try:
-            build_tape(self.padded, input_len, self.positions, self.container_stack, self._tape)
+            build_tape(self.padded.unsafe_ptr(), input_len, self.positions, self.container_stack, self._tape)
         except e:
             raise format_parse_error(e.code, e.position)
 
@@ -130,7 +130,7 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-        structural_index[validate_utf8=True](self.padded, input_len, self.positions)
+        structural_index[validate_utf8=True](self.padded.unsafe_ptr(), input_len, self.positions)
 
     def validate(mut self, data: List[UInt8]) raises -> None:
         """Validate JSON bytes strictly (RFC 8259); build NO tape, return no value.
@@ -167,7 +167,7 @@ struct Parser(Movable):
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
 
         # Stage 1 only — no tape is built on the validate path.
-        structural_index[validate_utf8=True](self.padded, input_len, self.positions)
+        structural_index[validate_utf8=True](self.padded.unsafe_ptr(), input_len, self.positions)
 
         # The shared leaf parsers (parse_string, _parse_number via the strings
         # path) write into / read from a scratch buffer sized input_len + 64;

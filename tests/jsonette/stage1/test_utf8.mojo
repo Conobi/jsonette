@@ -32,7 +32,7 @@ def _utf8_ok(data: List[UInt8]) raises -> Bool:
     var padded = _pad(data)
     var positions = List[UInt32]()
     try:
-        structural_index[validate_utf8=True](padded, len(data), positions)
+        structural_index[validate_utf8=True](padded.unsafe_ptr(), len(data), positions)
         return True
     except:
         return False
