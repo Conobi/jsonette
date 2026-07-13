@@ -51,6 +51,60 @@ def test_raw_bulk() raises:
     )
 
 
+def test_int_boundaries() raises:
+    # Zero
+    var w0 = JsonWriter()
+    w0.write_int(Int64(0))
+    assert_equal(w0^.finish(), String("0"))
+
+    # Single digits
+    var w1 = JsonWriter()
+    w1.write_int(Int64(7))
+    assert_equal(w1^.finish(), String("7"))
+
+    var w2 = JsonWriter()
+    w2.write_int(Int64(-3))
+    assert_equal(w2^.finish(), String("-3"))
+
+    # Int64.MAX
+    var w3 = JsonWriter()
+    w3.write_int(Int64(9223372036854775807))
+    assert_equal(w3^.finish(), String("9223372036854775807"))
+
+    # Int64.MIN — magnitude overflows Int64
+    var w4 = JsonWriter()
+    w4.write_int(Int64(-9223372036854775808))
+    assert_equal(w4^.finish(), String("-9223372036854775808"))
+
+    # Powers of 10
+    var w5 = JsonWriter()
+    w5.write_int(Int64(1000))
+    assert_equal(w5^.finish(), String("1000"))
+
+    var w6 = JsonWriter()
+    w6.write_int(Int64(-100))
+    assert_equal(w6^.finish(), String("-100"))
+
+
+def test_uint_boundaries() raises:
+    var w0 = JsonWriter()
+    w0.write_uint(UInt64(0))
+    assert_equal(w0^.finish(), String("0"))
+
+    # UInt64.MAX — 20 digits
+    var w1 = JsonWriter()
+    w1.write_uint(UInt64(18446744073709551615))
+    assert_equal(w1^.finish(), String("18446744073709551615"))
+
+    var w2 = JsonWriter()
+    w2.write_uint(UInt64(1))
+    assert_equal(w2^.finish(), String("1"))
+
+    var w3 = JsonWriter()
+    w3.write_uint(UInt64(10))
+    assert_equal(w3^.finish(), String("10"))
+
+
 def main() raises:
     test_escaping()
     test_escaped_buf()
@@ -58,4 +112,6 @@ def main() raises:
     test_finite_guard()
     test_pretty_colon_and_indent()
     test_raw_bulk()
+    test_int_boundaries()
+    test_uint_boundaries()
     print("test_writer: all passed")

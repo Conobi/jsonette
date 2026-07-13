@@ -6,7 +6,7 @@ formatting, and pretty-print indentation, so the tape round-trip path and the
 reflection path emit byte-identical structure for the same logical value.
 """
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import bitcast, memcpy
 
 comptime _HEX = String("0123456789abcdef")
 
@@ -45,6 +45,24 @@ struct JsonWriter:
         var pos = len(self.buf)
         self.buf.resize(unsafe_uninit_length=pos + n)
         memcpy(dest=self.buf.unsafe_ptr() + pos, src=src, count=n)
+
+    @always_inline("nodebug")
+    def _write_uint_digits(mut self, v: UInt64):
+        """Append decimal digits of `v` to `self.buf`. No sign, no leading zeros."""
+        if v == 0:
+            self.buf.append(0x30)
+            return
+        var digits = InlineArray[UInt8, 20](fill=UInt8(0))
+        var n = 0
+        var rem = v
+        while rem > 0:
+            digits[n] = UInt8(rem % 10) + 0x30
+            rem //= 10
+            n += 1
+        var i = n - 1
+        while i >= 0:
+            self.buf.append(digits[i])
+            i -= 1
 
     @always_inline("nodebug")
     def is_pretty(self) -> Bool:
@@ -108,12 +126,20 @@ struct JsonWriter:
         self.buf.append(0x22)
 
     def write_int(mut self, v: Int64):
-        """Append a signed integer in decimal."""
-        self.raw(String(v))
+        """Append a signed integer in decimal. No heap allocation."""
+        if v == 0:
+            self.buf.append(0x30)
+            return
+        if v > 0:
+            self._write_uint_digits(UInt64(v))
+            return
+        self.buf.append(0x2D)
+        var u = UInt64(bitcast[DType.uint64](SIMD[DType.int64, 1](v)))
+        self._write_uint_digits(0 - u)
 
     def write_uint(mut self, v: UInt64):
-        """Append an unsigned integer in decimal."""
-        self.raw(String(v))
+        """Append an unsigned integer in decimal. No heap allocation."""
+        self._write_uint_digits(v)
 
     def write_float(mut self, v: Float64) raises:
         """Append a float via the stdlib shortest-round-trip formatter.
