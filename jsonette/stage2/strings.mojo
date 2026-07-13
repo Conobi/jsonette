@@ -36,6 +36,33 @@ def _build_escape_table() -> InlineArray[UInt8, 256]:
 comptime _ESCAPE_LUT: InlineArray[UInt8, 256] = _build_escape_table()
 
 
+# --- Zero-copy raw string span ---
+
+
+@always_inline("nodebug")
+def _raw_string_span[o: Origin](
+    positions: List[UInt32],
+    si: Int,
+    input_ptr: UnsafePointer[UInt8, o],
+) -> Tuple[UnsafePointer[UInt8, o], Int]:
+    """Return a raw pointer and byte length for the string content at structural index `si`.
+
+    Reads the opening-quote position at positions[si] and the closing-quote
+    position at positions[si+1]. Returns (ptr_to_first_content_byte, length).
+    No copy, no escape processing, no validation.
+
+    INVARIANT: positions[si+1] is the closing quote for the opening quote at
+    positions[si]. True because Stage 1 masks in-string bytes: escaped quotes
+    are NOT structurals. This invariant is load-bearing for both the On-Demand
+    zero-copy string path and the future tape-free decode[T].
+    """
+    var open_pos = Int(positions.unsafe_get(si))
+    var close_pos = Int(positions.unsafe_get(si + 1))
+    var content_ptr = input_ptr + open_pos + 1
+    var content_len = close_pos - open_pos - 1
+    return (content_ptr, content_len)
+
+
 # --- Raw-pointer UTF-8 encoder ---
 
 

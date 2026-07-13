@@ -19,6 +19,7 @@ TESTS=(
     tests/jsonette/stage2/test_slow_float.mojo
     tests/jsonette/stage2/test_slow_float_adversarial.mojo
     tests/jsonette/stage2/test_float_differential.mojo
+    tests/jsonette/test_raw_string_span.mojo
     tests/jsonette/test_parser.mojo
     tests/jsonette/test_value.mojo
     tests/jsonette/test_pythonic_surface.mojo
@@ -49,6 +50,7 @@ TESTS=(
     tests/jsonette/serialize/test_decode.mojo
     tests/jsonette/serialize/test_decode_roundtrip.mojo
     tests/jsonette/serialize/test_fuzz_roundtrip.mojo
+    tests/jsonette/test_nocopy.mojo
     tests/jsonette/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
     tests/conformance/test_reject.mojo
