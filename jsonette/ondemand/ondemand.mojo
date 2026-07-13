@@ -62,10 +62,10 @@ comptime _LOWER_N = UInt8(0x6E)  # 'n'
 
 
 @always_inline("nodebug")
-def _has_backslash(ptr: UnsafePointer[UInt8, _], length: Int) -> Bool:
-    """Scan `length` bytes for a backslash. Returns True if one is found."""
+def _needs_slow_string_path(ptr: UnsafePointer[UInt8, _], length: Int) -> Bool:
+    """Scan for backslash or unescaped control char (< 0x20). Either requires parse_string."""
     for i in range(length):
-        if ptr[i] == _BACKSLASH:
+        if ptr[i] == _BACKSLASH or ptr[i] < UInt8(0x20):
             return True
     return False
 
@@ -132,7 +132,7 @@ struct Value[o: Origin[mut=True]](Movable):
             var content_ptr = span[0]
             var content_len = span[1]
 
-            if not _has_backslash(content_ptr, content_len):
+            if not _needs_slow_string_path(content_ptr, content_len):
                 return String(StringSlice(unsafe_from_utf8=Span[UInt8](
                     ptr=content_ptr, length=content_len
                 )))

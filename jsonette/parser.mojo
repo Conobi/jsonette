@@ -11,9 +11,10 @@ Five private build paths drive the stages:
   * `_build` runs Stage 1 (`structural_index`) then Stage 2 (`build_tape`) to
     materialise a DOM tape.
   * `_build_index` runs Stage 1 only, for the lazy On-Demand reader.
-  * `_build_nocopy` like `_build` but skips the memcpy — sets `input_ptr`
-    directly to the caller's pre-padded buffer.
-  * `_build_index_nocopy` like `_build_index` but skips the memcpy.
+  * `_build_nocopy` like `_build` but skips the memcpy — sets `_input_addr`
+    directly to the caller's pre-padded buffer (true zero-copy for DOM).
+  * `_build_index_nocopy` like `_build_index` but accepts UnsafePointer.
+    Currently still copies internally (Mojo 1.0.0b2 OD codegen workaround).
   * `validate` runs Stage 1 then a strict grammar walk that materialises nothing.
 
 Every path first rejects input beyond the 4 GiB structural-index limit
@@ -65,8 +66,9 @@ struct Parser(Movable):
     stage calls and On-Demand reads reconstruct a pointer from this address via
     `get_input_ptr()`. Stored as `Int` (not `UnsafePointer`) to work around a
     Mojo 1.0.0b2 miscompile reading UnsafePointer struct fields through
-    origin-tracked Pointer chains. In the copy paths it holds the address of
-    `padded`; in the nocopy paths it holds the caller's buffer address."""
+    origin-tracked Pointer chains. In the copy paths and in `_build_index_nocopy`
+    (OD codegen workaround) it holds the address of `padded`; in `_build_nocopy`
+    (DOM true zero-copy) it holds the caller's buffer address."""
 
     var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
     var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)

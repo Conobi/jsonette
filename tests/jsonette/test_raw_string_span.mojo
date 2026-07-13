@@ -122,6 +122,26 @@ def test_od_get_string_unicode_escape() raises:
     assert_equal(reader.root().get_object().field("u").get_string(), "A")
 
 
+def test_od_control_char_rejected() raises:
+    """OD get_string rejects unescaped control chars even without backslash."""
+    var buf = List[UInt8]()
+    # Build {"a": "x\x01y"} manually (unescaped SOH inside a string, no backslash)
+    for b in String('{"a": "x').as_bytes():
+        buf.append(b)
+    buf.append(UInt8(0x01))  # unescaped control char
+    for b in String('y"}').as_bytes():
+        buf.append(b)
+
+    var rejected = False
+    try:
+        var reader = od_iter(Span(buf))
+        var obj = reader.root().get_object()
+        _ = obj.field("a").get_string()
+    except:
+        rejected = True
+    assert_equal(rejected, True)
+
+
 def main() raises:
     test_simple_string()
     test_empty_string()
@@ -132,4 +152,5 @@ def main() raises:
     test_od_get_string_escaped()
     test_od_get_string_empty()
     test_od_get_string_unicode_escape()
+    test_od_control_char_rejected()
     print("All raw string span tests passed!")
