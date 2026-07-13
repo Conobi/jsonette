@@ -51,6 +51,7 @@ TESTS=(
     tests/jsonette/serialize/test_decode_roundtrip.mojo
     tests/jsonette/serialize/test_fuzz_roundtrip.mojo
     tests/jsonette/test_nocopy.mojo
+    tests/jsonette/test_adversarial_plan_b.mojo
     tests/jsonette/test_alloc_count.mojo
     tests/conformance/test_accept.mojo
     tests/conformance/test_reject.mojo
