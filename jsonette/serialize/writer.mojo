@@ -6,6 +6,7 @@ formatting, and pretty-print indentation, so the tape round-trip path and the
 reflection path emit byte-identical structure for the same logical value.
 """
 from std.math import isfinite
+from std.memory import memcpy
 
 comptime _HEX = String("0123456789abcdef")
 
@@ -37,14 +38,23 @@ struct JsonWriter:
         self.nonfinite_null = nonfinite_null
 
     @always_inline("nodebug")
+    def _bulk_append(mut self, src: UnsafePointer[UInt8, _], n: Int):
+        """Append `n` bytes from `src` to `self.buf` via memcpy."""
+        if n <= 0:
+            return
+        var pos = len(self.buf)
+        self.buf.resize(unsafe_uninit_length=pos + n)
+        memcpy(dest=self.buf.unsafe_ptr() + pos, src=src, count=n)
+
+    @always_inline("nodebug")
     def is_pretty(self) -> Bool:
         """True when an indent unit was supplied (pretty-print mode)."""
         return self.indent_unit.byte_length() > 0
 
     def raw(mut self, s: String):
         """Append the UTF-8 bytes of `s` verbatim (no escaping)."""
-        for b in s.as_bytes():
-            self.buf.append(b)
+        var b = s.as_bytes()
+        self._bulk_append(b.unsafe_ptr(), len(b))
 
     def _esc_one(mut self, c: UInt8):
         """Append one source byte in JSON-escaped form.

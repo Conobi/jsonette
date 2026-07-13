@@ -40,10 +40,22 @@ def test_pretty_colon_and_indent() raises:
     assert_equal(w^.finish(), String('{') + chr(10) + '  "k": 1' + chr(10) + '}')
 
 
+def test_raw_bulk() raises:
+    var w = JsonWriter()
+    w.raw(String(""))
+    w.raw(String("a"))
+    w.raw(String("hello world this is a longer string for memcpy"))
+    assert_equal(
+        w^.finish(),
+        String("ahello world this is a longer string for memcpy"),
+    )
+
+
 def main() raises:
     test_escaping()
     test_escaped_buf()
     test_numbers()
     test_finite_guard()
     test_pretty_colon_and_indent()
+    test_raw_bulk()
     print("test_writer: all passed")
