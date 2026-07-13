@@ -110,13 +110,13 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        if p.padded.unsafe_ptr()[pos] != _QUOTE:
+        if p.input_ptr[pos] != _QUOTE:
             raise Error("get_string: value is not a string")
         var needed = input_len + 64  # parse_string requires input_len + 64
         if len(p._od_scratch) < needed:
             p._od_scratch = List[UInt8](unsafe_uninit_length=needed)
         _ = parse_string(
-            p.padded.unsafe_ptr(), pos, input_len, p._od_scratch.unsafe_ptr(), 0
+            p.input_ptr, pos, input_len, p._od_scratch.unsafe_ptr(), 0
         )
         var sp = p._od_scratch.unsafe_ptr()
         var ln = Int(
@@ -142,7 +142,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.input_ptr + pos, input_len - pos)
         if r.tag != TAG_INT64 and r.tag != TAG_UINT64:
             raise Error("get_int: value is not an integer")
         # A positive integer above Int64.MAX is tagged UINT64; bitcasting it would
@@ -151,7 +151,7 @@ struct Value[o: Origin[mut=True]](Movable):
         if r.tag == TAG_UINT64 and r.value > UInt64(0x7FFF_FFFF_FFFF_FFFF):
             raise Error("get_int: integer out of Int64 range")
         if not _scalar_token_ok(
-            p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len
+            p.input_ptr, pos, r.bytes_consumed, input_len
         ):
             raise Error("get_int: trailing characters after number")
         return bitcast[DType.int64](r.value)
@@ -173,11 +173,11 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.input_ptr + pos, input_len - pos)
         if r.tag != TAG_UINT64 and r.tag != TAG_INT64:
             raise Error("get_uint: value is not an integer")
         if not _scalar_token_ok(
-            p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len
+            p.input_ptr, pos, r.bytes_consumed, input_len
         ):
             raise Error("get_uint: trailing characters after number")
         if r.tag == TAG_UINT64:
@@ -203,11 +203,11 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.input_ptr + pos, input_len - pos)
         if r.tag != TAG_FLOAT64 and r.tag != TAG_INT64 and r.tag != TAG_UINT64:
             raise Error("get_float: value is not a number")
         if not _scalar_token_ok(
-            p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len
+            p.input_ptr, pos, r.bytes_consumed, input_len
         ):
             raise Error("get_float: trailing characters after number")
         if r.tag == TAG_FLOAT64:
@@ -233,15 +233,15 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var b = p.padded.unsafe_ptr()[pos]
+        var b = p.input_ptr[pos]
         if b == _LOWER_T:
-            _validate_true(p.padded.unsafe_ptr(), pos, input_len)
-            if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, 4, input_len):
+            _validate_true(p.input_ptr, pos, input_len)
+            if not _scalar_token_ok(p.input_ptr, pos, 4, input_len):
                 raise Error("get_bool: trailing characters after literal")
             return True
         if b == _LOWER_F:
-            _validate_false(p.padded.unsafe_ptr(), pos, input_len)
-            if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, 5, input_len):
+            _validate_false(p.input_ptr, pos, input_len)
+            if not _scalar_token_ok(p.input_ptr, pos, 5, input_len):
                 raise Error("get_bool: trailing characters after literal")
             return False
         raise Error("get_bool: value is not a bool")
@@ -262,10 +262,10 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        if p.padded.unsafe_ptr()[pos] != _LOWER_N:
+        if p.input_ptr[pos] != _LOWER_N:
             return False
-        _validate_null(p.padded.unsafe_ptr(), pos, input_len)
-        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, 4, input_len):
+        _validate_null(p.input_ptr, pos, input_len)
+        if not _scalar_token_ok(p.input_ptr, pos, 4, input_len):
             raise Error("is_null: trailing characters after literal")
         return True
 
@@ -273,7 +273,7 @@ struct Value[o: Origin[mut=True]](Movable):
     def _first_byte(self) -> UInt8:
         """Return the value's first input byte (the type-discriminating char)."""
         ref p = self._reader[]._parser
-        return p.padded.unsafe_ptr()[Int(p.positions[self._si])]
+        return p.input_ptr[Int(p.positions[self._si])]
 
     @always_inline("nodebug")
     def is_string(self) -> Bool:
@@ -361,8 +361,8 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
-        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len):
+        var r = _parse_number(p.input_ptr + pos, input_len - pos)
+        if not _scalar_token_ok(p.input_ptr, pos, r.bytes_consumed, input_len):
             raise Error("as_int: trailing characters after number")
         if r.tag == TAG_FLOAT64:
             return None
@@ -381,8 +381,8 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
-        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len):
+        var r = _parse_number(p.input_ptr + pos, input_len - pos)
+        if not _scalar_token_ok(p.input_ptr, pos, r.bytes_consumed, input_len):
             raise Error("as_uint: trailing characters after number")
         if r.tag == TAG_FLOAT64:
             return None
@@ -403,8 +403,8 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.padded.unsafe_ptr() + pos, input_len - pos)
-        if not _scalar_token_ok(p.padded.unsafe_ptr(), pos, r.bytes_consumed, input_len):
+        var r = _parse_number(p.input_ptr + pos, input_len - pos)
+        if not _scalar_token_ok(p.input_ptr, pos, r.bytes_consumed, input_len):
             raise Error("as_float: trailing characters after number")
         if r.tag == TAG_FLOAT64:
             return Optional(bitcast[DType.float64](r.value))
@@ -626,7 +626,7 @@ struct Field[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var key_pos = Int(p.positions[self._key_si])
         return _unescaped_key_into(
-            p.padded.unsafe_ptr(), key_pos, self._reader[]._input_len, p._od_scratch
+            p.input_ptr, key_pos, self._reader[]._input_len, p._od_scratch
         )
 
     @always_inline("nodebug")
@@ -699,7 +699,7 @@ struct Object[o: Origin[mut=True]](Movable):
         """
         ref p = self._reader[]._parser
         return _skip_value(
-            p.padded.unsafe_ptr(), p.positions, len(p.positions), value_si
+            p.input_ptr, p.positions, len(p.positions), value_si
         )
 
     @no_inline
@@ -716,7 +716,7 @@ struct Object[o: Origin[mut=True]](Movable):
         var n = len(p.positions)
         if self._si >= n:
             return True
-        var b = p.padded.unsafe_ptr()[Int(p.positions[self._si])]
+        var b = p.input_ptr[Int(p.positions[self._si])]
         if b == _RBRACE:
             return True
         # A complete top-level key needs its closing-quote structural at _si+1;
@@ -740,7 +740,7 @@ struct Object[o: Origin[mut=True]](Movable):
         """
         self._check()
         ref p = self._reader[]._parser
-        var ip = p.padded.unsafe_ptr()
+        var ip = p.input_ptr
         var n = len(p.positions)
         var key_si = self._si
         var value_si = key_si + 3
@@ -778,7 +778,7 @@ struct Object[o: Origin[mut=True]](Movable):
         self._check()
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
-        var ip = p.padded.unsafe_ptr()
+        var ip = p.input_ptr
         var n = len(p.positions)
         var si = self._start_si  # this object's first key (root: 1, past '{')
         while si < n:
@@ -916,7 +916,7 @@ struct Array[o: Origin[mut=True]](Movable):
         var n = len(p.positions)
         if self._si >= n:
             return True
-        return p.padded.unsafe_ptr()[Int(p.positions[self._si])] == _RBRACK
+        return p.input_ptr[Int(p.positions[self._si])] == _RBRACK
 
     @no_inline
     def next_element(mut self) raises -> Value[Self.o]:
@@ -932,7 +932,7 @@ struct Array[o: Origin[mut=True]](Movable):
         """
         self._check()
         ref p = self._reader[]._parser
-        var ip = p.padded.unsafe_ptr()
+        var ip = p.input_ptr
         var n = len(p.positions)
         var elem_si = self._si
         if elem_si >= n:

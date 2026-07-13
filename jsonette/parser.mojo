@@ -56,13 +56,18 @@ struct Parser(Movable):
     Movable: the parser owns its reusable buffers and tape; moving it transfers
     that ownership (the existing `deinit move` constructor is the move). Any
     `Document` borrowing the old location is invalidated by the move, enforced by
-    the Document's origin parameter."""
+    the Document's origin parameter.
+
+    `input_ptr` is the single pointer all stage calls and On-Demand reads use to
+    reach the input bytes. In the copy paths it points into `padded` (set after
+    the memcpy); in the future nocopy path it will point to the caller's buffer."""
 
     var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
     var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)
     var positions: List[UInt32]       # reusable Stage 1 structural-offset buffer (grows only)
     var _tape: Tape                   # parser-owned tape, reused across parses (grows only)
     var _od_scratch: List[UInt8]      # reusable On-Demand string-unescape scratch (grows only)
+    var input_ptr: UnsafePointer[UInt8, MutAnyOrigin]  # all reads go through this (copy: into padded; nocopy: external)
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
@@ -70,6 +75,7 @@ struct Parser(Movable):
         self.positions = List[UInt32]()
         self._tape = Tape()  # empty Lists -> no allocation until first parse grows them
         self._od_scratch = List[UInt8]()  # empty -> allocated on first On-Demand string read
+        self.input_ptr = self.padded.unsafe_ptr()
 
     def __init__(out self, *, deinit move: Self):
         self.container_stack = move.container_stack^
@@ -77,6 +83,7 @@ struct Parser(Movable):
         self.positions = move.positions^
         self._tape = move._tape^
         self._od_scratch = move._od_scratch^
+        self.input_ptr = move.input_ptr
 
     def _build(mut self, data: Span[UInt8, _]) raises:
         """Build this parser's tape from `data` (Stage 1 + Stage 2). No Document returned.
@@ -103,13 +110,14 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        self.input_ptr = self.padded.unsafe_ptr()
 
         # Reusable structural-offset buffer: grows only when a larger input needs
         # more room than prior parses; warm same-size reparses contribute 0 allocs.
-        structural_index[validate_utf8=True](self.padded.unsafe_ptr(), input_len, self.positions)
+        structural_index[validate_utf8=True](self.input_ptr, input_len, self.positions)
         self.container_stack.resize(0, UInt32(0))
         try:
-            build_tape(self.padded.unsafe_ptr(), input_len, self.positions, self.container_stack, self._tape)
+            build_tape(self.input_ptr, input_len, self.positions, self.container_stack, self._tape)
         except e:
             raise format_parse_error(e.code, e.position)
 
@@ -130,7 +138,8 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-        structural_index[validate_utf8=True](self.padded.unsafe_ptr(), input_len, self.positions)
+        self.input_ptr = self.padded.unsafe_ptr()
+        structural_index[validate_utf8=True](self.input_ptr, input_len, self.positions)
 
     def validate(mut self, data: List[UInt8]) raises -> None:
         """Validate JSON bytes strictly (RFC 8259); build NO tape, return no value.
@@ -165,9 +174,10 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        self.input_ptr = self.padded.unsafe_ptr()
 
         # Stage 1 only — no tape is built on the validate path.
-        structural_index[validate_utf8=True](self.padded.unsafe_ptr(), input_len, self.positions)
+        structural_index[validate_utf8=True](self.input_ptr, input_len, self.positions)
 
         # The shared leaf parsers (parse_string, _parse_number via the strings
         # path) write into / read from a scratch buffer sized input_len + 64;
@@ -178,7 +188,7 @@ struct Parser(Movable):
 
         try:
             _validate_document(
-                self.padded.unsafe_ptr(),
+                self.input_ptr,
                 self.positions,
                 len(self.positions),
                 input_len,
