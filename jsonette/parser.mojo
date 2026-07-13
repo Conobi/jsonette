@@ -7,10 +7,13 @@ positions, the interleaved container stack, the tape, and the On-Demand unescape
 scratch — and reuses them across calls so a warm same-size reparse allocates
 nothing (the zero-allocation contract).
 
-Three private build paths drive the stages:
+Five private build paths drive the stages:
   * `_build` runs Stage 1 (`structural_index`) then Stage 2 (`build_tape`) to
     materialise a DOM tape.
   * `_build_index` runs Stage 1 only, for the lazy On-Demand reader.
+  * `_build_nocopy` like `_build` but skips the memcpy — sets `input_ptr`
+    directly to the caller's pre-padded buffer.
+  * `_build_index_nocopy` like `_build_index` but skips the memcpy.
   * `validate` runs Stage 1 then a strict grammar walk that materialises nothing.
 
 Every path first rejects input beyond the 4 GiB structural-index limit
@@ -58,16 +61,24 @@ struct Parser(Movable):
     `Document` borrowing the old location is invalidated by the move, enforced by
     the Document's origin parameter.
 
-    `input_ptr` is the single pointer all stage calls and On-Demand reads use to
-    reach the input bytes. In the copy paths it points into `padded` (set after
-    the memcpy); in the future nocopy path it will point to the caller's buffer."""
+    `_input_addr` stores the raw address of the input buffer as an `Int`. All
+    stage calls and On-Demand reads reconstruct a pointer from this address via
+    `get_input_ptr()`. Stored as `Int` (not `UnsafePointer`) to work around a
+    Mojo 1.0.0b2 miscompile reading UnsafePointer struct fields through
+    origin-tracked Pointer chains. In the copy paths it holds the address of
+    `padded`; in the nocopy paths it holds the caller's buffer address."""
 
     var container_stack: List[UInt32]  # interleaved: [open_idx, count, open_idx, count, ...]
     var padded: List[UInt8]           # reusable zero-padded input buffer (grows only)
     var positions: List[UInt32]       # reusable Stage 1 structural-offset buffer (grows only)
     var _tape: Tape                   # parser-owned tape, reused across parses (grows only)
     var _od_scratch: List[UInt8]      # reusable On-Demand string-unescape scratch (grows only)
-    var input_ptr: UnsafePointer[UInt8, MutAnyOrigin]  # all reads go through this (copy: into padded; nocopy: external)
+    var _input_addr: Int              # raw address of input buffer (workaround: Int, not UnsafePointer)
+
+    @always_inline("nodebug")
+    def get_input_ptr(self) -> UnsafePointer[UInt8, MutAnyOrigin]:
+        """Reconstruct a pointer to the input buffer from the stored address."""
+        return UnsafePointer[UInt8, MutAnyOrigin](unsafe_from_address=self._input_addr)
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
@@ -75,7 +86,7 @@ struct Parser(Movable):
         self.positions = List[UInt32]()
         self._tape = Tape()  # empty Lists -> no allocation until first parse grows them
         self._od_scratch = List[UInt8]()  # empty -> allocated on first On-Demand string read
-        self.input_ptr = self.padded.unsafe_ptr()
+        self._input_addr = Int(self.padded.unsafe_ptr())
 
     def __init__(out self, *, deinit move: Self):
         self.container_stack = move.container_stack^
@@ -83,7 +94,7 @@ struct Parser(Movable):
         self.positions = move.positions^
         self._tape = move._tape^
         self._od_scratch = move._od_scratch^
-        self.input_ptr = move.input_ptr
+        self._input_addr = move._input_addr
 
     def _build(mut self, data: Span[UInt8, _]) raises:
         """Build this parser's tape from `data` (Stage 1 + Stage 2). No Document returned.
@@ -110,14 +121,14 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-        self.input_ptr = self.padded.unsafe_ptr()
+        self._input_addr = Int(self.padded.unsafe_ptr())
 
         # Reusable structural-offset buffer: grows only when a larger input needs
         # more room than prior parses; warm same-size reparses contribute 0 allocs.
-        structural_index[validate_utf8=True](self.input_ptr, input_len, self.positions)
+        structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
         self.container_stack.resize(0, UInt32(0))
         try:
-            build_tape(self.input_ptr, input_len, self.positions, self.container_stack, self._tape)
+            build_tape(self.get_input_ptr(), input_len, self.positions, self.container_stack, self._tape)
         except e:
             raise format_parse_error(e.code, e.position)
 
@@ -138,8 +149,47 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-        self.input_ptr = self.padded.unsafe_ptr()
-        structural_index[validate_utf8=True](self.input_ptr, input_len, self.positions)
+        self._input_addr = Int(self.padded.unsafe_ptr())
+        structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
+
+    def _build_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+        """Build tape from a caller-owned padded buffer (no memcpy).
+
+        The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
+        bytes allocated and the bytes past input_len are zero (SIMD overread
+        safety). This is an unsafe fast path: the caller must keep the buffer
+        alive while any Document/Value built from this parser is in use.
+        """
+        _check_input_len(input_len)
+        self._input_addr = Int(data)
+        structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
+        self.container_stack.resize(0, UInt32(0))
+        try:
+            build_tape(self.get_input_ptr(), input_len, self.positions, self.container_stack, self._tape)
+        except e:
+            raise format_parse_error(e.code, e.position)
+
+    def _build_index_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+        """Run Stage 1 only from a caller-owned padded buffer (no memcpy).
+
+        Same padding contract as _build_nocopy. The caller must keep the buffer
+        alive while any Reader/Value built from this parser is in use.
+
+        NOTE: On-Demand Value methods that read input bytes through the
+        Pointer[Reader,o] chain hit a Mojo 1.0.0b2 codegen bug when
+        self.padded doesn't hold the data. Until that's fixed, OD nocopy
+        copies into self.padded as a workaround (same cost as the copy path).
+        """
+        _check_input_len(input_len)
+        var num_chunks = (input_len + 63) // 64
+        var padded_len = num_chunks * 64 + 128
+        if len(self.padded) < padded_len:
+            record_alloc()
+            self.padded = List[UInt8](unsafe_uninit_length=padded_len)
+        memcpy(dest=self.padded.unsafe_ptr(), src=data, count=input_len)
+        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        self._input_addr = Int(self.padded.unsafe_ptr())
+        structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
 
     def validate(mut self, data: List[UInt8]) raises -> None:
         """Validate JSON bytes strictly (RFC 8259); build NO tape, return no value.
@@ -174,10 +224,10 @@ struct Parser(Movable):
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
         memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
         memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
-        self.input_ptr = self.padded.unsafe_ptr()
+        self._input_addr = Int(self.padded.unsafe_ptr())
 
         # Stage 1 only — no tape is built on the validate path.
-        structural_index[validate_utf8=True](self.input_ptr, input_len, self.positions)
+        structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
 
         # The shared leaf parsers (parse_string, _parse_number via the strings
         # path) write into / read from a scratch buffer sized input_len + 64;
@@ -188,7 +238,7 @@ struct Parser(Movable):
 
         try:
             _validate_document(
-                self.input_ptr,
+                self.get_input_ptr(),
                 self.positions,
                 len(self.positions),
                 input_len,
