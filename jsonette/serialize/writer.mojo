@@ -6,7 +6,8 @@ formatting, and pretty-print indentation, so the tape round-trip path and the
 reflection path emit byte-identical structure for the same logical value.
 """
 from std.math import isfinite
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, memcpy, pack_bits
+from std.bit import count_trailing_zeros
 
 comptime _HEX = String("0123456789abcdef")
 
@@ -104,26 +105,58 @@ struct JsonWriter:
             self.buf.append(_HEX.as_bytes()[Int(c >> 4)])
             self.buf.append(_HEX.as_bytes()[Int(c & 0xF)])
 
+    def _write_escaped_core(mut self, src: UnsafePointer[UInt8, _], length: Int):
+        """Write `length` bytes from `src` as a quoted, escaped JSON string.
+
+        SIMD 32-byte scan-window: loads a chunk, computes a bitmask of bytes
+        needing escape (control chars < 0x20, `"`, `\\`), and bulk-copies the
+        clean prefix. The dirty byte is emitted via `_esc_one`. Falls back to
+        scalar for the < 32 byte tail.
+        """
+        debug_assert(length >= 0, "length must be non-negative")
+        self.buf.reserve(len(self.buf) + length + 64)
+        self.buf.append(0x22)
+
+        var ctrl_splat = SIMD[DType.uint8, 32](UInt8(0x1F))
+        var quote_splat = SIMD[DType.uint8, 32](UInt8(0x22))
+        var bs_splat = SIMD[DType.uint8, 32](UInt8(0x5C))
+
+        var i = 0
+        while i + 32 <= length:
+            var chunk = (src + i).load[width=32]()
+            var mask = UInt32(
+                pack_bits[DType.uint32](
+                    chunk.le(ctrl_splat) | chunk.eq(quote_splat) | chunk.eq(bs_splat)
+                )
+            )
+            if mask == 0:
+                self._bulk_append(src + i, 32)
+                i += 32
+            else:
+                var first = Int(count_trailing_zeros(mask))
+                if first > 0:
+                    self._bulk_append(src + i, first)
+                self._esc_one(src[i + first])
+                i += first + 1
+
+        while i < length:
+            self._esc_one(src[i])
+            i += 1
+
+        self.buf.append(0x22)
+
     def write_escaped_str(mut self, s: String):
         """Write a Mojo `String` as a quoted, escaped JSON string."""
-        self.buf.append(0x22)
-        for b in s.as_bytes():
-            self._esc_one(b)
-        self.buf.append(0x22)
+        var b = s.as_bytes()
+        self._write_escaped_core(b.unsafe_ptr(), len(b))
 
     def write_escaped_buf(mut self, ref buf: List[UInt8], start: Int, length: Int):
         """Write `length` bytes of `buf` from `start` as a quoted, escaped string."""
-        self.buf.append(0x22)
-        for i in range(length):
-            self._esc_one(buf[start + i])
-        self.buf.append(0x22)
+        self._write_escaped_core(buf.unsafe_ptr() + start, length)
 
     def write_escaped_buf(mut self, ptr: UnsafePointer[UInt8, _], start: Int, length: Int):
         """Write `length` bytes from `ptr + start` as a quoted, escaped string."""
-        self.buf.append(0x22)
-        for i in range(length):
-            self._esc_one(ptr[start + i])
-        self.buf.append(0x22)
+        self._write_escaped_core(ptr + start, length)
 
     def write_int(mut self, v: Int64):
         """Append a signed integer in decimal. No heap allocation."""
