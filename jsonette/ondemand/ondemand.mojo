@@ -39,7 +39,7 @@ from std.memory import bitcast
 
 from jsonette.parser import Parser
 from jsonette.ondemand.reader import Reader
-from jsonette.stage2.strings import parse_string
+from jsonette.stage2.strings import parse_string, _raw_string_span
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
 from jsonette.stage2.builder import _validate_true, _validate_false, _validate_null
 from jsonette.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
@@ -59,6 +59,15 @@ comptime _DIGIT9 = UInt8(0x39)  # '9'
 comptime _LOWER_T = UInt8(0x74)  # 't'
 comptime _LOWER_F = UInt8(0x66)  # 'f'
 comptime _LOWER_N = UInt8(0x6E)  # 'n'
+
+
+@always_inline("nodebug")
+def _has_backslash(ptr: UnsafePointer[UInt8, _], length: Int) -> Bool:
+    """Scan `length` bytes for a backslash. Returns True if one is found."""
+    for i in range(length):
+        if ptr[i] == _BACKSLASH:
+            return True
+    return False
 
 
 # `_scalar_token_ok` moved to jsonette.stage2.numbers (core Stage 2) and is
@@ -99,24 +108,41 @@ struct Value[o: Origin[mut=True]](Movable):
 
     @no_inline
     def get_string(self) raises -> String:
-        """Unescape this value as a JSON string and return it as an owned String.
+        """Parse this value as a JSON string and return it as an owned String.
 
-        Parses lazily into the parser's reusable scratch buffer via the shared
-        `parse_string`, then reads the 4-byte little-endian length prefix and the
-        UTF-8 bytes it wrote. Raises if the value is not a JSON string (mirroring
-        `get_int`'s tag guard), so a non-string never returns silently empty.
+        Escape-free fast path: if the raw span between the opening and closing
+        quotes contains no backslash, the content is copied directly from the
+        input (one copy, no scratch buffer). Strings with escapes fall back to
+        the full parse_string path (scratch then owned String).
         """
         self._check()
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
+        var input_ptr = p.get_input_ptr()
         var pos = Int(p.positions[self._si])
-        if p.get_input_ptr()[pos] != _QUOTE:
+        if input_ptr[pos] != _QUOTE:
             raise Error("get_string: value is not a string")
-        var needed = input_len + 64  # parse_string requires input_len + 64
+
+        # Fast path: when the closing-quote structural exists and the raw span
+        # contains no backslash, copy directly from input (one copy, no scratch).
+        # An unclosed string (si+1 out of bounds) falls through to parse_string
+        # which raises UNCLOSED_STRING.
+        if self._si + 1 < len(p.positions):
+            var span = _raw_string_span(p.positions, self._si, input_ptr)
+            var content_ptr = span[0]
+            var content_len = span[1]
+
+            if not _has_backslash(content_ptr, content_len):
+                return String(StringSlice(unsafe_from_utf8=Span[UInt8](
+                    ptr=content_ptr, length=content_len
+                )))
+
+        # Slow path: escape present or unclosed string, fall back to full parse_string
+        var needed = input_len + 64
         if len(p._od_scratch) < needed:
             p._od_scratch = List[UInt8](unsafe_uninit_length=needed)
         _ = parse_string(
-            p.get_input_ptr(), pos, input_len, p._od_scratch.unsafe_ptr(), 0
+            input_ptr, pos, input_len, p._od_scratch.unsafe_ptr(), 0
         )
         var sp = p._od_scratch.unsafe_ptr()
         var ln = Int(

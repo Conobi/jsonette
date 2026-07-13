@@ -2,6 +2,7 @@ from std.testing import assert_equal
 from std.memory import memcpy, memset
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.strings import _raw_string_span
+from jsonette.ondemand.reader import iter as od_iter
 
 
 def _pad_and_index(
@@ -91,10 +92,44 @@ def test_object_key_value() raises:
     assert_equal(val_span[0][2], UInt8(ord("l")))
 
 
+def test_od_get_string_clean() raises:
+    """OD get_string for escape-free strings returns correct value."""
+    var json = String('{"name": "Ada Lovelace", "city": "London"}')
+    var reader = od_iter(json)
+    var obj = reader.root().get_object()
+    assert_equal(obj.field("name").get_string(), "Ada Lovelace")
+
+
+def test_od_get_string_escaped() raises:
+    """OD get_string for strings with escapes falls back correctly."""
+    var json = String('{"msg": "hello\\nworld"}')
+    var reader = od_iter(json)
+    var obj = reader.root().get_object()
+    assert_equal(obj.field("msg").get_string(), "hello\nworld")
+
+
+def test_od_get_string_empty() raises:
+    """OD get_string for empty strings works."""
+    var json = String('{"e": ""}')
+    var reader = od_iter(json)
+    assert_equal(reader.root().get_object().field("e").get_string(), "")
+
+
+def test_od_get_string_unicode_escape() raises:
+    """OD get_string for unicode escapes falls back correctly."""
+    var json = String('{"u": "\\u0041"}')
+    var reader = od_iter(json)
+    assert_equal(reader.root().get_object().field("u").get_string(), "A")
+
+
 def main() raises:
     test_simple_string()
     test_empty_string()
     test_string_with_escape()
     test_escaped_quote()
     test_object_key_value()
+    test_od_get_string_clean()
+    test_od_get_string_escaped()
+    test_od_get_string_empty()
+    test_od_get_string_unicode_escape()
     print("All raw string span tests passed!")
