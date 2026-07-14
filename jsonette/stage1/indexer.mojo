@@ -5,9 +5,9 @@ at a time, and for each chunk combines the classifier's operator/whitespace mask
 with the string-mask scanners to compute that chunk's structural bits: structural
 operators outside strings, every real (non-escaped) quote, and pseudo-structural
 scalar starts (the first byte of a number or `true`/`false`/`null`). Set bits are
-scattered into the caller's reusable `positions` buffer by a branchless,
-8-at-a-time `emit` (simdjson AVX2-kernel style) that trades a small over-write
-tail for removing the per-structural mispredicted branch.
+scattered into the caller's reusable `positions` buffer. On AVX-512F targets
+the emit uses `vpcompressd` to pack 16 positions per instruction; otherwise it
+falls back to a branchless 8-at-a-time scatter (simdjson AVX2-kernel style).
 
 Output is deferred by one chunk so cross-chunk carries settle, and the spurious
 tail produced by the final chunk's zero-padding is trimmed at the end. On exit,
@@ -21,6 +21,9 @@ ASCII, so checking the padded chunks equals checking the exact input.
 """
 
 from std.bit import count_trailing_zeros, pop_count
+from std.sys.info import CompilationTarget
+from std.sys.intrinsics import compressed_store
+from std.math import iota
 
 from jsonette.stage1.simd_ops import SimdInput
 from jsonette.stage1.classifier import classify
@@ -89,40 +92,57 @@ def structural_index[
     def emit(base_idx: UInt32, bits: UInt64):
         """Write offsets of each set bit (relative to base_idx) into positions.
 
-        Branchless 8-at-a-time scatter (simdjson AVX2-kernel style): each
-        iteration writes 8 indices unconditionally and advances a local cursor by
-        8, but write_pos advances only by the true popcount. The spurious tail
-        (<8 entries, where count_trailing_zeros(0)==64) is overwritten by the
-        next emit or lands in the buffer's EMIT_SLACK and is never read. This
-        removes the per-set-bit branch (one mispredict per structural char) that
-        the stage-1 profile showed was ~2/3 of stage-1 cost on object input.
+        On AVX-512F targets, uses `vpcompressd` to scatter 16 positions per
+        instruction (4 iterations for 64 bits). On other targets, falls back to
+        the branchless 8-at-a-time scatter (simdjson AVX2-kernel style).
         """
         if bits == 0:
             return
-        var cnt = Int(pop_count(bits))
-        var b = bits
-        var w = write_pos
-        var done = 0
-        while done < cnt:
-            out_ptr[w + 0] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 1] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 2] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 3] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 4] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 5] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 6] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            out_ptr[w + 7] = base_idx + UInt32(count_trailing_zeros(b))
-            b = b & (b - 1)
-            w += 8
-            done += 8
-        write_pos += cnt
+        comptime if CompilationTarget.has_avx512f():
+            var b = bits
+            for chunk_idx in range(4):
+                var chunk_bits = UInt16(b & 0xFFFF)
+                if chunk_bits != 0:
+                    var candidates = iota[DType.uint32, 16](
+                        base_idx + UInt32(chunk_idx * 16)
+                    )
+                    var bit_tests = SIMD[DType.uint16, 16](
+                        1, 2, 4, 8, 16, 32, 64, 128,
+                        256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+                    )
+                    var masked = SIMD[DType.uint16, 16](chunk_bits) & bit_tests
+                    compressed_store(
+                        candidates,
+                        out_ptr + write_pos,
+                        masked.cast[DType.bool](),
+                    )
+                    write_pos += Int(pop_count(UInt64(chunk_bits)))
+                b >>= 16
+        else:
+            var cnt = Int(pop_count(bits))
+            var b = bits
+            var w = write_pos
+            var done = 0
+            while done < cnt:
+                out_ptr[w + 0] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 1] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 2] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 3] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 4] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 5] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 6] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                out_ptr[w + 7] = base_idx + UInt32(count_trailing_zeros(b))
+                b = b & (b - 1)
+                w += 8
+                done += 8
+            write_pos += cnt
 
     for chunk_idx in range(num_chunks):
         var base_idx = UInt32(chunk_idx * 64)
