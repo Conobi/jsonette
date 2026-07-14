@@ -2,6 +2,7 @@
 from std.testing import assert_equal, assert_true
 from std.memory import bitcast
 from jsonette.serialize.direct_decode import decode_direct
+from jsonette.serialize.reflect_loader import decode as decode_dom, JsonDeserializable
 
 
 struct Flat(Copyable, Movable, Defaultable):
@@ -90,6 +91,37 @@ def test_escaped_string_value() raises:
     assert_equal(f.name, String("hello\nworld"))
 
 
+struct OracleFlat(Copyable, Movable, Defaultable, JsonDeserializable):
+    """Flat struct conforming to both Defaultable (for decode_direct) and
+    JsonDeserializable (for DOM decode), used by the differential oracle."""
+    var name: String
+    var count: Int64
+    var ratio: Float64
+    var flag: Bool
+    def __init__(out self):
+        self.name = String(""); self.count = 0; self.ratio = 0.0; self.flag = False
+
+
+def test_differential_oracle() raises:
+    """Assert tape-free decode produces identical output to DOM decode on valid inputs."""
+    var inputs = List[String]()
+    inputs.append(String('{"name":"a","count":0,"ratio":0.0,"flag":false}'))
+    inputs.append(String('{"flag":true,"ratio":3.14,"count":-99,"name":"reversed order"}'))
+    inputs.append(String('{"name":"with spaces","count":1000000,"ratio":-0.001,"flag":true}'))
+    inputs.append(String('{"name":"","count":0,"ratio":0.0,"flag":false}'))
+    inputs.append(String('{"name":"esc\\nape","count":42,"ratio":1e10,"flag":false}'))
+    inputs.append(String('{"name":"x","count":9223372036854775807,"ratio":1.7976931348623157e+308,"flag":true,"EXTRA":"ignored"}'))
+
+    for idx in range(len(inputs)):
+        var json = inputs[idx]
+        var dom = decode_dom[OracleFlat](json)
+        var direct = decode_direct[OracleFlat](json)
+        assert_equal(dom.name, direct.name)
+        assert_equal(dom.count, direct.count)
+        assert_true(dom.ratio == direct.ratio, "ratio mismatch on input " + String(idx))
+        assert_true(dom.flag == direct.flag, "flag mismatch on input " + String(idx))
+
+
 def main() raises:
     test_flat_leaves()
     test_missing_required_raises()
@@ -100,4 +132,5 @@ def main() raises:
     test_empty_object_raises()
     test_root_not_object_raises()
     test_escaped_string_value()
+    test_differential_oracle()
     print("test_direct_decode: all passed")
