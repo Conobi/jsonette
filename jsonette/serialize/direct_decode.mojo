@@ -20,7 +20,7 @@ from std.memory import bitcast
 from jsonette.parser import Parser
 from jsonette.stage2.strings import parse_string, _raw_string_span, span_is_clean
 from jsonette.stage2.numbers import _parse_number, _scalar_token_ok
-from jsonette.stage2.builder import _validate_true, _validate_false, _validate_null
+from jsonette.stage2.builder import _validate_true, _validate_false
 from jsonette.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 from jsonette.ondemand.ondemand import _skip_value
 
@@ -29,6 +29,7 @@ comptime _Base = Movable & ImplicitlyDestructible
 comptime _Struct = Defaultable & Movable & ImplicitlyDestructible
 
 comptime _QUOTE = UInt8(0x22)     # '"'
+comptime _BACKSLASH = UInt8(0x5C) # '\'
 comptime _COLON = UInt8(0x3A)     # ':'
 comptime _LBRACE = UInt8(0x7B)    # '{'
 comptime _RBRACE = UInt8(0x7D)    # '}'
@@ -130,9 +131,13 @@ def _decode_leaf[T: _Base](
     elif tn == "Bool":
         if b == _LOWER_T:
             _validate_true(ip, pos, input_len)
+            if not _scalar_token_ok(ip, pos, 4, input_len):
+                raise "DECODE: trailing characters after 'true' at position " + String(pos)
             result = rebind_var[T](True)
         elif b == _LOWER_F:
             _validate_false(ip, pos, input_len)
+            if not _scalar_token_ok(ip, pos, 5, input_len):
+                raise "DECODE: trailing characters after 'false' at position " + String(pos)
             result = rebind_var[T](False)
         else:
             raise "DECODE: expected bool at position " + String(pos)
@@ -171,6 +176,8 @@ def _decode_leaf[T: _Base](
         if nr.tag == TAG_INT64:
             result = rebind_var[T](Int(bitcast[DType.int64](nr.value)))
         elif nr.tag == TAG_UINT64:
+            if nr.value > UInt64(Int64.MAX):
+                raise "DECODE: integer out of Int range at position " + String(pos)
             result = rebind_var[T](Int(nr.value))
         else:
             raise "DECODE: expected integer at position " + String(pos)
@@ -194,6 +201,8 @@ def _decode_leaf[T: _Base](
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
             raise "DECODE: expected integer for Int32 at position " + String(pos)
+        if nr.tag == TAG_UINT64 and nr.value > UInt64(Int32.MAX):
+            raise "DECODE: integer overflow at position " + String(pos)
         var v = bitcast[DType.int64](nr.value)
         if v < Int64(Int32.MIN) or v > Int64(Int32.MAX):
             raise "DECODE: integer overflow at position " + String(pos)
@@ -205,6 +214,8 @@ def _decode_leaf[T: _Base](
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
             raise "DECODE: expected integer for Int16 at position " + String(pos)
+        if nr.tag == TAG_UINT64 and nr.value > 32767:
+            raise "DECODE: integer overflow at position " + String(pos)
         var v = bitcast[DType.int64](nr.value)
         if v < -32768 or v > 32767:
             raise "DECODE: integer overflow at position " + String(pos)
@@ -216,6 +227,8 @@ def _decode_leaf[T: _Base](
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
             raise "DECODE: expected integer for Int8 at position " + String(pos)
+        if nr.tag == TAG_UINT64 and nr.value > 127:
+            raise "DECODE: integer overflow at position " + String(pos)
         var v = bitcast[DType.int64](nr.value)
         if v < -128 or v > 127:
             raise "DECODE: integer overflow at position " + String(pos)
@@ -357,9 +370,34 @@ def _decode_object[T: _Struct](
         var key_ptr = key_content[0]
         var key_len = key_content[1]
 
-        # Hash the key as StringSlice
-        var key_span = Span[UInt8](ptr=key_ptr, length=key_len)
-        var key_hash = hash(StringSlice(unsafe_from_utf8=key_span))
+        # Check for escaped keys (scan for backslash)
+        var has_escape = False
+        for k in range(key_len):
+            if key_ptr[k] == _BACKSLASH:
+                has_escape = True
+                break
+
+        # Hash the key — escaped keys must be unescaped first
+        var key_hash: UInt64
+        var decoded_key = String("")
+        if has_escape:
+            var kpos = Int(positions[si])
+            var needed = input_len + 64
+            if len(scratch) < needed:
+                scratch = List[UInt8](unsafe_uninit_length=needed)
+            _ = parse_string(ip, kpos, input_len, scratch.unsafe_ptr(), 0)
+            var sp = scratch.unsafe_ptr()
+            var ln = Int(
+                UInt32(sp[0])
+                | (UInt32(sp[1]) << 8)
+                | (UInt32(sp[2]) << 16)
+                | (UInt32(sp[3]) << 24)
+            )
+            decoded_key = String(StringSlice(unsafe_from_utf8=Span[UInt8](ptr=sp + 4, length=ln)))
+            key_hash = hash(decoded_key)
+        else:
+            var key_span = Span[UInt8](ptr=key_ptr, length=key_len)
+            key_hash = hash(StringSlice(unsafe_from_utf8=key_span))
 
         # Move past key (opening quote + closing quote)
         si += 2
@@ -379,17 +417,22 @@ def _decode_object[T: _Struct](
             comptime key = String(names[i])
             comptime field_hash = hash(key)
             if not matched and key_hash == field_hash:
-                # Collision guard: byte-verify key content
-                comptime expected_len = key.byte_length()
-                if key_len == expected_len:
-                    # Byte-by-byte comparison with comptime-known bytes
-                    var key_match = True
-                    comptime key_bytes = key.as_bytes()
-                    comptime for j in range(expected_len):
-                        comptime expected_byte = key_bytes[j]
-                        if key_ptr[j] != expected_byte:
-                            key_match = False
-                    if key_match:
+                # Collision guard: verify key content matches field name
+                var key_match: Bool
+                if has_escape:
+                    key_match = decoded_key == key
+                else:
+                    comptime expected_len = key.byte_length()
+                    if key_len == expected_len:
+                        key_match = True
+                        comptime key_bytes = key.as_bytes()
+                        comptime for j in range(expected_len):
+                            comptime expected_byte = key_bytes[j]
+                            if key_ptr[j] != expected_byte:
+                                key_match = False
+                    else:
+                        key_match = False
+                if key_match:
                         # Match! Parse value into field
                         ref field = trait_downcast[_Base](r.field_ref[i](s))
                         field = _decode_leaf[type_of(field)](
