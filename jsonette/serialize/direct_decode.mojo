@@ -347,11 +347,13 @@ def _decode_object[T: _Struct](
     si += 1  # move past '{'
 
     # Walk key-value pairs
+    var closed = False
     while si < n:
         var cur_byte = ip[Int(positions[si])]
 
         # End of object
         if cur_byte == _RBRACE:
+            closed = True
             break
 
         # Skip comma between members
@@ -364,6 +366,10 @@ def _decode_object[T: _Struct](
         # Expect a key (opening quote)
         if cur_byte != _QUOTE:
             raise "DECODE: expected string key at position " + String(Int(positions[si]))
+
+        # Guard: _raw_string_span needs positions[si+1] (closing quote)
+        if si + 1 >= n:
+            raise "DECODE: truncated key (no closing quote) at position " + String(Int(positions[si]))
 
         # Extract key span: positions[si] is opening quote, positions[si+1] is closing quote
         var key_content = _raw_string_span(positions, si, ip)
@@ -443,6 +449,9 @@ def _decode_object[T: _Struct](
 
         # Skip value (advance si past it regardless of match)
         si = _skip_value(ip, positions, n, si)
+
+    if not closed:
+        raise "DECODE: unclosed object (no matching '}')"
 
     # Check all required fields were found
     comptime for i in range(fc):
