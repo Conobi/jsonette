@@ -30,4 +30,3 @@ test-parallel = true
 
 [tool.mojox.lints]
 warnings = "error"
-missing-doc-strings = "warn"
