@@ -26,3 +26,4 @@ docs/superpowers/
 .claude/
 __pycache__/
 bench/poc_*
+.mojox/
