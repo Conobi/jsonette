@@ -6,9 +6,11 @@ SIMD-accelerated JSON parser for Mojo, implementing the two-stage structural ind
 
 ```bash
 uv sync                                                        # Install dev dependencies
-uv run -- bash scripts/build.sh                                # Build jsonette.mojopkg
-uv run -- bash scripts/run_tests.sh                            # Run all tests
-uv run -- mojo run -I . -D ASSERT=all tests/<path>.mojo        # Run single test
+uv run mojox check                                             # Type-check (precompile) jsonette
+uv run mojox build                                             # Build jsonette package
+uv run mojox test                                              # Run all tests
+uv run mojox run tests/<path>.mojo                             # Run single test
+uv run -- mojo run -I . -D ASSERT=all tests/<path>.mojo        # Run single test (raw mojo)
 ```
 
 ## Package Name
@@ -70,8 +72,6 @@ tests/
 bench/                               # Microbenchmarks + controlled-host runner scripts
 
 scripts/
-├── build.sh
-├── run_tests.sh
 ├── download_corpus.py               # Benchmark corpora (twitter.json, canada.json, ...)
 ├── download_test_vectors.py         # JSONTestSuite vectors
 ├── gen_conformance_tests.py         # Generate conformance tests from vectors
