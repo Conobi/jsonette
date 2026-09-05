@@ -27,3 +27,6 @@ docs/superpowers/
 __pycache__/
 bench/poc_*
 .mojox/
+.venv/
+.cache/
+.local/
