@@ -23,7 +23,7 @@ malformed sibling is tolerated. For a strict whole-document yes/no, use
 `Parser.validate` (the no-tape full walk in `validate.mojo`).
 
 All handles borrow the owning `Reader` through an origin-tracked
-`Pointer[Reader, Self.o]` (the verified pattern; a bare `UnsafePointer` field
+`Pointer[Reader, Self.o]` (the verified pattern; a bare `Pointer` field
 miscompiles on 1.0.0b1), reaching the underlying `Parser` as `self._reader[]._parser`.
 They reuse stage 1's `structural_index` and the leaf parsers `parse_string` /
 `_parse_number` as-is. A handle is valid only while its `Reader` is alive and is
@@ -62,10 +62,10 @@ comptime _LOWER_N = UInt8(0x6E)  # 'n'
 
 
 @always_inline("nodebug")
-def _needs_slow_string_path(ptr: UnsafePointer[UInt8, _], length: Int) -> Bool:
+def _needs_slow_string_path(ptr: Pointer[UInt8, _], length: Int) -> Bool:
     """Scan for backslash or unescaped control char (< 0x20). Either requires parse_string."""
     for i in range(length):
-        if ptr[i] == _BACKSLASH or ptr[i] < UInt8(0x20):
+        if ptr[unsafe_offset=i] == _BACKSLASH or ptr[unsafe_offset=i] < UInt8(0x20):
             return True
     return False
 
@@ -120,7 +120,7 @@ struct Value[o: Origin[mut=True]](Movable):
         var input_len = self._reader[]._input_len
         var input_ptr = p.get_input_ptr()
         var pos = Int(p.positions[self._si])
-        if input_ptr[pos] != _QUOTE:
+        if input_ptr[unsafe_offset=pos] != _QUOTE:
             raise Error("get_string: value is not a string")
 
         # Fast path: when the closing-quote structural exists and the raw span
@@ -134,7 +134,7 @@ struct Value[o: Origin[mut=True]](Movable):
 
             if not _needs_slow_string_path(content_ptr, content_len):
                 return String(StringSlice(unsafe_from_utf8=Span[UInt8](
-                    ptr=content_ptr, length=content_len
+                    unsafe_ptr=content_ptr, length=content_len
                 )))
 
         # Slow path: escape present or unclosed string, fall back to full parse_string
@@ -146,12 +146,12 @@ struct Value[o: Origin[mut=True]](Movable):
         )
         var sp = p._od_scratch.unsafe_ptr()
         var ln = Int(
-            UInt32(sp[0])
-            | (UInt32(sp[1]) << 8)
-            | (UInt32(sp[2]) << 16)
-            | (UInt32(sp[3]) << 24)
+            UInt32(sp[unsafe_offset=0])
+            | (UInt32(sp[unsafe_offset=1]) << 8)
+            | (UInt32(sp[unsafe_offset=2]) << 16)
+            | (UInt32(sp[unsafe_offset=3]) << 24)
         )
-        return String(StringSlice(unsafe_from_utf8=Span[UInt8](ptr=sp + 4, length=ln)))
+        return String(StringSlice(unsafe_from_utf8=Span[UInt8](unsafe_ptr=sp.unsafe_offset(4), length=ln)))
 
     @no_inline
     def get_int(self) raises -> Int64:
@@ -168,7 +168,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.get_input_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.get_input_ptr().unsafe_offset(pos), input_len - pos)
         if r.tag != TAG_INT64 and r.tag != TAG_UINT64:
             raise Error("get_int: value is not an integer")
         # A positive integer above Int64.MAX is tagged UINT64; bitcasting it would
@@ -199,7 +199,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.get_input_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.get_input_ptr().unsafe_offset(pos), input_len - pos)
         if r.tag != TAG_UINT64 and r.tag != TAG_INT64:
             raise Error("get_uint: value is not an integer")
         if not _scalar_token_ok(
@@ -229,7 +229,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.get_input_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.get_input_ptr().unsafe_offset(pos), input_len - pos)
         if r.tag != TAG_FLOAT64 and r.tag != TAG_INT64 and r.tag != TAG_UINT64:
             raise Error("get_float: value is not a number")
         if not _scalar_token_ok(
@@ -259,7 +259,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var b = p.get_input_ptr()[pos]
+        var b = p.get_input_ptr()[unsafe_offset=pos]
         if b == _LOWER_T:
             _validate_true(p.get_input_ptr(), pos, input_len)
             if not _scalar_token_ok(p.get_input_ptr(), pos, 4, input_len):
@@ -288,7 +288,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        if p.get_input_ptr()[pos] != _LOWER_N:
+        if p.get_input_ptr()[unsafe_offset=pos] != _LOWER_N:
             return False
         _validate_null(p.get_input_ptr(), pos, input_len)
         if not _scalar_token_ok(p.get_input_ptr(), pos, 4, input_len):
@@ -299,7 +299,7 @@ struct Value[o: Origin[mut=True]](Movable):
     def _first_byte(self) -> UInt8:
         """Return the value's first input byte (the type-discriminating char)."""
         ref p = self._reader[]._parser
-        return p.get_input_ptr()[Int(p.positions[self._si])]
+        return p.get_input_ptr()[unsafe_offset=Int(p.positions[self._si])]
 
     @always_inline("nodebug")
     def is_string(self) -> Bool:
@@ -387,7 +387,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.get_input_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.get_input_ptr().unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(p.get_input_ptr(), pos, r.bytes_consumed, input_len):
             raise Error("as_int: trailing characters after number")
         if r.tag == TAG_FLOAT64:
@@ -407,7 +407,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.get_input_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.get_input_ptr().unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(p.get_input_ptr(), pos, r.bytes_consumed, input_len):
             raise Error("as_uint: trailing characters after number")
         if r.tag == TAG_FLOAT64:
@@ -429,7 +429,7 @@ struct Value[o: Origin[mut=True]](Movable):
         ref p = self._reader[]._parser
         var input_len = self._reader[]._input_len
         var pos = Int(p.positions[self._si])
-        var r = _parse_number(p.get_input_ptr() + pos, input_len - pos)
+        var r = _parse_number(p.get_input_ptr().unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(p.get_input_ptr(), pos, r.bytes_consumed, input_len):
             raise Error("as_float: trailing characters after number")
         if r.tag == TAG_FLOAT64:
@@ -523,7 +523,7 @@ struct Value[o: Origin[mut=True]](Movable):
 
 @no_inline
 def _skip_value(
-    ip: UnsafePointer[UInt8, _],
+    ip: Pointer[UInt8, _],
     positions: List[UInt32],
     n: Int,
     value_si: Int,
@@ -545,12 +545,12 @@ def _skip_value(
     """
     if value_si >= n:
         return n  # truncated: no value at this index
-    var vb = ip[Int(positions[value_si])]
+    var vb = ip[unsafe_offset=Int(positions[value_si])]
     if vb == _LBRACE or vb == _LBRACK:
         var depth = 0
         var si = value_si
         while si < n:
-            var ch = ip[Int(positions[si])]
+            var ch = ip[unsafe_offset=Int(positions[si])]
             if ch == _LBRACE or ch == _LBRACK:
                 depth += 1
             elif ch == _RBRACE or ch == _RBRACK:
@@ -567,7 +567,7 @@ def _skip_value(
 
 @always_inline("nodebug")
 def _unescaped_key_into(
-    ip: UnsafePointer[UInt8, _],
+    ip: Pointer[UInt8, _],
     key_pos: Int,
     input_len: Int,
     mut scratch: List[UInt8],
@@ -585,12 +585,12 @@ def _unescaped_key_into(
     _ = parse_string(ip, key_pos, input_len, scratch.unsafe_ptr(), 0)
     var sp = scratch.unsafe_ptr()
     var ln = Int(
-        UInt32(sp[0])
-        | (UInt32(sp[1]) << 8)
-        | (UInt32(sp[2]) << 16)
-        | (UInt32(sp[3]) << 24)
+        UInt32(sp[unsafe_offset=0])
+        | (UInt32(sp[unsafe_offset=1]) << 8)
+        | (UInt32(sp[unsafe_offset=2]) << 16)
+        | (UInt32(sp[unsafe_offset=3]) << 24)
     )
-    return String(StringSlice(unsafe_from_utf8=Span[UInt8](ptr=sp + 4, length=ln)))
+    return String(StringSlice(unsafe_from_utf8=Span[UInt8](unsafe_ptr=sp.unsafe_offset(4), length=ln)))
 
 
 struct Field[o: Origin[mut=True]](Movable):
@@ -742,7 +742,7 @@ struct Object[o: Origin[mut=True]](Movable):
         var n = len(p.positions)
         if self._si >= n:
             return True
-        var b = p.get_input_ptr()[Int(p.positions[self._si])]
+        var b = p.get_input_ptr()[unsafe_offset=Int(p.positions[self._si])]
         if b == _RBRACE:
             return True
         # A complete top-level key needs its closing-quote structural at _si+1;
@@ -774,7 +774,7 @@ struct Object[o: Origin[mut=True]](Movable):
             raise Error("next_field: top-level key has no value")
         # Advance the cursor past the value (depth-aware) and an optional comma.
         var nxt = self._skip_value(value_si)
-        if nxt < n and ip[Int(p.positions[nxt])] == _COMMA:
+        if nxt < n and ip[unsafe_offset=Int(p.positions[nxt])] == _COMMA:
             nxt += 1
         self._si = nxt
         return Field[Self.o](self._reader[], key_si, value_si, self._gen)
@@ -808,7 +808,7 @@ struct Object[o: Origin[mut=True]](Movable):
         var n = len(p.positions)
         var si = self._start_si  # this object's first key (root: 1, past '{')
         while si < n:
-            var b = ip[Int(p.positions[si])]
+            var b = ip[unsafe_offset=Int(p.positions[si])]
             if b == _RBRACE:
                 break  # end of root object
             # A complete top-level key needs at least its closing-quote structural
@@ -829,7 +829,7 @@ struct Object[o: Origin[mut=True]](Movable):
             # span is longer than its decoded form.
             var has_escape = False
             for k in range(klen):
-                if ip[pos + 1 + k] == _BACKSLASH:
+                if ip[unsafe_offset=pos + 1 + k] == _BACKSLASH:
                     has_escape = True
                     break
             var matched: Bool
@@ -843,7 +843,7 @@ struct Object[o: Origin[mut=True]](Movable):
                 if matched:
                     var kb = key.as_bytes()
                     for k in range(klen):
-                        if ip[pos + 1 + k] != kb[k]:
+                        if ip[unsafe_offset=pos + 1 + k] != kb[k]:
                             matched = False
                             break
             if matched:
@@ -851,7 +851,7 @@ struct Object[o: Origin[mut=True]](Movable):
                     raise Error("field has no value: " + key)
                 return value_si
             si = self._skip_value(value_si)  # depth-aware advance past the value
-            if si < n and ip[Int(p.positions[si])] == _COMMA:
+            if si < n and ip[unsafe_offset=Int(p.positions[si])] == _COMMA:
                 si += 1
         return -1
 
@@ -942,7 +942,7 @@ struct Array[o: Origin[mut=True]](Movable):
         var n = len(p.positions)
         if self._si >= n:
             return True
-        return p.get_input_ptr()[Int(p.positions[self._si])] == _RBRACK
+        return p.get_input_ptr()[unsafe_offset=Int(p.positions[self._si])] == _RBRACK
 
     @no_inline
     def next_element(mut self) raises -> Value[Self.o]:
@@ -965,7 +965,7 @@ struct Array[o: Origin[mut=True]](Movable):
             raise Error("next_element: cursor past end of array")
         # Advance the cursor past this element (depth-aware) and an optional comma.
         var nxt = _skip_value(ip, p.positions, n, elem_si)
-        if nxt < n and ip[Int(p.positions[nxt])] == _COMMA:
+        if nxt < n and ip[unsafe_offset=Int(p.positions[nxt])] == _COMMA:
             nxt += 1
         self._si = nxt
         return Value[Self.o](self._reader[], elem_si, self._gen)

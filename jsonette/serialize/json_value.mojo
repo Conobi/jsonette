@@ -64,6 +64,17 @@ struct JsonValue(JsonSerializable, Copyable, Movable):
     var vals: List[JsonValue]
     """Object values, parallel to `keys` (live when `tag == _TAG_OBJECT`)."""
 
+    def __deinit__(deinit self):
+        """Destroy the value and its nested children.
+
+        `JsonValue` is recursive -- `arr` and `vals` are `List[JsonValue]` --
+        so Mojo cannot synthesise a destructor for it: the type would have to
+        be `Deinitable` before it is complete. Declaring the destructor
+        explicitly closes that cycle; the fields are then destroyed field-wise
+        as usual.
+        """
+        pass
+
     def __init__(out self):
         """Create a JSON `null`."""
         self.tag = _TAG_NULL
@@ -193,7 +204,9 @@ struct JsonValue(JsonSerializable, Copyable, Movable):
         self.keys.append(key^)
         self.vals.append(v^)
 
-    def __getitem__(mut self, var key: String) -> ref [self.vals] JsonValue:
+    def __getitem__(
+        mut self, var key: String
+    ) -> ref [origin_of(self.vals)._get_owned_interior["element"]] JsonValue:
         """Return a mutable reference to the value at `key` (making `self` an
         object), auto-vivifying an empty object at `key` if absent.
 

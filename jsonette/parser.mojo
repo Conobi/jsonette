@@ -13,7 +13,7 @@ Five private build paths drive the stages:
   * `_build_index` runs Stage 1 only, for the lazy On-Demand reader.
   * `_build_nocopy` like `_build` but skips the memcpy — sets `_input_addr`
     directly to the caller's pre-padded buffer (true zero-copy for DOM).
-  * `_build_index_nocopy` like `_build_index` but accepts UnsafePointer.
+  * `_build_index_nocopy` like `_build_index` but accepts Pointer.
     Currently still copies internally (Mojo 1.0.0b2 OD codegen workaround).
   * `validate` runs Stage 1 then a strict grammar walk that materialises nothing.
 
@@ -24,7 +24,7 @@ via the check fused into Stage 1 (`structural_index[validate_utf8=True]`), so
 supplies a pre-loaded byte buffer.
 """
 
-from std.memory import memcpy, memset
+from std.memory import unsafe_memcpy, unsafe_memset
 
 from jsonette.tape import Tape
 from jsonette.error import format_parse_error, ErrorCode
@@ -64,8 +64,8 @@ struct Parser(Movable):
 
     `_input_addr` stores the raw address of the input buffer as an `Int`. All
     stage calls and On-Demand reads reconstruct a pointer from this address via
-    `get_input_ptr()`. Stored as `Int` (not `UnsafePointer`) to work around a
-    Mojo 1.0.0b2 miscompile reading UnsafePointer struct fields through
+    `get_input_ptr()`. Stored as `Int` (not `Pointer`) to work around a
+    Mojo 1.0.0b2 miscompile reading Pointer struct fields through
     origin-tracked Pointer chains. In the copy paths and in `_build_index_nocopy`
     (OD codegen workaround) it holds the address of `padded`; in `_build_nocopy`
     (DOM true zero-copy) it holds the caller's buffer address."""
@@ -75,12 +75,12 @@ struct Parser(Movable):
     var positions: List[UInt32]       # reusable Stage 1 structural-offset buffer (grows only)
     var _tape: Tape                   # parser-owned tape, reused across parses (grows only)
     var _od_scratch: List[UInt8]      # reusable On-Demand string-unescape scratch (grows only)
-    var _input_addr: Int              # raw address of input buffer (workaround: Int, not UnsafePointer)
+    var _input_addr: Int              # raw address of input buffer (workaround: Int, not Pointer)
 
     @always_inline("nodebug")
-    def get_input_ptr(self) -> UnsafePointer[UInt8, MutAnyOrigin]:
+    def get_input_ptr(self) -> Pointer[UInt8, MutAnyOrigin]:
         """Reconstruct a pointer to the input buffer from the stored address."""
-        return UnsafePointer[UInt8, MutAnyOrigin](unsafe_from_address=self._input_addr)
+        return Pointer[UInt8, MutAnyOrigin](unsafe_from_address=self._input_addr)
 
     def __init__(out self):
         self.container_stack = List[UInt32](capacity=2048)  # MAX_DEPTH * 2
@@ -121,8 +121,8 @@ struct Parser(Movable):
             # reuses the existing buffer and contributes 0 to allocs/op.
             record_alloc()
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
-        memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        unsafe_memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        unsafe_memset(self.padded.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
         self._input_addr = Int(self.padded.unsafe_ptr())
 
         # Reusable structural-offset buffer: grows only when a larger input needs
@@ -149,12 +149,12 @@ struct Parser(Movable):
         if len(self.padded) < padded_len:
             record_alloc()
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
-        memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        unsafe_memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        unsafe_memset(self.padded.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
         self._input_addr = Int(self.padded.unsafe_ptr())
         structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
 
-    def _build_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+    def _build_nocopy(mut self, data: Pointer[UInt8, MutAnyOrigin], input_len: Int) raises:
         """Build tape from a caller-owned padded buffer (no memcpy).
 
         The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
@@ -171,7 +171,7 @@ struct Parser(Movable):
         except e:
             raise format_parse_error(e.code, e.position)
 
-    def _build_index_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+    def _build_index_nocopy(mut self, data: Pointer[UInt8, MutAnyOrigin], input_len: Int) raises:
         """Run Stage 1 only from a caller-owned padded buffer (no memcpy).
 
         Same padding contract as _build_nocopy. The caller must keep the buffer
@@ -188,8 +188,8 @@ struct Parser(Movable):
         if len(self.padded) < padded_len:
             record_alloc()
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
-        memcpy(dest=self.padded.unsafe_ptr(), src=data, count=input_len)
-        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        unsafe_memcpy(dest=self.padded.unsafe_ptr(), src=data, count=input_len)
+        unsafe_memset(self.padded.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
         self._input_addr = Int(self.padded.unsafe_ptr())
         structural_index[validate_utf8=True](self.get_input_ptr(), input_len, self.positions)
 
@@ -224,8 +224,8 @@ struct Parser(Movable):
         if len(self.padded) < padded_len:
             record_alloc()
             self.padded = List[UInt8](unsafe_uninit_length=padded_len)
-        memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-        memset(self.padded.unsafe_ptr() + input_len, 0, padded_len - input_len)
+        unsafe_memcpy(dest=self.padded.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+        unsafe_memset(self.padded.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
         self._input_addr = Int(self.padded.unsafe_ptr())
 
         # Stage 1 only — no tape is built on the validate path.

@@ -80,7 +80,7 @@ comptime _FRAME_ARR: Int = 1  # this open container is an array
 
 
 def _validate_document(
-    ip: UnsafePointer[UInt8, _],
+    ip: Pointer[UInt8, _],
     positions: List[UInt32],
     n: Int,
     input_len: Int,
@@ -113,7 +113,7 @@ def _validate_document(
 
     while si < n:
         var pos = Int(positions[si])
-        var b = ip[pos]
+        var b = ip[unsafe_offset=pos]
 
         if (
             state == _ST_DOC_BEGIN
@@ -136,7 +136,7 @@ def _validate_document(
                 si += 2  # a string occupies two structurals
                 state = after_scalar
             elif b == _MINUS or (b >= _DIGIT0 and b <= _DIGIT9):
-                var r = _parse_number(ip + pos, input_len - pos)
+                var r = _parse_number(ip.unsafe_offset(pos), input_len - pos)
                 if not _scalar_token_ok(ip, pos, r.bytes_consumed, input_len):
                     raise ParseError(
                         code=ErrorCode.NUMBER_ERROR.value, position=pos

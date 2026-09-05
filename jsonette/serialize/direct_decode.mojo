@@ -25,8 +25,8 @@ from jsonette.tape import TAG_INT64, TAG_UINT64, TAG_FLOAT64
 from jsonette.ondemand.ondemand import _skip_value
 
 
-comptime _Base = Movable & ImplicitlyDestructible
-comptime _Struct = Defaultable & Movable & ImplicitlyDestructible
+comptime _Base = Movable & Deinitable
+comptime _Struct = Defaultable & Movable & Deinitable
 
 comptime _QUOTE = UInt8(0x22)     # '"'
 comptime _BACKSLASH = UInt8(0x5C) # '\'
@@ -39,7 +39,7 @@ comptime _LOWER_F = UInt8(0x66)   # 'f'
 
 
 def _decode_string(
-    ip: UnsafePointer[UInt8, _],
+    ip: Pointer[UInt8, _],
     positions: List[UInt32],
     si: Int,
     input_len: Int,
@@ -68,7 +68,7 @@ def _decode_string(
     # Fast path: no escapes needed — construct String from raw input span
     if span_is_clean(content_ptr, content_len):
         return String(StringSlice(unsafe_from_utf8=Span[UInt8](
-            ptr=content_ptr, length=content_len
+            unsafe_ptr=content_ptr, length=content_len
         )))
 
     # Slow path: parse_string with escape handling
@@ -81,18 +81,18 @@ def _decode_string(
     # parse_string writes [u32 len LE][content bytes][NUL] at buf_start=0
     var sp = scratch.unsafe_ptr()
     var str_len = Int(
-        UInt32(sp[0])
-        | (UInt32(sp[1]) << 8)
-        | (UInt32(sp[2]) << 16)
-        | (UInt32(sp[3]) << 24)
+        UInt32(sp[unsafe_offset=0])
+        | (UInt32(sp[unsafe_offset=1]) << 8)
+        | (UInt32(sp[unsafe_offset=2]) << 16)
+        | (UInt32(sp[unsafe_offset=3]) << 24)
     )
     return String(StringSlice(unsafe_from_utf8=Span[UInt8](
-        ptr=sp + 4, length=str_len
+        unsafe_ptr=sp.unsafe_offset(4), length=str_len
     )))
 
 
 def _decode_leaf[T: _Base](
-    ip: UnsafePointer[UInt8, _],
+    ip: Pointer[UInt8, _],
     positions: List[UInt32],
     si: Int,
     input_len: Int,
@@ -119,7 +119,7 @@ def _decode_leaf[T: _Base](
         The decoded value of type T.
     """
     var pos = Int(positions.unsafe_get(si))
-    var b = ip[pos]
+    var b = ip[unsafe_offset=pos]
 
     comptime tn = reflect[T].name()
 
@@ -143,7 +143,7 @@ def _decode_leaf[T: _Base](
             raise "DECODE: expected bool at position " + String(pos)
 
     elif tn == "SIMD[DType.float64, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag == TAG_FLOAT64:
@@ -154,7 +154,7 @@ def _decode_leaf[T: _Base](
             result = rebind_var[T](Float64(nr.value))
 
     elif tn == "SIMD[DType.float32, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         var d: Float64
@@ -170,7 +170,7 @@ def _decode_leaf[T: _Base](
         result = rebind_var[T](Float32(d))
 
     elif tn == "Int":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag == TAG_INT64:
@@ -183,7 +183,7 @@ def _decode_leaf[T: _Base](
             raise "DECODE: expected integer at position " + String(pos)
 
     elif tn == "SIMD[DType.int64, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag == TAG_INT64:
@@ -196,7 +196,7 @@ def _decode_leaf[T: _Base](
             raise "DECODE: expected integer at position " + String(pos)
 
     elif tn == "SIMD[DType.int32, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
@@ -209,7 +209,7 @@ def _decode_leaf[T: _Base](
         result = rebind_var[T](Int32(v))
 
     elif tn == "SIMD[DType.int16, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
@@ -222,7 +222,7 @@ def _decode_leaf[T: _Base](
         result = rebind_var[T](Int16(v))
 
     elif tn == "SIMD[DType.int8, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
@@ -235,7 +235,7 @@ def _decode_leaf[T: _Base](
         result = rebind_var[T](Int8(v))
 
     elif tn == "SIMD[DType.uint64, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag == TAG_UINT64:
@@ -249,7 +249,7 @@ def _decode_leaf[T: _Base](
             raise "DECODE: expected unsigned integer at position " + String(pos)
 
     elif tn == "SIMD[DType.uint32, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
@@ -262,7 +262,7 @@ def _decode_leaf[T: _Base](
         result = rebind_var[T](UInt32(uval))
 
     elif tn == "SIMD[DType.uint16, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
@@ -275,7 +275,7 @@ def _decode_leaf[T: _Base](
         result = rebind_var[T](UInt16(uval))
 
     elif tn == "SIMD[DType.uint8, 1]":
-        var nr = _parse_number(ip + pos, input_len - pos)
+        var nr = _parse_number(ip.unsafe_offset(pos), input_len - pos)
         if not _scalar_token_ok(ip, pos, nr.bytes_consumed, input_len):
             raise "DECODE: invalid number at position " + String(pos)
         if nr.tag != TAG_INT64 and nr.tag != TAG_UINT64:
@@ -293,7 +293,7 @@ def _decode_leaf[T: _Base](
 
 def _decode_object[T: _Struct](
     positions: List[UInt32],
-    ip: UnsafePointer[UInt8, _],
+    ip: Pointer[UInt8, _],
     input_len: Int,
     root_pos: Int,
     mut scratch: List[UInt8],
@@ -321,7 +321,7 @@ def _decode_object[T: _Struct](
     Returns:
         A freshly constructed T with all fields populated from the JSON.
     """
-    if ip[root_pos] != _LBRACE:
+    if ip[unsafe_offset=root_pos] != _LBRACE:
         raise "DECODE: expected '{' at position " + String(root_pos)
 
     s = type_of(s)()
@@ -349,7 +349,7 @@ def _decode_object[T: _Struct](
     # Walk key-value pairs
     var closed = False
     while si < n:
-        var cur_byte = ip[Int(positions[si])]
+        var cur_byte = ip[unsafe_offset=Int(positions[si])]
 
         # End of object
         if cur_byte == _RBRACE:
@@ -361,7 +361,7 @@ def _decode_object[T: _Struct](
             si += 1
             if si >= n:
                 raise "DECODE: truncated object after comma"
-            cur_byte = ip[Int(positions[si])]
+            cur_byte = ip[unsafe_offset=Int(positions[si])]
 
         # Expect a key (opening quote)
         if cur_byte != _QUOTE:
@@ -379,7 +379,7 @@ def _decode_object[T: _Struct](
         # Check for escaped keys (scan for backslash)
         var has_escape = False
         for k in range(key_len):
-            if key_ptr[k] == _BACKSLASH:
+            if key_ptr[unsafe_offset=k] == _BACKSLASH:
                 has_escape = True
                 break
 
@@ -394,22 +394,22 @@ def _decode_object[T: _Struct](
             _ = parse_string(ip, kpos, input_len, scratch.unsafe_ptr(), 0)
             var sp = scratch.unsafe_ptr()
             var ln = Int(
-                UInt32(sp[0])
-                | (UInt32(sp[1]) << 8)
-                | (UInt32(sp[2]) << 16)
-                | (UInt32(sp[3]) << 24)
+                UInt32(sp[unsafe_offset=0])
+                | (UInt32(sp[unsafe_offset=1]) << 8)
+                | (UInt32(sp[unsafe_offset=2]) << 16)
+                | (UInt32(sp[unsafe_offset=3]) << 24)
             )
-            decoded_key = String(StringSlice(unsafe_from_utf8=Span[UInt8](ptr=sp + 4, length=ln)))
+            decoded_key = String(StringSlice(unsafe_from_utf8=Span[UInt8](unsafe_ptr=sp.unsafe_offset(4), length=ln)))
             key_hash = hash(decoded_key)
         else:
-            var key_span = Span[UInt8](ptr=key_ptr, length=key_len)
+            var key_span = Span[UInt8](unsafe_ptr=key_ptr, length=key_len)
             key_hash = hash(StringSlice(unsafe_from_utf8=key_span))
 
         # Move past key (opening quote + closing quote)
         si += 2
 
         # Expect colon — the colon is the next structural
-        if si >= n or ip[Int(positions[si])] != _COLON:
+        if si >= n or ip[unsafe_offset=Int(positions[si])] != _COLON:
             raise "DECODE: expected ':' after key at position " + String(Int(positions[si - 1]))
         si += 1  # move past colon
 
@@ -434,13 +434,16 @@ def _decode_object[T: _Struct](
                         comptime key_bytes = key.as_bytes()
                         comptime for j in range(expected_len):
                             comptime expected_byte = key_bytes[j]
-                            if key_ptr[j] != expected_byte:
+                            if key_ptr[unsafe_offset=j] != expected_byte:
                                 key_match = False
                     else:
                         key_match = False
                 if key_match:
                         # Match! Parse value into field
-                        ref field = trait_downcast[_Base](r.field_ref[i](s))
+                        ref field = r.field_ref[i](s)
+                        comptime assert conforms_to(
+                            type_of(field), _Base
+                        ), "decoded struct fields must be Movable and Deinitable"
                         field = _decode_leaf[type_of(field)](
                             ip, positions, si, input_len, scratch
                         )

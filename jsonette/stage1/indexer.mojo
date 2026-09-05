@@ -35,7 +35,7 @@ from jsonette._alloc_count import record_alloc
 
 def structural_index[
     validate_utf8: Bool = False
-](input_ptr: UnsafePointer[UInt8, _], input_len: Int, mut positions: List[UInt32]) raises:
+](input_ptr: Pointer[UInt8, _], input_len: Int, mut positions: List[UInt32]) raises:
     """Stage 1 main entry point: fill `positions` with structural character offsets.
 
     Processes input in 64-byte chunks using SIMD classification, escape/string
@@ -68,7 +68,7 @@ def structural_index[
     # 8-at-a-time emit can over-write up to 7 entries past the true count, so the
     # buffer carries EMIT_SLACK extra slots; those over-writes are never read.
     comptime EMIT_SLACK = 8
-    if positions.capacity < input_len + EMIT_SLACK:
+    if positions.capacity() < input_len + EMIT_SLACK:
         record_alloc()  # genuine grow: the sole heap alloc on this path
         positions.reserve(input_len + EMIT_SLACK)
     # Length must cover the raw-pointer write phase (writer indexes [write_pos]).
@@ -113,7 +113,7 @@ def structural_index[
                     var masked = SIMD[DType.uint16, 16](chunk_bits) & bit_tests
                     compressed_store(
                         candidates,
-                        out_ptr + write_pos,
+                        out_ptr.unsafe_offset(write_pos),
                         masked.cast[DType.bool](),
                     )
                     write_pos += Int(pop_count(UInt64(chunk_bits)))
@@ -124,21 +124,21 @@ def structural_index[
             var w = write_pos
             var done = 0
             while done < cnt:
-                out_ptr[w + 0] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 0] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 1] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 1] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 2] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 2] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 3] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 3] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 4] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 4] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 5] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 5] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 6] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 6] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
-                out_ptr[w + 7] = base_idx + UInt32(count_trailing_zeros(b))
+                out_ptr[unsafe_offset=w + 7] = base_idx + UInt32(count_trailing_zeros(b))
                 b = b & (b - 1)
                 w += 8
                 done += 8
@@ -146,7 +146,7 @@ def structural_index[
 
     for chunk_idx in range(num_chunks):
         var base_idx = UInt32(chunk_idx * 64)
-        var input = SimdInput.load(input_ptr + Int(base_idx))
+        var input = SimdInput.load(input_ptr.unsafe_offset(Int(base_idx)))
 
         comptime if validate_utf8:
             utf8_checker.check_next_input(input)
@@ -192,7 +192,7 @@ def structural_index[
     # structurals from the final chunk's zero-padding — forms a contiguous tail.
     # Trim that tail instead of filtering all n positions (was an O(n) pass with
     # a branch per structural that filtered only ~1 entry).
-    while write_pos > 0 and Int(out_ptr[write_pos - 1]) >= input_len:
+    while write_pos > 0 and Int(out_ptr[unsafe_offset=write_pos - 1]) >= input_len:
         write_pos -= 1
     # Shrink to actual structural count so Stage 2 sees the right len().
     positions.resize(write_pos, UInt32(0))

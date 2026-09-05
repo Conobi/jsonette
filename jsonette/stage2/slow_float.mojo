@@ -12,6 +12,7 @@ value sits in [0.5, 1), then extract 1 + 52 mantissa bits with banker's
 rounding. Only bounded fixed-size integer arithmetic is needed; no
 arbitrary-precision rationals.
 """
+from std.builtin.globals import global_constant
 
 comptime MAX_DIGITS: Int = 800
 """Big-endian digit array capacity (matches Go strconv.decimal).
@@ -77,7 +78,7 @@ def _trim(mut a: Decimal):
 
 
 def parse_decimal_token(
-    ptr: UnsafePointer[UInt8, _],
+    ptr: Pointer[UInt8, _],
     token_start: Int,
     token_end: Int,
     negative: Bool,
@@ -95,8 +96,8 @@ def parse_decimal_token(
 
     var i = token_start
     # Skip an in-range leading sign (caller usually strips '-').
-    if i < token_end and (ptr[i] == UInt8(0x2D) or ptr[i] == UInt8(0x2B)):
-        if ptr[i] == UInt8(0x2D):
+    if i < token_end and (ptr[unsafe_offset=i] == UInt8(0x2D) or ptr[unsafe_offset=i] == UInt8(0x2B)):
+        if ptr[unsafe_offset=i] == UInt8(0x2D):
             a.neg = True
         i += 1
 
@@ -107,7 +108,7 @@ def parse_decimal_token(
     # count even when the fraction is truncated).
     var frac = 0
     while i < token_end:
-        var c = ptr[i]
+        var c = ptr[unsafe_offset=i]
         if c == UInt8(0x2E):  # '.'
             saw_dot = True
             i += 1
@@ -151,16 +152,16 @@ def parse_decimal_token(
     a.dp += a.nd - frac
 
     # Optional explicit exponent.
-    if i < token_end and (ptr[i] == UInt8(0x65) or ptr[i] == UInt8(0x45)):
+    if i < token_end and (ptr[unsafe_offset=i] == UInt8(0x65) or ptr[unsafe_offset=i] == UInt8(0x45)):
         i += 1
         var exp_neg = False
-        if i < token_end and (ptr[i] == UInt8(0x2B) or ptr[i] == UInt8(0x2D)):
-            exp_neg = ptr[i] == UInt8(0x2D)
+        if i < token_end and (ptr[unsafe_offset=i] == UInt8(0x2B) or ptr[unsafe_offset=i] == UInt8(0x2D)):
+            exp_neg = ptr[unsafe_offset=i] == UInt8(0x2D)
             i += 1
         var exp = 0
-        while i < token_end and ptr[i] >= UInt8(0x30) and ptr[i] <= UInt8(0x39):
+        while i < token_end and ptr[unsafe_offset=i] >= UInt8(0x30) and ptr[unsafe_offset=i] <= UInt8(0x39):
             if exp < 100000:  # clamp; anything this large saturates dp anyway
-                exp = exp * 10 + Int(ptr[i] - UInt8(0x30))
+                exp = exp * 10 + Int(ptr[unsafe_offset=i] - UInt8(0x30))
             i += 1
         if exp_neg:
             a.dp -= exp
@@ -344,7 +345,8 @@ def _left_cutoff(k: Int) -> StaticString:
 
 def _left_shift(mut a: Decimal, k: Int):
     """Binary left shift (multiply by 2^k); k <= MAX_SHIFT."""
-    var delta = _LEFT_DELTA[k]
+    ref left_delta = global_constant[_LEFT_DELTA]()
+    var delta = left_delta[k]
     if _prefix_less_than(a, _left_cutoff(k)):
         delta -= 1
 
@@ -523,7 +525,7 @@ def decimal_to_double_bits(mut a: Decimal) -> UInt64:
         if a.dp >= 9:  # len(_POWTAB)
             n = 27
         else:
-            n = _POWTAB[a.dp]
+            n = global_constant[_POWTAB]()[a.dp]
         _shift(a, -n)
         exp += n
     while a.dp < 0 or (a.dp == 0 and a.d[0] < 5):
@@ -531,7 +533,7 @@ def decimal_to_double_bits(mut a: Decimal) -> UInt64:
         if -a.dp >= 9:
             n = 27
         else:
-            n = _POWTAB[-a.dp]
+            n = global_constant[_POWTAB]()[-a.dp]
         _shift(a, n)
         exp -= n
 
@@ -581,7 +583,7 @@ def _overflow_bits(neg: Bool) -> UInt64:
 
 
 def parse_float_slow(
-    ptr: UnsafePointer[UInt8, _],
+    ptr: Pointer[UInt8, _],
     token_start: Int,
     token_end: Int,
     negative: Bool,

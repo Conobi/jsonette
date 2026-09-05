@@ -25,7 +25,7 @@ def _digit_value(b: UInt8) -> UInt64:
 
 
 @always_inline("nodebug")
-def _load_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
+def _load_8(ptr: Pointer[UInt8, _], pos: Int) -> UInt64:
     """Load 8 bytes at ptr+pos as one little-endian UInt64 (unaligned-safe).
 
     Shared by `_are_8_digits` and `_parse_8_digits` so detect-true guarantees
@@ -35,11 +35,11 @@ def _load_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
     defense-in-depth backstop, not a license for an unbounded over-read.
     """
     comptime assert is_little_endian(), "SWAR number parsing requires a little-endian target"
-    return (ptr + pos).bitcast[UInt64]().load[alignment=1]()
+    return (ptr.unsafe_offset(pos)).unsafe_bitcast[UInt64]().unsafe_load[alignment=1]()
 
 
 @always_inline("nodebug")
-def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
+def _are_8_digits(ptr: Pointer[UInt8, _], pos: Int) -> Bool:
     """True iff 8 bytes at ptr+pos are all ASCII digits ('0'-'9').
 
     In-register SWAR (`is_made_of_eight_digits_fast`): a byte is a digit iff its
@@ -59,7 +59,7 @@ def _are_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
 
 
 @always_inline("nodebug")
-def _parse_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
+def _parse_8_digits(ptr: Pointer[UInt8, _], pos: Int) -> UInt64:
     """Parse exactly 8 ASCII digits to a UInt64. Caller ensures all are digits.
 
     In-register SWAR (Lemire `parse_eight_digits_unrolled`): subtract '0' from
@@ -78,7 +78,7 @@ def _parse_8_digits(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
     return (((v & mask) * mul1) + (((v >> 16) & mask) * mul2)) >> 32
 
 
-def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError -> NumberResult:
+def _parse_number(ptr: Pointer[UInt8, _], max_len: Int) raises ParseError -> NumberResult:
     """Parse a JSON number starting at ptr[0].
 
     Returns tag ('l'/'u'/'d'), raw value bits, and bytes consumed.
@@ -99,14 +99,14 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     var pos = 0
 
     # Branchless optional leading minus: advance pos by the bool's int value.
-    var negative = ptr[pos] == UInt8(0x2D)  # '-'
+    var negative = ptr[unsafe_offset=pos] == UInt8(0x2D)  # '-'
     pos += Int(negative)
 
-    if pos >= max_len or not _is_digit(ptr[pos]):
+    if pos >= max_len or not _is_digit(ptr[unsafe_offset=pos]):
         raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
 
     # Leading zero check: "01" is invalid, "0" and "0.x" are ok
-    if ptr[pos] == UInt8(0x30) and pos + 1 < max_len and _is_digit(ptr[pos + 1]):
+    if ptr[unsafe_offset=pos] == UInt8(0x30) and pos + 1 < max_len and _is_digit(ptr[unsafe_offset=pos + 1]):
         raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
 
     # Parse integer digits
@@ -133,8 +133,8 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     # Scalar tail: remaining digits.
     # A single digit can only overflow UInt64 once 19 digits are already held
     # (UInt64.MAX has 20 digits), so gate the guard on `digit_count >= 19`.
-    while pos < max_len and _is_digit(ptr[pos]):
-        var digit = _digit_value(ptr[pos])
+    while pos < max_len and _is_digit(ptr[unsafe_offset=pos]):
+        var digit = _digit_value(ptr[unsafe_offset=pos])
         if digit_count >= 19 and integer_part > (UInt64.MAX - digit) // 10:
             overflowed = True
         else:
@@ -152,9 +152,9 @@ def _parse_number(ptr: UnsafePointer[UInt8, _], max_len: Int) raises ParseError 
     # leave the stray '.' for the structural validator.
     var is_float = False
     if pos < max_len:
-        var b = ptr[pos]
+        var b = ptr[unsafe_offset=pos]
         if b == UInt8(0x2E):  # '.'
-            if pos + 1 >= max_len or _is_digit(ptr[pos + 1]):
+            if pos + 1 >= max_len or _is_digit(ptr[unsafe_offset=pos + 1]):
                 is_float = True
         elif b == UInt8(0x65) or b == UInt8(0x45):  # 'e' / 'E'
             is_float = True
@@ -195,7 +195,7 @@ def _finish_integer(negative: Bool, integer_part: UInt64, pos: Int) raises Parse
 
 
 def _parse_float(
-    ptr: UnsafePointer[UInt8, _],
+    ptr: Pointer[UInt8, _],
     mut pos: Int,
     max_len: Int,
     negative: Bool,
@@ -215,9 +215,9 @@ def _parse_float(
     # future changes in the digit-counting logic.
     var too_many_digits = (digit_count > 19) or overflowed
 
-    if pos < max_len and ptr[pos] == UInt8(0x2E):
+    if pos < max_len and ptr[unsafe_offset=pos] == UInt8(0x2E):
         pos += 1
-        if pos >= max_len or not _is_digit(ptr[pos]):
+        if pos >= max_len or not _is_digit(ptr[unsafe_offset=pos]):
             raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
         # SWAR fast path for fractional digits
         while pos + 8 <= max_len and total_digits + 8 <= 19 and _are_8_digits(ptr, pos):
@@ -227,9 +227,9 @@ def _parse_float(
             total_digits += 8
             pos += 8
         # Scalar tail
-        while pos < max_len and _is_digit(ptr[pos]):
+        while pos < max_len and _is_digit(ptr[unsafe_offset=pos]):
             if total_digits < 19:
-                mantissa = mantissa * 10 + _digit_value(ptr[pos])
+                mantissa = mantissa * 10 + _digit_value(ptr[unsafe_offset=pos])
             else:
                 too_many_digits = True
             frac_digits += 1
@@ -237,15 +237,15 @@ def _parse_float(
             pos += 1
 
     var parsed_exponent = 0
-    if pos < max_len and (ptr[pos] == UInt8(0x65) or ptr[pos] == UInt8(0x45)):
+    if pos < max_len and (ptr[unsafe_offset=pos] == UInt8(0x65) or ptr[unsafe_offset=pos] == UInt8(0x45)):
         pos += 1
         var exp_negative = False
-        if pos < max_len and (ptr[pos] == UInt8(0x2B) or ptr[pos] == UInt8(0x2D)):
-            exp_negative = ptr[pos] == UInt8(0x2D)
+        if pos < max_len and (ptr[unsafe_offset=pos] == UInt8(0x2B) or ptr[unsafe_offset=pos] == UInt8(0x2D)):
+            exp_negative = ptr[unsafe_offset=pos] == UInt8(0x2D)
             pos += 1
-        if pos >= max_len or not _is_digit(ptr[pos]):
+        if pos >= max_len or not _is_digit(ptr[unsafe_offset=pos]):
             raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
-        while pos < max_len and _is_digit(ptr[pos]):
+        while pos < max_len and _is_digit(ptr[unsafe_offset=pos]):
             # Clamp the accumulator like the slow path (slow_float._parse_decimal):
             # a 19+ digit exponent would overflow Int (Mojo wraps silently). Any
             # exponent this large already saturates the result to inf or 0.0 via
@@ -254,7 +254,7 @@ def _parse_float(
             # over every exponent digit so the token boundary is unchanged.
             if parsed_exponent < 100000:
                 parsed_exponent = (
-                    parsed_exponent * 10 + Int(_digit_value(ptr[pos]))
+                    parsed_exponent * 10 + Int(_digit_value(ptr[unsafe_offset=pos]))
                 )
             pos += 1
         if exp_negative:
@@ -276,7 +276,7 @@ def _parse_float(
 
 @always_inline("nodebug")
 def _scalar_token_ok(
-    ip: UnsafePointer[UInt8, _], pos: Int, bytes_consumed: Int, input_len: Int
+    ip: Pointer[UInt8, _], pos: Int, bytes_consumed: Int, input_len: Int
 ) -> Bool:
     """Return True iff the scalar token at ip[pos] ending after bytes_consumed sits at a clean boundary.
 
@@ -301,7 +301,7 @@ def _scalar_token_ok(
     var end = pos + bytes_consumed  # always <= input_len (max_len = input_len - pos)
     if end >= input_len:  # EOF terminator — check FIRST, never read padding
         return True
-    var t = ip[end]  # in-bounds: input buffer has 128 NUL bytes of padding
+    var t = ip[unsafe_offset=end]  # in-bounds: input buffer has 128 NUL bytes of padding
     return (
         t == 0x20
         or t == 0x09

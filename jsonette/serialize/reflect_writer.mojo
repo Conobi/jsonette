@@ -36,32 +36,31 @@ def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
     reached. Use `UInt64` or `Int` instead. Supported sized unsigned types are
     `UInt8`, `UInt16`, `UInt32`, and `UInt64`.
     """
-    comptime tn = reflect[T].name()
-    comptime if tn == "Int":
+    comptime if T == Int:
         w.write_int(Int64(rebind[Int](value)))
-    elif tn == "Bool":
+    elif T == Bool:
         w.write_bool(rebind[Bool](value))
-    elif tn == "String":
+    elif T == String:
         w.write_escaped_str(rebind[String](value))
-    elif tn == "SIMD[DType.float64, 1]":
+    elif T == Float64:
         w.write_float(rebind[Float64](value))
-    elif tn == "SIMD[DType.float32, 1]":
+    elif T == Float32:
         w.write_float(Float64(rebind[Float32](value)))
-    elif tn == "SIMD[DType.int64, 1]":
+    elif T == Int64:
         w.write_int(rebind[Int64](value))
-    elif tn == "SIMD[DType.int32, 1]":
+    elif T == Int32:
         w.write_int(Int64(rebind[Int32](value)))
-    elif tn == "SIMD[DType.int16, 1]":
+    elif T == Int16:
         w.write_int(Int64(rebind[Int16](value)))
-    elif tn == "SIMD[DType.int8, 1]":
+    elif T == Int8:
         w.write_int(Int64(rebind[Int8](value)))
-    elif tn == "SIMD[DType.uint64, 1]":
+    elif T == UInt64:
         w.write_uint(rebind[UInt64](value))
-    elif tn == "SIMD[DType.uint32, 1]":
+    elif T == UInt32:
         w.write_uint(UInt64(rebind[UInt32](value)))
-    elif tn == "SIMD[DType.uint16, 1]":
+    elif T == UInt16:
         w.write_uint(UInt64(rebind[UInt16](value)))
-    elif tn == "SIMD[DType.uint8, 1]":
+    elif T == UInt8:
         w.write_uint(UInt64(rebind[UInt8](value)))
     elif reflect[T].is_struct():
         comptime r = reflect[T]
@@ -72,7 +71,7 @@ def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
             comptime if i > 0:
                 w.raw(",")
             w.newline_indent()
-            w.write_escaped_str(String(names[i]))
+            w.write_escaped_str(String(comptime (names[i])))
             w.colon()
             emit(r.field_ref[i](value), w)
         w.depth -= 1
@@ -80,7 +79,9 @@ def _default_emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
             w.newline_indent()
         w.raw("}")
     else:
-        raise "JSON_ENCODE_ERROR: unsupported type '" + String(tn) + "'"
+        raise "JSON_ENCODE_ERROR: unsupported type '" + String(
+            reflect[T].name()
+        ) + "'"
 
 
 def emit[T: AnyType, //](value: T, mut w: JsonWriter) raises:
@@ -128,7 +129,7 @@ __extension Optional(JsonSerializable):
 __extension Dict(JsonSerializable):
     def write_json(self, mut w: JsonWriter) raises:
         """Emit a JSON object. Keys must be `String` (compile-time enforced)."""
-        comptime assert reflect[Self.K].name() == "String", "JSON object keys must be String"
+        comptime assert Self.K == String, "JSON object keys must be String"
         if len(self) == 0:
             w.raw("{}")
             return

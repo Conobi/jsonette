@@ -11,7 +11,8 @@ String buffer layout: [UInt32 length (LE)][UTF-8 bytes][0x00 null terminator]
 from std.memory import pack_bits
 from jsonette.error import ParseError, ErrorCode
 from std.bit import count_trailing_zeros
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
+from std.builtin.globals import global_constant
 
 
 # --- Escape lookup table (comptime) ---
@@ -43,8 +44,8 @@ comptime _ESCAPE_LUT: InlineArray[UInt8, 256] = _build_escape_table()
 def _raw_string_span[o: Origin](
     positions: List[UInt32],
     si: Int,
-    input_ptr: UnsafePointer[UInt8, o],
-) -> Tuple[UnsafePointer[UInt8, o], Int]:
+    input_ptr: Pointer[UInt8, o],
+) -> Tuple[Pointer[UInt8, o], Int]:
     """Return a raw pointer and byte length for the string content at structural index `si`.
 
     Reads the opening-quote position at positions[si] and the closing-quote
@@ -58,7 +59,7 @@ def _raw_string_span[o: Origin](
     """
     var open_pos = Int(positions.unsafe_get(si))
     var close_pos = Int(positions.unsafe_get(si + 1))
-    var content_ptr = input_ptr + open_pos + 1
+    var content_ptr = input_ptr.unsafe_offset(open_pos + 1)
     var content_len = close_pos - open_pos - 1
     return (content_ptr, content_len)
 
@@ -69,27 +70,27 @@ def _raw_string_span[o: Origin](
 @always_inline("nodebug")
 def _encode_utf8_ptr(
     code_point: UInt32,
-    write_ptr: UnsafePointer[mut=True, UInt8, _],
+    write_ptr: Pointer[mut=True, UInt8, _],
     write_pos: Int,
 ) -> Int:
     """Encode a Unicode code point as UTF-8 via raw pointer. Returns new write_pos."""
     if code_point <= 0x7F:
-        write_ptr[write_pos] = UInt8(code_point)
+        write_ptr[unsafe_offset=write_pos] = UInt8(code_point)
         return write_pos + 1
     elif code_point <= 0x7FF:
-        write_ptr[write_pos] = UInt8(0xC0 | (code_point >> 6))
-        write_ptr[write_pos + 1] = UInt8(0x80 | (code_point & 0x3F))
+        write_ptr[unsafe_offset=write_pos] = UInt8(0xC0 | (code_point >> 6))
+        write_ptr[unsafe_offset=write_pos + 1] = UInt8(0x80 | (code_point & 0x3F))
         return write_pos + 2
     elif code_point <= 0xFFFF:
-        write_ptr[write_pos] = UInt8(0xE0 | (code_point >> 12))
-        write_ptr[write_pos + 1] = UInt8(0x80 | ((code_point >> 6) & 0x3F))
-        write_ptr[write_pos + 2] = UInt8(0x80 | (code_point & 0x3F))
+        write_ptr[unsafe_offset=write_pos] = UInt8(0xE0 | (code_point >> 12))
+        write_ptr[unsafe_offset=write_pos + 1] = UInt8(0x80 | ((code_point >> 6) & 0x3F))
+        write_ptr[unsafe_offset=write_pos + 2] = UInt8(0x80 | (code_point & 0x3F))
         return write_pos + 3
     else:
-        write_ptr[write_pos] = UInt8(0xF0 | (code_point >> 18))
-        write_ptr[write_pos + 1] = UInt8(0x80 | ((code_point >> 12) & 0x3F))
-        write_ptr[write_pos + 2] = UInt8(0x80 | ((code_point >> 6) & 0x3F))
-        write_ptr[write_pos + 3] = UInt8(0x80 | (code_point & 0x3F))
+        write_ptr[unsafe_offset=write_pos] = UInt8(0xF0 | (code_point >> 18))
+        write_ptr[unsafe_offset=write_pos + 1] = UInt8(0x80 | ((code_point >> 12) & 0x3F))
+        write_ptr[unsafe_offset=write_pos + 2] = UInt8(0x80 | ((code_point >> 6) & 0x3F))
+        write_ptr[unsafe_offset=write_pos + 3] = UInt8(0x80 | (code_point & 0x3F))
         return write_pos + 4
 
 
@@ -97,10 +98,10 @@ def _encode_utf8_ptr(
 
 
 def _parse_unicode_escape_ptr(
-    ptr: UnsafePointer[UInt8, _],
+    ptr: Pointer[UInt8, _],
     backslash_pos: Int,
     input_len: Int,
-    write_ptr: UnsafePointer[mut=True, UInt8, _],
+    write_ptr: Pointer[mut=True, UInt8, _],
     write_pos: Int,
 ) raises ParseError -> Tuple[Int, Int]:
     """Parse \\uXXXX (and surrogate pairs) starting at backslash_pos.
@@ -115,8 +116,8 @@ def _parse_unicode_escape_ptr(
         # High surrogate — must be followed by \uXXXX low surrogate
         if (
             new_pos + 1 >= input_len
-            or ptr[new_pos] != UInt8(0x5C)
-            or ptr[new_pos + 1] != UInt8(0x75)
+            or ptr[unsafe_offset=new_pos] != UInt8(0x5C)
+            or ptr[unsafe_offset=new_pos + 1] != UInt8(0x75)
         ):
             raise ParseError(
                 code=ErrorCode.STRING_ERROR.value, position=backslash_pos
@@ -139,7 +140,7 @@ def _parse_unicode_escape_ptr(
 
 
 @always_inline("nodebug")
-def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
+def span_is_clean(src: Pointer[UInt8, _], content_len: Int) -> Bool:
     """True iff `src[0:content_len]` holds no backslash and no control byte, i.e.
     the raw input bytes ARE the string content (no unescaping needed, so the tape
     can reference the input span directly instead of copying).
@@ -155,12 +156,12 @@ def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
     var i = 0
     var full_end = content_len & ~31
     while i < full_end:
-        var chunk = (src + i).load[width=32]()
+        var chunk = (src.unsafe_offset(i)).unsafe_load[width=32]()
         special |= pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
         i += 32
     var tail_len = content_len - i
     if tail_len > 0:
-        var chunk = (src + i).load[width=32]()
+        var chunk = (src.unsafe_offset(i)).unsafe_load[width=32]()
         var m = pack_bits[DType.uint32](chunk.eq(bs_splat) | chunk.le(ctrl_splat))
         special |= m & ((UInt32(1) << UInt32(tail_len)) - 1)
     return special == 0
@@ -170,10 +171,10 @@ def span_is_clean(src: UnsafePointer[UInt8, _], content_len: Int) -> Bool:
 
 
 def parse_string(
-    input_ptr: UnsafePointer[UInt8, _],
+    input_ptr: Pointer[UInt8, _],
     pos: Int,
     input_len: Int,
-    string_buf_ptr: UnsafePointer[mut=True, UInt8, _],
+    string_buf_ptr: Pointer[mut=True, UInt8, _],
     buf_start: Int,
 ) raises ParseError -> Tuple[Int, Int]:
     """Parse a JSON string starting at input_ptr[pos] (opening quote).
@@ -198,10 +199,10 @@ def parse_string(
 
     while i < input_len:
         # --- SIMD scan: load 32 bytes ---
-        var chunk = (input_ptr + i).load[width=32]()
+        var chunk = (input_ptr.unsafe_offset(i)).unsafe_load[width=32]()
 
         # Unconditional 32-byte store (copy first, check after)
-        memcpy(dest=write_ptr + write_pos, src=input_ptr + i, count=32)
+        unsafe_memcpy(dest=write_ptr.unsafe_offset(write_pos), src=input_ptr.unsafe_offset(i), count=32)
 
         # Only 2 comparisons: quote and backslash
         var quote_mask = pack_bits[DType.uint32](chunk.eq(quote_splat))
@@ -246,15 +247,15 @@ def parse_string(
         i += first_special
 
         # Handle the special character
-        var b = input_ptr[i]
+        var b = input_ptr[unsafe_offset=i]
         if b == QUOTE:
             # Closing quote found — finalize string
-            write_ptr[write_pos] = UInt8(0)  # null terminator
+            write_ptr[unsafe_offset=write_pos] = UInt8(0)  # null terminator
             var str_len = UInt32(write_pos - buf_start - 4)
-            write_ptr[buf_start] = UInt8(str_len & 0xFF)
-            write_ptr[buf_start + 1] = UInt8((str_len >> 8) & 0xFF)
-            write_ptr[buf_start + 2] = UInt8((str_len >> 16) & 0xFF)
-            write_ptr[buf_start + 3] = UInt8((str_len >> 24) & 0xFF)
+            write_ptr[unsafe_offset=buf_start] = UInt8(str_len & 0xFF)
+            write_ptr[unsafe_offset=buf_start + 1] = UInt8((str_len >> 8) & 0xFF)
+            write_ptr[unsafe_offset=buf_start + 2] = UInt8((str_len >> 16) & 0xFF)
+            write_ptr[unsafe_offset=buf_start + 3] = UInt8((str_len >> 24) & 0xFF)
             return (i - pos + 1, write_pos + 1)
 
         elif b == BACKSLASH:
@@ -263,8 +264,9 @@ def parse_string(
                 raise ParseError(
                     code=ErrorCode.UNCLOSED_STRING.value, position=i
                 )
-            var escaped = input_ptr[i + 1]
-            var replacement = _ESCAPE_LUT[Int(escaped)]
+            var escaped = input_ptr[unsafe_offset=i + 1]
+            ref escape_lut = global_constant[_ESCAPE_LUT]()
+            var replacement = escape_lut[Int(escaped)]
 
             if replacement == UInt8(0xFE):
                 # Unicode escape: \uXXXX (possibly surrogate pair)
@@ -275,7 +277,7 @@ def parse_string(
                 write_pos = result[1]
             elif replacement != UInt8(0):
                 # Simple escape: single replacement byte
-                write_ptr[write_pos] = replacement
+                write_ptr[unsafe_offset=write_pos] = replacement
                 write_pos += 1
                 i += 2
             else:
@@ -294,14 +296,14 @@ def parse_string(
 
 
 def _parse_hex4(
-    ptr: UnsafePointer[UInt8, _], start: Int, input_len: Int
+    ptr: Pointer[UInt8, _], start: Int, input_len: Int
 ) raises ParseError -> UInt32:
     """Parse 4 hex digits starting at ptr[start] into a UInt32."""
     if start + 4 > input_len:
         raise ParseError(code=ErrorCode.STRING_ERROR.value, position=start)
     var value: UInt32 = 0
     for i in range(4):
-        var b = ptr[start + i]
+        var b = ptr[unsafe_offset=start + i]
         var digit: UInt32
         if b >= UInt8(0x30) and b <= UInt8(0x39):
             digit = UInt32(b) - 0x30

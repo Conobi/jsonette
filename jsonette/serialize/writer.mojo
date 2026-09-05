@@ -6,7 +6,7 @@ formatting, and pretty-print indentation, so the tape round-trip path and the
 reflection path emit byte-identical structure for the same logical value.
 """
 from std.math import isfinite
-from std.memory import bitcast, memcpy, pack_bits
+from std.memory import bitcast, unsafe_memcpy, pack_bits
 from std.bit import count_trailing_zeros
 
 comptime _HEX = String("0123456789abcdef")
@@ -39,13 +39,13 @@ struct JsonWriter:
         self.nonfinite_null = nonfinite_null
 
     @always_inline("nodebug")
-    def _bulk_append(mut self, src: UnsafePointer[UInt8, _], n: Int):
+    def _bulk_append(mut self, src: Pointer[UInt8, _], n: Int):
         """Append `n` bytes from `src` to `self.buf` via memcpy."""
         if n <= 0:
             return
         var pos = len(self.buf)
         self.buf.resize(unsafe_uninit_length=pos + n)
-        memcpy(dest=self.buf.unsafe_ptr() + pos, src=src, count=n)
+        unsafe_memcpy(dest=self.buf.unsafe_ptr().unsafe_offset(pos), src=src, count=n)
 
     @always_inline("nodebug")
     def _write_uint_digits(mut self, v: UInt64):
@@ -105,7 +105,7 @@ struct JsonWriter:
             self.buf.append(_HEX.as_bytes()[Int(c >> 4)])
             self.buf.append(_HEX.as_bytes()[Int(c & 0xF)])
 
-    def _write_escaped_core(mut self, src: UnsafePointer[UInt8, _], length: Int):
+    def _write_escaped_core(mut self, src: Pointer[UInt8, _], length: Int):
         """Write `length` bytes from `src` as a quoted, escaped JSON string.
 
         SIMD 32-byte scan-window: loads a chunk, computes a bitmask of bytes
@@ -123,24 +123,24 @@ struct JsonWriter:
 
         var i = 0
         while i + 32 <= length:
-            var chunk = (src + i).load[width=32]()
+            var chunk = (src.unsafe_offset(i)).unsafe_load[width=32]()
             var mask = UInt32(
                 pack_bits[DType.uint32](
                     chunk.le(ctrl_splat) | chunk.eq(quote_splat) | chunk.eq(bs_splat)
                 )
             )
             if mask == 0:
-                self._bulk_append(src + i, 32)
+                self._bulk_append(src.unsafe_offset(i), 32)
                 i += 32
             else:
                 var first = Int(count_trailing_zeros(mask))
                 if first > 0:
-                    self._bulk_append(src + i, first)
-                self._esc_one(src[i + first])
+                    self._bulk_append(src.unsafe_offset(i), first)
+                self._esc_one(src[unsafe_offset=i + first])
                 i += first + 1
 
         while i < length:
-            self._esc_one(src[i])
+            self._esc_one(src[unsafe_offset=i])
             i += 1
 
         self.buf.append(0x22)
@@ -152,11 +152,11 @@ struct JsonWriter:
 
     def write_escaped_buf(mut self, ref buf: List[UInt8], start: Int, length: Int):
         """Write `length` bytes of `buf` from `start` as a quoted, escaped string."""
-        self._write_escaped_core(buf.unsafe_ptr() + start, length)
+        self._write_escaped_core(buf.unsafe_ptr().unsafe_offset(start), length)
 
-    def write_escaped_buf(mut self, ptr: UnsafePointer[UInt8, _], start: Int, length: Int):
+    def write_escaped_buf(mut self, ptr: Pointer[UInt8, _], start: Int, length: Int):
         """Write `length` bytes from `ptr + start` as a quoted, escaped string."""
-        self._write_escaped_core(ptr + start, length)
+        self._write_escaped_core(ptr.unsafe_offset(start), length)
 
     def write_int(mut self, v: Int64):
         """Append a signed integer in decimal. No heap allocation."""

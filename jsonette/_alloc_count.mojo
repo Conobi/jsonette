@@ -18,13 +18,12 @@ and reads from the bench all hit the same cell. Single-threaded only (the bench
 is single-thread); a plain `Int` cell is sufficient.
 """
 
-from std.memory import UnsafePointer
 from std.sys.defines import is_defined
 
 comptime ALLOC_COUNT_ENABLED = is_defined["BENCH_ALLOC_COUNT"]()
 """True when built with `-D BENCH_ALLOC_COUNT`; gates all counter code out otherwise."""
 
-comptime _CounterPtr = UnsafePointer[Int, MutUntrackedOrigin]
+comptime _CounterPtr = Pointer[Int, MutUntrackedOrigin]
 
 
 @no_inline
@@ -41,7 +40,7 @@ def _counter_ptr() -> _CounterPtr:
         count = __mlir_attr.`1:index`,
         _type = __mlir_type[`!kgen.pointer<`, Int, `>`],
     ]()
-    return _CounterPtr(raw)
+    return _CounterPtr(_mlir_value=raw)
 
 
 @always_inline("nodebug")

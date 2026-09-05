@@ -92,15 +92,15 @@ struct SimdInput(Movable, Copyable):
 
     @always_inline("nodebug")
     @staticmethod
-    def load(ptr: UnsafePointer[UInt8, _]) -> SimdInput:
+    def load(ptr: Pointer[UInt8, _]) -> SimdInput:
         """Load 64 bytes from ptr (unaligned)."""
         var result = SimdInput(
             chunks=InlineArray[SIMD[DType.uint8, 32], 2](
                 fill=SIMD[DType.uint8, 32](0)
             )
         )
-        result.chunks[0] = ptr.load[width=32]()
-        result.chunks[1] = (ptr + 32).load[width=32]()
+        result.chunks[0] = ptr.unsafe_load[width=32]()
+        result.chunks[1] = (ptr.unsafe_offset(32)).unsafe_load[width=32]()
         return result^
 
     @always_inline("nodebug")

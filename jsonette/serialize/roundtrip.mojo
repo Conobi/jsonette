@@ -31,7 +31,7 @@ def _str_len_of[o: Origin[mut=True]](ref [o] d: Document, payload: UInt64) -> In
 def _str_byte_of[o: Origin[mut=True]](ref [o] d: Document, payload: UInt64, i: Int) -> UInt8:
     """`i`-th content byte of a TAG_STRING payload in document `d`."""
     if is_raw_string(payload):
-        return d._parser.get_input_ptr()[raw_string_offset(payload) + i]
+        return d._parser.get_input_ptr()[unsafe_offset=raw_string_offset(payload) + i]
     return d._parser._tape.string_buf[Int(payload) + 4 + i]
 
 

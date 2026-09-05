@@ -33,7 +33,7 @@ comptime ST_DOC_END: Int = 9        # root value complete: nothing may follow
 
 
 def build_tape(
-    input_ptr: UnsafePointer[UInt8, _], input_len: Int, mut structural_positions: List[UInt32],
+    input_ptr: Pointer[UInt8, _], input_len: Int, mut structural_positions: List[UInt32],
     mut container_stack: List[UInt32],
     mut tape: Tape,
 ) raises ParseError:
@@ -80,11 +80,11 @@ def build_tape(
     # buffer never overruns and the terminal resize only truncates.
     var n_strings_max = num_structurals // 2
     var need_str = input_len + 5 * n_strings_max + 64
-    if tape.elements.capacity < need_elem:
+    if tape.elements.capacity() < need_elem:
         record_alloc()
         tape.elements.reserve(need_elem)
     tape.elements.resize(unsafe_uninit_length=need_elem)
-    if tape.string_buf.capacity < need_str:
+    if tape.string_buf.capacity() < need_str:
         record_alloc()
         tape.string_buf.reserve(need_str)
     tape.string_buf.resize(unsafe_uninit_length=need_str)
@@ -92,7 +92,7 @@ def build_tape(
     var tape_pos = 0
     var sbuf_pos = 0  # tracks used bytes in string_buf
     # Root open placeholder at tape[0]
-    tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
+    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
     tape_pos += 1
 
     # Interleaved container stack: stk[depth*2] = open_idx, stk[depth*2+1] = count
@@ -107,10 +107,10 @@ def build_tape(
     var state = ST_DOC_BEGIN
 
     while True:
-        var pos = Int(si_ptr[si])
+        var pos = Int(si_ptr[unsafe_offset=si])
         if pos == Int(UInt32(0xFFFFFFFF)):
             break  # sentinel reached
-        var byte = input_ptr[pos]
+        var byte = input_ptr[unsafe_offset=pos]
 
         if (
             state == ST_DOC_BEGIN
@@ -131,33 +131,33 @@ def build_tape(
                 # quotes; in-string bytes emit nothing). si+1 is always readable
                 # thanks to the sentinel; an unterminated string yields a
                 # close_pos past input_len, which the span parser rejects.
-                var close_pos = Int(si_ptr[si + 1])
+                var close_pos = Int(si_ptr[unsafe_offset=si + 1])
                 var content_len = close_pos - pos - 1
                 if (
                     close_pos < input_len
-                    and input_ptr[close_pos] == TAG_STRING
+                    and input_ptr[unsafe_offset=close_pos] == TAG_STRING
                     and content_len <= RAW_STRING_MAX_LEN
-                    and span_is_clean(input_ptr + pos + 1, content_len)
+                    and span_is_clean(input_ptr.unsafe_offset(pos + 1), content_len)
                 ):
                     # Zero-copy: the tape references the input span directly.
-                    tape_ptr[tape_pos] = make_tape_entry(
+                    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(
                         TAG_STRING, make_raw_string_payload(pos + 1, content_len)
                     )
                 else:
                     # Escapes, control bytes, oversize, or unterminated: unescape
                     # / copy into string_buf (or raise) via the general parser.
                     var buf_offset = UInt64(sbuf_pos)
-                    sbuf_pos += parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)[1]
-                    tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
+                    sbuf_pos += parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr().unsafe_offset(sbuf_pos), 0)[1]
+                    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
                 si += 2
                 state = after_scalar
             elif byte == UInt8(0x2D) or (byte >= UInt8(0x30) and byte <= UInt8(0x39)):  # number
-                var result = _parse_number(input_ptr + pos, input_len - pos)
+                var result = _parse_number(input_ptr.unsafe_offset(pos), input_len - pos)
                 if not _scalar_token_ok(input_ptr, pos, result.bytes_consumed, input_len):
                     raise ParseError(code=ErrorCode.NUMBER_ERROR.value, position=pos)
-                tape_ptr[tape_pos] = make_tape_entry(result.tag, UInt64(0))
-                tape_ptr[tape_pos + 1] = result.value
+                tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(result.tag, UInt64(0))
+                tape_ptr[unsafe_offset=tape_pos + 1] = result.value
                 tape_pos += 2
                 si += 1
                 state = after_scalar
@@ -165,7 +165,7 @@ def build_tape(
                 _validate_true(input_ptr, pos, input_len)
                 if not _scalar_token_ok(input_ptr, pos, 4, input_len):
                     raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_TRUE, UInt64(0))
+                tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_TRUE, UInt64(0))
                 tape_pos += 1
                 si += 1
                 state = after_scalar
@@ -173,7 +173,7 @@ def build_tape(
                 _validate_false(input_ptr, pos, input_len)
                 if not _scalar_token_ok(input_ptr, pos, 5, input_len):
                     raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_FALSE, UInt64(0))
+                tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_FALSE, UInt64(0))
                 tape_pos += 1
                 si += 1
                 state = after_scalar
@@ -181,16 +181,16 @@ def build_tape(
                 _validate_null(input_ptr, pos, input_len)
                 if not _scalar_token_ok(input_ptr, pos, 4, input_len):
                     raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_NULL, UInt64(0))
+                tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_NULL, UInt64(0))
                 tape_pos += 1
                 si += 1
                 state = after_scalar
             elif byte == TAG_OBJECT_OPEN:  # '{'
                 if depth >= MAX_DEPTH:
                     raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos)
-                stk[depth * 2] = UInt32(tape_pos)
-                stk[depth * 2 + 1] = UInt32(0)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_OBJECT_OPEN, UInt64(0))
+                stk[unsafe_offset=depth * 2] = UInt32(tape_pos)
+                stk[unsafe_offset=depth * 2 + 1] = UInt32(0)
+                tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_OBJECT_OPEN, UInt64(0))
                 tape_pos += 1
                 depth += 1
                 si += 1
@@ -198,9 +198,9 @@ def build_tape(
             elif byte == TAG_ARRAY_OPEN:  # '['
                 if depth >= MAX_DEPTH:
                     raise ParseError(code=ErrorCode.DEPTH_EXCEEDED.value, position=pos)
-                stk[depth * 2] = UInt32(tape_pos)
-                stk[depth * 2 + 1] = UInt32(0)
-                tape_ptr[tape_pos] = make_tape_entry(TAG_ARRAY_OPEN, UInt64(0))
+                stk[unsafe_offset=depth * 2] = UInt32(tape_pos)
+                stk[unsafe_offset=depth * 2 + 1] = UInt32(0)
+                tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_ARRAY_OPEN, UInt64(0))
                 tape_pos += 1
                 depth += 1
                 si += 1
@@ -217,21 +217,21 @@ def build_tape(
             # An object member key (a string) is expected; ST_OBJ_BEGIN also
             # permits a closing '}' (empty object).
             if byte == TAG_STRING:  # '"' key
-                var close_pos = Int(si_ptr[si + 1])
+                var close_pos = Int(si_ptr[unsafe_offset=si + 1])
                 var content_len = close_pos - pos - 1
                 if (
                     close_pos < input_len
-                    and input_ptr[close_pos] == TAG_STRING
+                    and input_ptr[unsafe_offset=close_pos] == TAG_STRING
                     and content_len <= RAW_STRING_MAX_LEN
-                    and span_is_clean(input_ptr + pos + 1, content_len)
+                    and span_is_clean(input_ptr.unsafe_offset(pos + 1), content_len)
                 ):
-                    tape_ptr[tape_pos] = make_tape_entry(
+                    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(
                         TAG_STRING, make_raw_string_payload(pos + 1, content_len)
                     )
                 else:
                     var buf_offset = UInt64(sbuf_pos)
-                    sbuf_pos += parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr() + sbuf_pos, 0)[1]
-                    tape_ptr[tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
+                    sbuf_pos += parse_string(input_ptr, pos, input_len, tape.string_buf.unsafe_ptr().unsafe_offset(sbuf_pos), 0)[1]
+                    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_STRING, buf_offset)
                 tape_pos += 1
                 si += 2
                 state = ST_OBJ_COLON
@@ -252,7 +252,7 @@ def build_tape(
                 raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos)  # missing colon
         elif state == ST_OBJ_CONTINUE:
             if byte == UInt8(0x2C):  # ','
-                stk[depth * 2 - 1] += 1
+                stk[unsafe_offset=depth * 2 - 1] += 1
                 si += 1
                 state = ST_OBJ_KEY
             elif unlikely(byte == TAG_OBJECT_CLOSE):  # '}'
@@ -265,7 +265,7 @@ def build_tape(
                 raise ParseError(code=ErrorCode.TAPE_ERROR.value, position=pos)  # missing comma
         elif state == ST_ARR_CONTINUE:
             if byte == UInt8(0x2C):  # ','
-                stk[depth * 2 - 1] += 1
+                stk[unsafe_offset=depth * 2 - 1] += 1
                 si += 1
                 state = ST_ARR_VALUE
             elif unlikely(byte == TAG_ARRAY_CLOSE):  # ']'
@@ -285,9 +285,9 @@ def build_tape(
         raise ParseError(code=ErrorCode.UNCLOSED_CONTAINER.value, position=0)
 
     var root_close_idx = tape_pos
-    tape_ptr[tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
+    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(TAG_ROOT, UInt64(0))
     tape_pos += 1
-    tape_ptr[0] = make_tape_entry(TAG_ROOT, UInt64(root_close_idx))
+    tape_ptr[unsafe_offset=0] = make_tape_entry(TAG_ROOT, UInt64(root_close_idx))
 
     # Shrink tape and string_buf to actual used size (no zeroing on shrink)
     tape.elements.resize(tape_pos, UInt64(0))
@@ -296,17 +296,17 @@ def build_tape(
 
 @always_inline("nodebug")
 def _close_container[o: Origin[mut=True]](
-    tape_ptr: UnsafePointer[UInt64, origin=o],
+    tape_ptr: Pointer[UInt64, origin=o],
     tape_pos: Int,
-    stk: UnsafePointer[UInt32, _],
+    stk: Pointer[UInt32, _],
     depth: Int,
     close_tag: UInt8,
 ):
     # depth is current depth BEFORE decrement; container was opened at depth-1
-    var open_idx = Int(stk[(depth - 1) * 2])
-    var comma_count = stk[(depth - 1) * 2 + 1]
+    var open_idx = Int(stk[unsafe_offset=(depth - 1) * 2])
+    var comma_count = stk[unsafe_offset=(depth - 1) * 2 + 1]
     var close_idx = tape_pos
-    var open_tag = UInt8(tape_ptr[open_idx] >> 56)
+    var open_tag = UInt8(tape_ptr[unsafe_offset=open_idx] >> 56)
 
     var is_empty = (close_idx == open_idx + 1)
     var count = UInt64(comma_count)
@@ -315,21 +315,21 @@ def _close_container[o: Origin[mut=True]](
     if count > 0xFFFFFF:
         count = 0xFFFFFF
 
-    tape_ptr[tape_pos] = make_tape_entry(close_tag, UInt64(open_idx))
-    tape_ptr[open_idx] = make_tape_entry(
+    tape_ptr[unsafe_offset=tape_pos] = make_tape_entry(close_tag, UInt64(open_idx))
+    tape_ptr[unsafe_offset=open_idx] = make_tape_entry(
         open_tag, (count << 32) | UInt64(close_idx + 1)
     )
 
 
 @always_inline("nodebug")
 def _parent_state[o: Origin[mut=True]](
-    tape_ptr: UnsafePointer[UInt64, origin=o], stk: UnsafePointer[UInt32, _], depth: Int
+    tape_ptr: Pointer[UInt64, origin=o], stk: Pointer[UInt32, _], depth: Int
 ) -> Int:
     """Next state after popping a container (depth already decremented): the parent
     container's continue-state, or document-end at the root."""
     if depth == 0:
         return ST_DOC_END
-    var parent_tag = UInt8(tape_ptr[Int(stk[(depth - 1) * 2])] >> 56)
+    var parent_tag = UInt8(tape_ptr[unsafe_offset=Int(stk[unsafe_offset=(depth - 1) * 2])] >> 56)
     if parent_tag == TAG_OBJECT_OPEN:
         return ST_OBJ_CONTINUE
     return ST_ARR_CONTINUE
@@ -337,29 +337,29 @@ def _parent_state[o: Origin[mut=True]](
 
 @always_inline("nodebug")
 def _validate_true(
-    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
+    ptr: Pointer[UInt8, _], pos: Int, input_len: Int
 ) raises ParseError:
     if pos + 4 > input_len:
         raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
-    if ptr[pos] != UInt8(0x74) or ptr[pos + 1] != UInt8(0x72) or ptr[pos + 2] != UInt8(0x75) or ptr[pos + 3] != UInt8(0x65):
+    if ptr[unsafe_offset=pos] != UInt8(0x74) or ptr[unsafe_offset=pos + 1] != UInt8(0x72) or ptr[unsafe_offset=pos + 2] != UInt8(0x75) or ptr[unsafe_offset=pos + 3] != UInt8(0x65):
         raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
 
 
 @always_inline("nodebug")
 def _validate_false(
-    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
+    ptr: Pointer[UInt8, _], pos: Int, input_len: Int
 ) raises ParseError:
     if pos + 5 > input_len:
         raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
-    if ptr[pos] != UInt8(0x66) or ptr[pos + 1] != UInt8(0x61) or ptr[pos + 2] != UInt8(0x6C) or ptr[pos + 3] != UInt8(0x73) or ptr[pos + 4] != UInt8(0x65):
+    if ptr[unsafe_offset=pos] != UInt8(0x66) or ptr[unsafe_offset=pos + 1] != UInt8(0x61) or ptr[unsafe_offset=pos + 2] != UInt8(0x6C) or ptr[unsafe_offset=pos + 3] != UInt8(0x73) or ptr[unsafe_offset=pos + 4] != UInt8(0x65):
         raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
 
 
 @always_inline("nodebug")
 def _validate_null(
-    ptr: UnsafePointer[UInt8, _], pos: Int, input_len: Int
+    ptr: Pointer[UInt8, _], pos: Int, input_len: Int
 ) raises ParseError:
     if pos + 4 > input_len:
         raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)
-    if ptr[pos] != UInt8(0x6E) or ptr[pos + 1] != UInt8(0x75) or ptr[pos + 2] != UInt8(0x6C) or ptr[pos + 3] != UInt8(0x6C):
+    if ptr[unsafe_offset=pos] != UInt8(0x6E) or ptr[unsafe_offset=pos + 1] != UInt8(0x75) or ptr[unsafe_offset=pos + 2] != UInt8(0x6C) or ptr[unsafe_offset=pos + 3] != UInt8(0x6C):
         raise ParseError(code=ErrorCode.INVALID_LITERAL.value, position=pos)

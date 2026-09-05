@@ -93,7 +93,7 @@ struct Value[o: Origin[mut=True]](Copyable, Movable, Sized, Writable):
         string_buf. The branch is perfectly predicted within any one string.
         """
         if is_raw_string(payload):
-            return self._doc[]._parser.get_input_ptr()[raw_string_offset(payload) + i]
+            return self._doc[]._parser.get_input_ptr()[unsafe_offset=raw_string_offset(payload) + i]
         return self._sbuf(Int(payload) + 4 + i)
 
     def is_object(self) -> Bool:

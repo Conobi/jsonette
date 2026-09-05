@@ -18,7 +18,7 @@ to `root()` (`doc["k"]`, `k in doc`, `doc == s`, `doc.field(...)`, `doc.is_*`,
 """
 
 from std.collections import Optional
-from std.memory import UnsafePointer
+from std.memory import Pointer
 
 from jsonette.parser import Parser
 from jsonette.value import Value, _FieldIter, _ElemIter
@@ -58,7 +58,7 @@ struct Document(Movable):
         """Reparse from a JSON String (convenience), reusing buffers."""
         self.reparse(data.as_bytes())
 
-    def reparse_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+    def reparse_nocopy(mut self, data: Pointer[UInt8, MutAnyOrigin], input_len: Int) raises:
         """Rebuild from a caller-owned padded buffer (no memcpy); bumps the gen.
 
         The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
@@ -235,7 +235,7 @@ def parse(data: String) raises -> Document:
     return parse(data.as_bytes())
 
 
-def parse_nocopy(data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises -> Document:
+def parse_nocopy(data: Pointer[UInt8, MutAnyOrigin], input_len: Int) raises -> Document:
     """Parse JSON from a caller-owned padded buffer (no memcpy).
 
     The caller guarantees `data` has at least ceil(input_len/64)*64 + 128

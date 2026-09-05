@@ -6,14 +6,14 @@ default-constructs T (every field valid), then reflectively ASSIGNS each field â
 no uninitialised memory exists, so a mid-decode raise unwinds over a valid struct.
 """
 from std.reflection import reflect
-from std.builtin.rebind import trait_downcast, rebind_var, downcast
+from std.builtin.rebind import rebind_var, downcast
 from std.collections import Optional, Dict
 from jsonette.document import parse
 from jsonette.value import Value
 
 
-comptime _Base = Movable & ImplicitlyDestructible
-comptime _Struct = Defaultable & Movable & ImplicitlyDestructible
+comptime _Base = Movable & Deinitable
+comptime _Struct = Defaultable & Movable & Deinitable
 
 
 def _checked_int(v: Int64, lo: Int64, hi: Int64, tn: String) raises -> Int64:
@@ -44,7 +44,7 @@ def _checked_f32(d: Float64, tn: String) raises -> Float32:
     return Float32(d)
 
 
-trait JsonDeserializable(Movable):
+trait JsonDeserializable(Movable, Deinitable):
     """Builds itself from a DOM `Value` (static out-return). The default body routes
     to the reflective struct field-walk, so a plain struct conforms with zero methods."""
     @staticmethod
@@ -104,7 +104,10 @@ def _default_decode[T: _Struct, o: Origin[mut=True]](val: Value[o], out s: T) ra
     comptime names = r.field_names()
     comptime for i in range(r.field_count()):
         comptime key = String(names[i])
-        ref field = trait_downcast[_Base](r.field_ref[i](s))
+        ref field = r.field_ref[i](s)
+        comptime assert conforms_to(
+            type_of(field), _Base
+        ), "decoded struct fields must be Movable and Deinitable"
         var maybe = val.try_field(key)
         if maybe:
             field = _decode[type_of(field)](maybe.value())
@@ -116,7 +119,7 @@ def _default_decode[T: _Struct, o: Origin[mut=True]](val: Value[o], out s: T) ra
                 raise "MISSING_FIELD: '" + key + "'"
 
 
-def decode[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
+def decode[T: Defaultable & Movable & Deinitable & JsonDeserializable](
     data: String, out s: T
 ) raises:
     """Parse JSON `data` and reflectively build a fresh `T`."""
@@ -124,7 +127,7 @@ def decode[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializabl
     s = T.from_json(doc.root())
 
 
-def decode[T: Defaultable & Movable & ImplicitlyDestructible & JsonDeserializable](
+def decode[T: Defaultable & Movable & Deinitable & JsonDeserializable](
     data: Span[UInt8, _], out s: T
 ) raises:
     """Parse JSON `data` (raw bytes) and reflectively build a fresh `T`.
@@ -141,7 +144,7 @@ __extension List(JsonDeserializable):
     def from_json[o: Origin[mut=True]](val: Value[o], out s: Self) raises:
         """Build a JSON array into List[T]; element type recovered from Self.T."""
         # Build into a list whose element type is STATICALLY `_Base` (Movable &
-        # ImplicitlyDestructible), so a mid-decode raise unwinds over a list the
+        # Deinitable), so a mid-decode raise unwinds over a list the
         # compiler can implicitly destroy. `List[Self.T]` alone is only
         # *conditionally* destructible (b2), so building straight into `s` leaves
         # a partially-filled list "abandoned" on the throw path. Rebind into `s`
@@ -158,6 +161,9 @@ __extension Optional(JsonDeserializable):
     def from_json[o: Origin[mut=True]](val: Value[o], out s: Self) raises:
         """Explicit JSON null -> None; else decode the inner value as Self.T. Absent
         keys never reach here (the struct field-walk keeps the default None)."""
+        comptime assert conforms_to(
+            Self.T, Movable
+        ), "Optional payloads decoded from JSON must be Movable"
         if val.is_null():
             s = Self()
         else:
@@ -169,7 +175,16 @@ __extension Dict(JsonDeserializable):
     def from_json[o: Origin[mut=True]](val: Value[o], out s: Self) raises:
         """Build a JSON object into Dict[String, V]; V recovered from Self.V. Keys
         must be String (compile-time enforced)."""
-        comptime assert reflect[Self.K].name() == "String", "JSON object keys must be String"
-        s = Self()
+        comptime assert Self.K == String, "JSON object keys must be String"
+        # Same technique as the List extension above: build into a dict whose
+        # key/value types are STATICALLY `_Base` (Movable & Deinitable), so a
+        # mid-decode raise unwinds over something the compiler can implicitly
+        # destroy. `Dict[Self.K, Self.V]` is only *conditionally* Deinitable in
+        # 1.0.0, so filling `s` directly leaves a partially-built dict abandoned
+        # on the throw path. Rebind into `s` once fully built (same layout,
+        # zero-copy move).
+        comptime VT = downcast[Self.V, _Base]
+        var built = Dict[String, VT, Self.H]()
         for entry in val.fields():
-            s[rebind_var[Self.K](entry.key())] = _decode[downcast[Self.V, _Base]](entry.value())
+            built[entry.key()] = _decode[VT](entry.value())
+        s = rebind_var[Self](built^)

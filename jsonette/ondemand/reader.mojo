@@ -14,7 +14,7 @@ entry point: they run Stage 1 and return an owning `Reader`. Note this module's
 the On-Demand API stays namespaced under `jsonette.ondemand`.
 """
 
-from std.memory import UnsafePointer
+from std.memory import Pointer
 
 from jsonette.parser import Parser
 from jsonette.ondemand.ondemand import Value
@@ -59,7 +59,7 @@ struct Reader(Movable):
         """Reparse from a JSON String (convenience), reusing buffers."""
         self.reparse(data.as_bytes())
 
-    def reparse_nocopy(mut self, data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises:
+    def reparse_nocopy(mut self, data: Pointer[UInt8, MutAnyOrigin], input_len: Int) raises:
         """Re-run Stage 1 from a caller-owned padded buffer (no memcpy); bumps gen.
 
         Same padding contract as iter_nocopy. Buffer must stay alive while any
@@ -82,7 +82,7 @@ def iter(data: String) raises -> Reader:
     return iter(data.as_bytes())
 
 
-def iter_nocopy(data: UnsafePointer[UInt8, MutAnyOrigin], input_len: Int) raises -> Reader:
+def iter_nocopy(data: Pointer[UInt8, MutAnyOrigin], input_len: Int) raises -> Reader:
     """Run Stage 1 from a caller-owned padded buffer (no memcpy).
 
     The caller guarantees `data` has at least ceil(input_len/64)*64 + 128
