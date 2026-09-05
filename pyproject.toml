@@ -6,7 +6,15 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "mojox>=0.5",
-    "mojo-compiler==1.0.0b2",
+    "mojo-compiler==1.0.0",
+    "mojo-compiler-mojo-libs==1.0.0",
+]
+
+[dependency-groups]
+# Developer toolchain: mojo-lsp-server, mojo-lldb, lldb-dap and the mblack
+# formatter. Not the compiler -- mojo-compiler above provides that.
+dev = [
+    "mojo==1.0.0",
 ]
 
 [build-system]
@@ -16,8 +24,8 @@ dependencies = [
 requires = [
     "mojox-build>=0.5",
     "mojox-core>=0.5",
-    "mojo-compiler==1.0.0b2",
-    "mojo-compiler-mojo-libs==1.0.0b2",
+    "mojo-compiler==1.0.0",
+    "mojo-compiler-mojo-libs==1.0.0",
 ]
 build-backend = "mojox_build"
 
