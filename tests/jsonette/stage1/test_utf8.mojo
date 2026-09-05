@@ -7,7 +7,7 @@ deterministic fuzz. Every verdict is cross-checked against the stdlib
 `_is_valid_utf8` oracle.
 """
 
-from std.collections.string.string_slice import _is_valid_utf8
+from std.collections.string._utf8 import _is_valid_utf8
 from std.testing import assert_equal, assert_true
 
 from jsonette.document import parse

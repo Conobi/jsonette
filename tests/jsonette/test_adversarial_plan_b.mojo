@@ -8,7 +8,7 @@ Each test targets a specific attack surface in the new code paths:
 """
 
 from std.testing import assert_equal, assert_true
-from std.memory import memcpy, memset, UnsafePointer
+from std.memory import unsafe_memcpy, unsafe_memset, Pointer
 from jsonette.document import parse, parse_nocopy
 from jsonette.ondemand.reader import iter as od_iter, iter_nocopy
 from jsonette.stage1.indexer import structural_index
@@ -27,8 +27,8 @@ def _make_padded(s: String) -> List[UInt8]:
     var num_chunks = (input_len + 63) // 64
     var padded_len = num_chunks * 64 + 128
     var buf = List[UInt8](unsafe_uninit_length=padded_len)
-    memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-    memset(buf.unsafe_ptr() + input_len, 0, padded_len - input_len)
+    unsafe_memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+    unsafe_memset(buf.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
     return buf^
 
 
@@ -38,8 +38,8 @@ def _make_padded_bytes(data: List[UInt8]) -> List[UInt8]:
     var num_chunks = (input_len + 63) // 64
     var padded_len = num_chunks * 64 + 128
     var buf = List[UInt8](unsafe_uninit_length=padded_len)
-    memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-    memset(buf.unsafe_ptr() + input_len, 0, padded_len - input_len)
+    unsafe_memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+    unsafe_memset(buf.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
     return buf^
 
 
@@ -188,7 +188,7 @@ def test_od_utf8_string_fast_path() raises:
 
     var padded = _make_padded_bytes(raw)
     var reader = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(raw),
     )
     var result = reader.root().get_object().field("name").get_string()
@@ -408,7 +408,7 @@ def test_dom_nocopy_complex_document() raises:
     )
     var padded = _make_padded(json)
     var doc_nc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     var doc_copy = parse(json)
@@ -461,7 +461,7 @@ def test_dom_nocopy_strings_with_escapes() raises:
     var json = String('{"a": "hello\\nworld", "b": "tab\\there", "c": "\\u0041"}')
     var padded = _make_padded(json)
     var doc_nc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     assert_equal(doc_nc.root().field("a").get_string(), "hello\nworld")
@@ -485,7 +485,7 @@ def test_dom_nocopy_reparse_shorter_doc() raises:
     var padded2 = _make_padded(json2)
 
     var doc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded1.unsafe_ptr()),
+        padded1.unsafe_ptr().as_unsafe_any_origin(),
         len(json1.as_bytes()),
     )
     # Verify first parse works
@@ -494,7 +494,7 @@ def test_dom_nocopy_reparse_shorter_doc() raises:
 
     # Reparse with shorter doc
     doc.reparse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded2.unsafe_ptr()),
+        padded2.unsafe_ptr().as_unsafe_any_origin(),
         len(json2.as_bytes()),
     )
     # Must see the new document
@@ -527,13 +527,13 @@ def test_dom_nocopy_reparse_longer_doc() raises:
     var padded2 = _make_padded(json2)
 
     var doc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded1.unsafe_ptr()),
+        padded1.unsafe_ptr().as_unsafe_any_origin(),
         len(json1.as_bytes()),
     )
     assert_equal(doc.root().field("x").get_uint(), UInt64(1))
 
     doc.reparse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded2.unsafe_ptr()),
+        padded2.unsafe_ptr().as_unsafe_any_origin(),
         len(json2.as_bytes()),
     )
     assert_equal(doc.root().field("a").get_uint(), UInt64(1))
@@ -560,7 +560,7 @@ def test_dom_nocopy_minimum_padding() raises:
     assert_equal(len(padded), 192)
 
     var doc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     assert_equal(doc.root().get_uint(), UInt64(7))
@@ -575,7 +575,7 @@ def test_dom_nocopy_minimum_padding() raises:
     assert_equal(len(json_exact.as_bytes()), 65)  # 7 + 56 + 2 = 65
     var padded64 = _make_padded(json_exact)
     var doc64 = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded64.unsafe_ptr()),
+        padded64.unsafe_ptr().as_unsafe_any_origin(),
         len(json_exact.as_bytes()),
     )
     assert_equal(doc64.root().field("a").get_string(), content56)
@@ -601,7 +601,7 @@ def test_od_nocopy_vs_copy_strings() raises:
 
     var r_copy = od_iter(json)
     var r_nc = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -647,7 +647,7 @@ def test_od_nocopy_vs_copy_numbers() raises:
 
     var r_copy = od_iter(json)
     var r_nc = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -690,7 +690,7 @@ def test_od_nocopy_vs_copy_booleans_null() raises:
 
     var r_copy = od_iter(json)
     var r_nc = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -719,7 +719,7 @@ def test_od_nocopy_vs_copy_nested() raises:
 
     var r_copy = od_iter(json)
     var r_nc = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -743,7 +743,7 @@ def test_od_nocopy_vs_copy_nested() raises:
     # Use reparse_nocopy instead of reassignment to avoid Mojo codegen heap
     # corruption on iter_nocopy reader reassignment (see test_nocopy_reader_reassign_crash).
     r_nc.reparse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     var r_copy2 = od_iter(json)
@@ -775,7 +775,7 @@ def test_od_nocopy_vs_copy_array_iteration() raises:
     """
     var json = String('[1, "two", 3.0, true, null, [4, 5], {"k": "v"}]')
     var padded = _make_padded(json)
-    var nc_ptr = UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr())
+    var nc_ptr = padded.unsafe_ptr().as_unsafe_any_origin()
     var nc_len = len(json.as_bytes())
 
     # elem(0): uint
@@ -830,7 +830,7 @@ def test_od_nocopy_reparse_parity() raises:
     var padded2 = _make_padded(json2)
 
     var reader = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded1.unsafe_ptr()),
+        padded1.unsafe_ptr().as_unsafe_any_origin(),
         len(json1.as_bytes()),
     )
     assert_equal(
@@ -838,7 +838,7 @@ def test_od_nocopy_reparse_parity() raises:
     )
 
     reader.reparse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded2.unsafe_ptr()),
+        padded2.unsafe_ptr().as_unsafe_any_origin(),
         len(json2.as_bytes()),
     )
     assert_equal(
@@ -922,7 +922,7 @@ def test_dom_nocopy_vs_copy_parity_full() raises:
 
     var dc = parse(json)
     var dn = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -981,7 +981,7 @@ def test_od_nocopy_string_only_document() raises:
     var padded = _make_padded(json)
 
     var reader = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     assert_equal(reader.root().get_string(), "just a string")
@@ -990,7 +990,7 @@ def test_od_nocopy_string_only_document() raises:
     var json2 = String('"hello\\nworld"')
     var padded2 = _make_padded(json2)
     var reader2 = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded2.unsafe_ptr()),
+        padded2.unsafe_ptr().as_unsafe_any_origin(),
         len(json2.as_bytes()),
     )
     assert_equal(reader2.root().get_string(), "hello\nworld")
@@ -1008,7 +1008,7 @@ def test_od_key_matching_with_escapes_nocopy() raises:
     var padded = _make_padded(json)
 
     var reader = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     assert_equal(
@@ -1017,7 +1017,7 @@ def test_od_key_matching_with_escapes_nocopy() raises:
 
     # Re-read with fresh reader for next field (forward-only)
     var reader2 = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     assert_equal(

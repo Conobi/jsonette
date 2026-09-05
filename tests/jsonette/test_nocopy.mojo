@@ -1,5 +1,5 @@
 from std.testing import assert_equal
-from std.memory import memcpy, memset, UnsafePointer
+from std.memory import unsafe_memcpy, unsafe_memset, Pointer
 from jsonette.document import parse, parse_nocopy
 from jsonette.ondemand.reader import iter as od_iter, iter_nocopy
 
@@ -11,8 +11,8 @@ def _make_padded(s: String) -> List[UInt8]:
     var num_chunks = (input_len + 63) // 64
     var padded_len = num_chunks * 64 + 128
     var buf = List[UInt8](unsafe_uninit_length=padded_len)
-    memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-    memset(buf.unsafe_ptr() + input_len, 0, padded_len - input_len)
+    unsafe_memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+    unsafe_memset(buf.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
     return buf^
 
 
@@ -23,7 +23,7 @@ def test_nocopy_parse_object() raises:
 
     var doc_copy = parse(json)
     var doc_nc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -44,13 +44,13 @@ def test_nocopy_reparse() raises:
     var padded2 = _make_padded(json2)
 
     var doc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded1.unsafe_ptr()),
+        padded1.unsafe_ptr().as_unsafe_any_origin(),
         len(json1.as_bytes()),
     )
     assert_equal(doc.root().field("x").get_uint(), UInt64(1))
 
     doc.reparse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded2.unsafe_ptr()),
+        padded2.unsafe_ptr().as_unsafe_any_origin(),
         len(json2.as_bytes()),
     )
     assert_equal(doc.root().field("x").get_uint(), UInt64(2))
@@ -64,7 +64,7 @@ def test_nocopy_iter() raises:
     var padded = _make_padded(json)
 
     var reader = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
     var root = reader.root()
@@ -81,7 +81,7 @@ def test_nocopy_matches_copy() raises:
 
     var doc_copy = parse(json)
     var doc_nc = parse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded.unsafe_ptr()),
+        padded.unsafe_ptr().as_unsafe_any_origin(),
         len(json.as_bytes()),
     )
 
@@ -104,13 +104,13 @@ def test_nocopy_iter_reparse() raises:
     var padded2 = _make_padded(json2)
 
     var reader = iter_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded1.unsafe_ptr()),
+        padded1.unsafe_ptr().as_unsafe_any_origin(),
         len(json1.as_bytes()),
     )
     assert_equal(reader.root().get_object().field("a").get_uint(), UInt64(10))
 
     reader.reparse_nocopy(
-        UnsafePointer[UInt8, MutAnyOrigin](padded2.unsafe_ptr()),
+        padded2.unsafe_ptr().as_unsafe_any_origin(),
         len(json2.as_bytes()),
     )
     assert_equal(reader.root().get_object().field("a").get_uint(), UInt64(20))

@@ -8,13 +8,13 @@ production result must equal the reference (old) result.
 from jsonette.stage2.numbers import _are_8_digits, _parse_8_digits
 
 
-def _ref_are_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> Bool:
-    var sub = (ptr + pos).load[width=8]() - SIMD[DType.uint8, 8](0x30)
+def _ref_are_8(ptr: Pointer[UInt8, _], pos: Int) -> Bool:
+    var sub = (ptr.unsafe_offset(pos)).unsafe_load[width=8]() - SIMD[DType.uint8, 8](0x30)
     return sub.reduce_max() <= 9
 
 
-def _ref_parse_8(ptr: UnsafePointer[UInt8, _], pos: Int) -> UInt64:
-    var chunk = (ptr + pos).load[width=8]()
+def _ref_parse_8(ptr: Pointer[UInt8, _], pos: Int) -> UInt64:
+    var chunk = (ptr.unsafe_offset(pos)).unsafe_load[width=8]()
     var d = (chunk - SIMD[DType.uint8, 8](0x30)).cast[DType.uint64]()
     var g1 = d[0] * 1000 + d[1] * 100 + d[2] * 10 + d[3]
     var g2 = d[4] * 1000 + d[5] * 100 + d[6] * 10 + d[7]

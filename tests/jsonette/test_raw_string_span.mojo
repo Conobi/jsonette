@@ -1,5 +1,5 @@
 from std.testing import assert_equal
-from std.memory import memcpy, memset
+from std.memory import unsafe_memcpy, unsafe_memset
 from jsonette.stage1.indexer import structural_index
 from jsonette.stage2.strings import _raw_string_span
 from jsonette.ondemand.reader import iter as od_iter
@@ -14,8 +14,8 @@ def _pad_and_index(
     var num_chunks = (input_len + 63) // 64
     var padded_len = num_chunks * 64 + 128
     buf = List[UInt8](unsafe_uninit_length=padded_len)
-    memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
-    memset(buf.unsafe_ptr() + input_len, 0, padded_len - input_len)
+    unsafe_memcpy(dest=buf.unsafe_ptr(), src=data.unsafe_ptr(), count=input_len)
+    unsafe_memset(buf.unsafe_ptr().unsafe_offset(input_len), 0, padded_len - input_len)
     positions = List[UInt32]()
     structural_index(buf.unsafe_ptr(), input_len, positions)
 
@@ -27,11 +27,11 @@ def test_simple_string() raises:
     _pad_and_index(String('"hello"'), buf, pos)
     var span = _raw_string_span(pos, 0, buf.unsafe_ptr())
     assert_equal(span[1], 5)
-    assert_equal(span[0][0], UInt8(ord("h")))
-    assert_equal(span[0][1], UInt8(ord("e")))
-    assert_equal(span[0][2], UInt8(ord("l")))
-    assert_equal(span[0][3], UInt8(ord("l")))
-    assert_equal(span[0][4], UInt8(ord("o")))
+    assert_equal(span[0][unsafe_offset=0], UInt8(ord("h")))
+    assert_equal(span[0][unsafe_offset=1], UInt8(ord("e")))
+    assert_equal(span[0][unsafe_offset=2], UInt8(ord("l")))
+    assert_equal(span[0][unsafe_offset=3], UInt8(ord("l")))
+    assert_equal(span[0][unsafe_offset=4], UInt8(ord("o")))
 
 
 def test_empty_string() raises:
@@ -80,16 +80,16 @@ def test_object_key_value() raises:
     # Key span: si=1, content starts at offset 2, length = 5-1-1 = 3
     var key_span = _raw_string_span(pos, 1, buf.unsafe_ptr())
     assert_equal(key_span[1], 3)  # "key" = 3 bytes
-    assert_equal(key_span[0][0], UInt8(ord("k")))
-    assert_equal(key_span[0][1], UInt8(ord("e")))
-    assert_equal(key_span[0][2], UInt8(ord("y")))
+    assert_equal(key_span[0][unsafe_offset=0], UInt8(ord("k")))
+    assert_equal(key_span[0][unsafe_offset=1], UInt8(ord("e")))
+    assert_equal(key_span[0][unsafe_offset=2], UInt8(ord("y")))
 
     # Value span: si=4, content starts at offset 8, length = 11-7-1 = 3
     var val_span = _raw_string_span(pos, 4, buf.unsafe_ptr())
     assert_equal(val_span[1], 3)  # "val" = 3 bytes
-    assert_equal(val_span[0][0], UInt8(ord("v")))
-    assert_equal(val_span[0][1], UInt8(ord("a")))
-    assert_equal(val_span[0][2], UInt8(ord("l")))
+    assert_equal(val_span[0][unsafe_offset=0], UInt8(ord("v")))
+    assert_equal(val_span[0][unsafe_offset=1], UInt8(ord("a")))
+    assert_equal(val_span[0][unsafe_offset=2], UInt8(ord("l")))
 
 
 def test_od_get_string_clean() raises:
