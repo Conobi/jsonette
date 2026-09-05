@@ -38,3 +38,11 @@ test-parallel = true
 
 [tool.mojox.lints]
 warnings = "error"
+
+# The DOM writer and the reflective walk recurse once per nesting level, and an
+# unoptimised frame is large enough that the documented `_MAX_DEPTH` of 1024
+# exhausts the default 8 MB stack before the guard can raise -- adversarial
+# deep-nesting tests segfault instead of getting a clean error. -O1 shrinks the
+# frames enough for the guard to hold; the release build is unaffected.
+[tool.mojox.profile.dev]
+optimize = 1
