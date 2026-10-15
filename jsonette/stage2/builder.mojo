@@ -107,9 +107,12 @@ def build_tape(
     var state = ST_DOC_BEGIN
 
     while True:
-        var pos = Int(si_ptr[unsafe_offset=si])
-        if pos == Int(UInt32(0xFFFFFFFF)):
+        var raw_pos = si_ptr[unsafe_offset=si]
+        # Compare in the UInt32 domain: Mojo 1.1.0 can constant-fold
+        # `Int(UInt32(0xFFFFFFFF))` to -1, so an Int-domain test never matches.
+        if raw_pos == UInt32(0xFFFFFFFF):
             break  # sentinel reached
+        var pos = Int(raw_pos)
         var byte = input_ptr[unsafe_offset=pos]
 
         if (

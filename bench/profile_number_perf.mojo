@@ -183,14 +183,14 @@ def bench(
 
     for _ in range(WARMUP):
         for t in range(ntok):
-            sink += _parse_number(ptr + starts[t], lens[t]).value
+            sink += _parse_number(ptr.unsafe_offset(starts[t]), lens[t]).value
 
     # Pass 1 — min wall-clock (no counter syscalls).
     var best_ns = Int(0x7FFFFFFFFFFFFFFF)
     for _ in range(ITERS):
         var t0 = perf_counter_ns()
         for t in range(ntok):
-            sink += _parse_number(ptr + starts[t], lens[t]).value
+            sink += _parse_number(ptr.unsafe_offset(starts[t]), lens[t]).value
         var t1 = perf_counter_ns()
         var dt = Int(t1 - t0)
         if dt < best_ns:
@@ -204,7 +204,7 @@ def bench(
             perf.reset()
             perf.enable()
             for t in range(ntok):
-                sink += _parse_number(ptr + starts[t], lens[t]).value
+                sink += _parse_number(ptr.unsafe_offset(starts[t]), lens[t]).value
             perf.disable()
             var c = perf.cycles()
             var ins = perf.instructions()

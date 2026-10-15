@@ -13,8 +13,8 @@ comptime LARGEST_POWER_OF_FIVE: Int = 308
 comptime NUM_POWERS: Int = 651
 
 
-def _build_pow5_hi() -> InlineArray[UInt64, 651]:
-    var t = InlineArray[UInt64, 651](fill=UInt64(0))
+def _build_pow5_hi() -> Array[UInt64, 651]:
+    var t = Array[UInt64, 651](fill=UInt64(0))
     t[0] = UInt64(17218479456385750618)
     t[1] = UInt64(10761549660241094136)
     t[2] = UInt64(13451937075301367670)
@@ -669,8 +669,8 @@ def _build_pow5_hi() -> InlineArray[UInt64, 651]:
     return t^
 
 
-def _build_pow5_lo() -> InlineArray[UInt64, 651]:
-    var t = InlineArray[UInt64, 651](fill=UInt64(0))
+def _build_pow5_lo() -> Array[UInt64, 651]:
+    var t = Array[UInt64, 651](fill=UInt64(0))
     t[0] = UInt64(1242899115359157056)
     t[1] = UInt64(5388497965526861064)
     t[2] = UInt64(6735622456908576330)

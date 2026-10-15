@@ -42,8 +42,8 @@ stays `True` and just `branches()`/`branch_misses()` return 0.
 """
 
 from std.ffi import external_call
-from std.memory.unsafe_pointer import alloc
-from std.memory import memset_zero
+from std.memory import unsafe_memset_zero
+from std.memory.alloc import unsafe_alloc
 
 
 comptime SYS_read = 0
@@ -102,15 +102,15 @@ def _open_counter(config: UInt64, group_fd: Int64) -> Int64:
     Returns:
         The counter file descriptor, or a negative value on failure.
     """
-    var attr = alloc[UInt8](ATTR_SIZE).as_unsafe_any_origin()
-    memset_zero(attr, ATTR_SIZE)
-    (attr + 0).bitcast[UInt32]()[] = UInt32(PERF_TYPE_HARDWARE)
-    (attr + 4).bitcast[UInt32]()[] = UInt32(ATTR_SIZE)
-    (attr + 8).bitcast[UInt64]()[] = config
+    var attr = unsafe_alloc[UInt8](ATTR_SIZE).as_unsafe_any_origin()
+    unsafe_memset_zero(attr, ATTR_SIZE)
+    attr.unsafe_offset(0).unsafe_bitcast[UInt32]()[] = UInt32(PERF_TYPE_HARDWARE)
+    attr.unsafe_offset(4).unsafe_bitcast[UInt32]()[] = UInt32(ATTR_SIZE)
+    attr.unsafe_offset(8).unsafe_bitcast[UInt64]()[] = config
     var flags = (UInt64(1) << 5) | (UInt64(1) << 6)  # exclude_kernel | exclude_hv
     if group_fd < 0:
         flags = flags | (UInt64(1) << 0)  # disabled (leader starts stopped)
-    (attr + 40).bitcast[UInt64]()[] = flags
+    attr.unsafe_offset(40).unsafe_bitcast[UInt64]()[] = flags
     var fd = _syscall6(
         Int64(SYS_perf_event_open),
         Int64(Int(attr)),
@@ -119,7 +119,7 @@ def _open_counter(config: UInt64, group_fd: Int64) -> Int64:
         group_fd,
         Int64(0),
     )
-    attr.free()
+    attr.unsafe_free()
     return fd
 
 
@@ -151,7 +151,7 @@ def _read_counter(fd: Int64) -> UInt64:
     Returns:
         The accumulated counter value, or 0 if the read failed.
     """
-    var buf = alloc[UInt64](1).as_unsafe_any_origin()
+    var buf = unsafe_alloc[UInt64](1).as_unsafe_any_origin()
     buf[] = UInt64(0)
     # Read via the raw syscall (read == syscall 0 on x86-64). The stdlib binds
     # external_call["read", ...] with a different signature for file I/O, and
@@ -169,7 +169,7 @@ def _read_counter(fd: Int64) -> UInt64:
     var value = UInt64(0)
     if n == 8:
         value = buf[]
-    buf.free()
+    buf.unsafe_free()
     return value
 
 
@@ -309,13 +309,13 @@ def peak_rss_kb() -> Int:
     Returns:
         Peak RSS in KB, or 0 if the call failed.
     """
-    var buf = alloc[Int64](18).as_unsafe_any_origin()
-    memset_zero(buf, 18)
+    var buf = unsafe_alloc[Int64](18).as_unsafe_any_origin()
+    unsafe_memset_zero(buf, 18)
     var rc = external_call["getrusage", Int32](Int32(RUSAGE_SELF), buf)
     var maxrss = Int(0)
     if rc == 0:
-        maxrss = Int(buf[4])
-    buf.free()
+        maxrss = Int(buf[unsafe_offset=4])
+    buf.unsafe_free()
     return maxrss
 
 

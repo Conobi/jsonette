@@ -59,16 +59,16 @@ def main():
     lines.append("")
     lines.append("")
 
-    # Generate the table as two builder functions returning InlineArray
-    lines.append(f"def _build_pow5_hi() -> InlineArray[UInt64, {NUM_ENTRIES}]:")
-    lines.append(f"    var t = InlineArray[UInt64, {NUM_ENTRIES}](fill=UInt64(0))")
+    # Generate the table as two builder functions returning Array
+    lines.append(f"def _build_pow5_hi() -> Array[UInt64, {NUM_ENTRIES}]:")
+    lines.append(f"    var t = Array[UInt64, {NUM_ENTRIES}](fill=UInt64(0))")
     for i, (hi, lo) in enumerate(entries):
         lines.append(f"    t[{i}] = UInt64({hi})")
     lines.append("    return t^")
     lines.append("")
     lines.append("")
-    lines.append(f"def _build_pow5_lo() -> InlineArray[UInt64, {NUM_ENTRIES}]:")
-    lines.append(f"    var t = InlineArray[UInt64, {NUM_ENTRIES}](fill=UInt64(0))")
+    lines.append(f"def _build_pow5_lo() -> Array[UInt64, {NUM_ENTRIES}]:")
+    lines.append(f"    var t = Array[UInt64, {NUM_ENTRIES}](fill=UInt64(0))")
     for i, (hi, lo) in enumerate(entries):
         lines.append(f"    t[{i}] = UInt64({lo})")
     lines.append("    return t^")

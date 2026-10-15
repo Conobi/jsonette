@@ -18,10 +18,10 @@ from std.builtin.globals import global_constant
 # --- Escape lookup table (comptime) ---
 
 
-def _build_escape_table() -> InlineArray[UInt8, 256]:
+def _build_escape_table() -> Array[UInt8, 256]:
     """Build a 256-byte LUT mapping escaped byte -> replacement byte.
     0x00 = invalid escape, 0xFE = \\u sentinel for unicode escapes."""
-    var t = InlineArray[UInt8, 256](fill=UInt8(0))
+    var t = Array[UInt8, 256](fill=UInt8(0))
     t[0x22] = UInt8(0x22)  # \" -> "
     t[0x5C] = UInt8(0x5C)  # \\ -> backslash
     t[0x2F] = UInt8(0x2F)  # \/ -> /
@@ -34,7 +34,7 @@ def _build_escape_table() -> InlineArray[UInt8, 256]:
     return t^
 
 
-comptime _ESCAPE_LUT: InlineArray[UInt8, 256] = _build_escape_table()
+comptime _ESCAPE_LUT: Array[UInt8, 256] = _build_escape_table()
 
 
 # --- Zero-copy raw string span ---

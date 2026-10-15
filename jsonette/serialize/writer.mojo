@@ -53,7 +53,7 @@ struct JsonWriter:
         if v == 0:
             self.buf.append(0x30)
             return
-        var digits = InlineArray[UInt8, 20](fill=UInt8(0))
+        var digits = Array[UInt8, 20](fill=UInt8(0))
         var n = 0
         var rem = v
         while rem > 0:

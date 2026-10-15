@@ -14,7 +14,7 @@ Key mechanisms:
   - _skip_value from the On-Demand layer to skip unrecognised or nested values.
 """
 from std.reflection import reflect
-from std.builtin.rebind import trait_downcast, rebind_var
+from std.builtin.rebind import rebind_var
 from std.memory import bitcast
 
 from jsonette.parser import Parser

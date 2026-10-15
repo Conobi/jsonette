@@ -53,7 +53,7 @@ struct Decimal(Movable, Copyable):
     that nonzero digits were discarded beyond the array capacity.
     """
 
-    var d: InlineArray[UInt8, MAX_DIGITS]
+    var d: Array[UInt8, MAX_DIGITS]
     var nd: Int
     var dp: Int
     var neg: Bool
@@ -61,7 +61,7 @@ struct Decimal(Movable, Copyable):
 
     def __init__(out self):
         """Construct an empty (zero) decimal."""
-        self.d = InlineArray[UInt8, MAX_DIGITS](uninitialized=True)
+        self.d = Array[UInt8, MAX_DIGITS](uninitialized=True)
         self.nd = 0
         self.dp = 0
         self.neg = False
@@ -198,9 +198,9 @@ def _prefix_less_than(a: Decimal, cutoff: StaticString) -> Bool:
 # Left-shift cheat table (Go strconv.decimal `leftcheats`): for a shift of k
 # (multiply by 2^k), entry k gives the number of new digits introduced, minus
 # one if the digit prefix is below `cutoff`. Indices 0..60.
-def _build_left_delta() -> InlineArray[Int, 61]:
+def _build_left_delta() -> Array[Int, 61]:
     """Build the left-shift new-digit-count table (delta of `leftcheats`)."""
-    var t = InlineArray[Int, 61](fill=0)
+    var t = Array[Int, 61](fill=0)
     var vals = [
         0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 7,
         8, 8, 8, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13,
@@ -485,9 +485,9 @@ def _rounded_integer(a: Decimal) -> UInt64:
 
 
 # Decimal-power-of-ten to binary-power-of-two step table (Go `powtab`).
-def _build_powtab() -> InlineArray[Int, 9]:
+def _build_powtab() -> Array[Int, 9]:
     """Build the decimal-exponent to binary-shift step table."""
-    var t = InlineArray[Int, 9](fill=0)
+    var t = Array[Int, 9](fill=0)
     var vals = [1, 3, 6, 9, 13, 16, 19, 23, 26]
     for i in range(9):
         t[i] = vals[i]

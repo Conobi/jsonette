@@ -220,7 +220,7 @@ def test_fuzz_differential_against_stdlib() raises:
     random bytes): the fused checker must match the stdlib oracle."""
     var state = UInt64(0x9E3779B97F4A7C15)
 
-    @parameter
+    @__parameter
     def next_rand(mut state: UInt64) -> UInt64:
         state = state * 6364136223846793005 + 1442695040888963407
         return state >> 33

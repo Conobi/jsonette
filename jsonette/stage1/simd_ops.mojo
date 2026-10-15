@@ -88,14 +88,14 @@ def prefix_xor(bitmask: UInt64) -> UInt64:
 struct SimdInput(Movable, Copyable):
     """64 bytes loaded into 2 AVX2 registers. Abstracts the hardware SIMD width."""
 
-    var chunks: InlineArray[SIMD[DType.uint8, 32], 2]
+    var chunks: Array[SIMD[DType.uint8, 32], 2]
 
     @always_inline("nodebug")
     @staticmethod
     def load(ptr: Pointer[UInt8, _]) -> SimdInput:
         """Load 64 bytes from ptr (unaligned)."""
         var result = SimdInput(
-            chunks=InlineArray[SIMD[DType.uint8, 32], 2](
+            chunks=Array[SIMD[DType.uint8, 32], 2](
                 fill=SIMD[DType.uint8, 32](0)
             )
         )

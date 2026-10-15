@@ -87,7 +87,7 @@ def structural_index[
     var out_ptr = positions.unsafe_ptr()
     var write_pos = 0
 
-    @parameter
+    @__parameter
     @always_inline("nodebug")
     def emit(base_idx: UInt32, bits: UInt64):
         """Write offsets of each set bit (relative to base_idx) into positions.
