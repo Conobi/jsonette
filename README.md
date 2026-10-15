@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.modular.com/mojo"><img alt="Mojo 1.0.0b2" src="https://img.shields.io/badge/Mojo-1.0.0b2-orange"></a>
+  <a href="https://www.modular.com/mojo"><img alt="Mojo 1.1.0" src="https://img.shields.io/badge/Mojo-1.1.0-orange"></a>
   <a href="LICENSE"><img alt="license MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
 
@@ -15,7 +15,7 @@ byte-by-byte branching with a branchless classifier that scans 64 bytes per SIMD
 a flat tape, read through a Python-like API.
 
 > [!NOTE]
-> **Early.** Requires Mojo 1.0.0b2, x86-64. Parses, validates and serialises JSON today;
+> **Early.** Requires Mojo 1.1.0, x86-64. Parses, validates and serialises JSON today;
 > the public API may still change before 1.0.
 
 ## Install

@@ -100,17 +100,17 @@ String content is excluded from structural character detection using a carry-les
 ### No I/O in the parser
 `Parser.parse(ref data: List[UInt8]) -> Value` takes a pre-loaded buffer. Callers own I/O. No file handles, no streams inside `jsonette/`.
 
-## Mojo Conventions (1.0.0b2)
+## Mojo Conventions (1.1.0)
 
-- `def` for all functions and methods (`fn` is deprecated).
-- Move constructor: `def __init__(out self, *, deinit take: Self)`.
+- `def` for all functions and methods (`fn` was removed in 1.1).
+- Move constructor: `def __init__(out self, *, deinit move: Self)`.
 - `comptime` for constants (not `@parameter`).
 - Trait methods use `def`.
 - `@always_inline("nodebug")` on hot-path accessors.
 - Bounds checking is on by default for CPU collections. Hot-path accessors use `unsafe_get()` / `unsafe_ptr()` to bypass checks where indices are trusted (e.g., tape-driven offsets).
-- `UnsafePointer` is non-null by design. Express nullability with `Optional[UnsafePointer[...]]`.
+- `Pointer` is non-null by design. Express nullability with `Optional[Pointer[...]]`.
 - `String.__len__()` is deprecated — use `byte_length()` or `count_codepoints()`.
-- When in doubt about a stdlib API (`SIMD`, `UnsafePointer`, `List`, `Span`), check the Modular stdlib docs for the pinned toolchain; `uv run -- mojo` (the compiler version pinned in `pyproject.toml`) is the single source of truth for whether code compiles.
+- When in doubt about a stdlib API (`SIMD`, `Pointer`, `List`, `Span`), check the Modular stdlib docs for the pinned toolchain; `uv run -- mojo` (the compiler version pinned in `pyproject.toml`) is the single source of truth for whether code compiles.
 
 ## Commit Style
 

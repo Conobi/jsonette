@@ -6,11 +6,11 @@ the conventions the codebase follows, and a few notes on its structure.
 ## Development setup
 
 jsonette uses [`uv`](https://docs.astral.sh/uv/) to manage the Mojo toolchain
-(pinned to `mojo-compiler==1.0.0b2`) and dependencies.
+(pinned to `mojo-compiler==1.1.0`) and dependencies.
 
 ```bash
 uv sync                              # install the toolchain + dev dependencies
-uv run -- bash scripts/build.sh      # build jsonette.mojopkg
+uv run mojox build                   # build jsonette.mojoc
 ```
 
 ### Running the tests
@@ -22,13 +22,13 @@ suite:
 ```bash
 uv run -- python scripts/download_test_vectors.py   # RFC 8259 conformance vectors
 uv run -- python scripts/download_corpus.py         # benchmark corpus
-uv run -- bash scripts/run_tests.sh                 # run the whole suite
+uv run mojox test                                   # run the whole suite
 ```
 
 To run a single test:
 
 ```bash
-uv run -- mojo run -I . -D ASSERT=all tests/jsonette/test_value.mojo
+uv run mojox test tests/jsonette/test_value.mojo
 ```
 
 The suite is run with `-D ASSERT=all`, which enables the internal invariant and
@@ -53,9 +53,9 @@ docs: note clmul alternative for string masking
 
 ## Mojo conventions
 
-The codebase targets **Mojo 1.0.0b2** and follows these rules:
+The codebase targets **Mojo 1.1.0** and follows these rules:
 
-- Use **`def`** for all functions and methods (`fn` is deprecated).
+- Use **`def`** for all functions and methods (`fn` was removed in Mojo 1.1).
 - Every public symbol carries a **docstring**. If you change a function's
   behaviour, update its docstring in the same commit.
 - Use **`comptime`** for compile-time constants (not `@parameter`).
